@@ -1,0 +1,102 @@
+# Hermes research overlay config.
+
+hermes_version: "0.1.0-mvp"
+runtime_scope: "deployment candidate hardening"
+runtime_boundary: "not an OS sandbox"
+
+# Task-scoped Hermes records are the source of truth for research work.
+records_dir: ".trellis/tasks/{task}/hermes"
+state_machine_file: ".trellis/hermes/state_machine.yaml"
+
+records:
+  evidence_ledger: ".trellis/tasks/{task}/hermes/evidence_ledger.jsonl"
+  claim_ledger: ".trellis/tasks/{task}/hermes/claim_ledger.jsonl"
+  artifact_ledger: ".trellis/tasks/{task}/hermes/artifact_ledger.jsonl"
+  provenance_ledger: ".trellis/tasks/{task}/hermes/provenance_ledger.jsonl"
+  audit_ledger: ".trellis/tasks/{task}/hermes/audit_ledger.jsonl"
+  approval_records: ".trellis/tasks/{task}/hermes/approval_records.jsonl"
+  state_transition_log: ".trellis/tasks/{task}/hermes/state_transition_log.jsonl"
+  worker_records: ".trellis/tasks/{task}/hermes/worker_records.jsonl"
+  service_queue: ".trellis/tasks/{task}/hermes/service_queue.jsonl"
+  experiment: ".trellis/tasks/{task}/hermes/experiment.yaml"
+  run_manifest: ".trellis/tasks/{task}/hermes/run_manifest.jsonl"
+  metrics_schema: ".trellis/tasks/{task}/hermes/metrics_schema.yaml"
+  compare_records: ".trellis/tasks/{task}/hermes/compare.jsonl"
+  report: ".trellis/tasks/{task}/hermes/report.md"
+
+global_templates:
+  records_readme: ".trellis/hermes/records/README.md"
+  recordbus_protocol: ".trellis/hermes/records/recordbus.md"
+  subagent_protocol: ".trellis/hermes/records/subagent_protocol.md"
+  experiments_readme: ".trellis/hermes/experiments/README.md"
+  experiment_template: ".trellis/hermes/experiments/experiment.yaml"
+  ledgers_readme: ".trellis/hermes/ledgers/README.md"
+  metrics_schema: ".trellis/hermes/metrics/metrics_schema.yaml"
+  report_template: ".trellis/hermes/reports/report.md"
+  roles_dir: ".trellis/hermes/roles"
+
+recordbus:
+  trusted_channel: "append-only-records"
+  task_records_dir: ".trellis/tasks/{task}/hermes"
+  files:
+    task_card: ".trellis/tasks/{task}/hermes/worker_records.jsonl"
+    heartbeat: ".trellis/tasks/{task}/hermes/worker_records.jsonl"
+    checkpoint: ".trellis/tasks/{task}/hermes/worker_records.jsonl"
+    result: ".trellis/tasks/{task}/hermes/worker_records.jsonl"
+    risk: ".trellis/tasks/{task}/hermes/worker_records.jsonl"
+    rejection: ".trellis/tasks/{task}/hermes/worker_records.jsonl"
+    compare: ".trellis/tasks/{task}/hermes/compare.jsonl"
+    provenance: ".trellis/tasks/{task}/hermes/provenance_ledger.jsonl"
+    audit: ".trellis/tasks/{task}/hermes/audit_ledger.jsonl"
+    service_queue: ".trellis/tasks/{task}/hermes/service_queue.jsonl"
+    report: ".trellis/tasks/{task}/hermes/report.md"
+  chat_is_fact_source: false
+  completion_requires_record: true
+
+async_workers:
+  heartbeat_interval: "5m"
+  timeout_policy: "mark stalled, resume from the latest checkpoint, or dispatch a replacement worker"
+  one_writer_per_worktree: true
+  long_context_policy: "Keep long logs and long diffs in files; pass structured summaries and evidence refs to the main agent."
+  maker_checker_separation: true
+
+runtime:
+  scripts_dir: ".trellis/scripts/hermes"
+  sandbox:
+    mode: "none"
+    required: false
+    note: "Local fail-closed checks only; not an OS sandbox."
+  commands:
+    append_record: "python3 ./.trellis/scripts/hermes/record.py append --task {task} --record-type worker --json '{json}'"
+    validate_worker: "python3 ./.trellis/scripts/hermes/validate.py --task {task} --kind worker"
+    init_experiment: "python3 ./.trellis/scripts/hermes/experiment.py init --task {task}"
+    validate_experiment: "python3 ./.trellis/scripts/hermes/experiment.py validate --task {task}"
+    validate_metrics_schema: "python3 ./.trellis/scripts/hermes/validate.py --task {task} --kind metrics_schema"
+    guard_worker: "python3 ./.trellis/scripts/hermes/guard.py --task {task} --job-id {job_id} --changed-files {files}"
+    heartbeat_beat: "python3 ./.trellis/scripts/hermes/heartbeat.py beat --task {task} --job-id {job_id} --checkpoint {checkpoint} --summary {summary}"
+    heartbeat_watch: "python3 ./.trellis/scripts/hermes/heartbeat.py watch --task {task} --job-id {job_id} --checkpoint {checkpoint} --summary {summary} --interval {interval}"
+    check_jobs: "python3 ./.trellis/scripts/hermes/jobs.py check --task {task}"
+    job_resume: "python3 ./.trellis/scripts/hermes/jobs.py resume --task {task} --job-id {job_id}"
+    runner_run: "python3 ./.trellis/scripts/hermes/runner.py run --task {task} --job-id {job_id} --checkpoint {checkpoint} --summary {summary} --resume-from {resume_from} -- {command}"
+    runner_replay: "python3 ./.trellis/scripts/hermes/runner.py replay --task {task} --run-id {run_id}"
+    validate_run_manifest: "python3 ./.trellis/scripts/hermes/validate.py --task {task} --kind run_manifest"
+    aggregate: "python3 ./.trellis/scripts/hermes/report.py aggregate --task {task} --output .trellis/tasks/{task}/hermes/aggregate.json"
+    compare: "python3 ./.trellis/scripts/hermes/report.py compare --task {task} --metric {metric} --baseline {baseline} --new {new} --threshold {threshold} --direction {direction}"
+    report: "python3 ./.trellis/scripts/hermes/report.py report --task {task} --question {question} --method {method} --data {data} --metrics {metrics} --limitations {limitations} --risks {risks}"
+    claim_review: "python3 ./.trellis/scripts/hermes/report.py claim-review --task {task} --claim-id {claim_id}"
+    quality_gate: "python3 ./.trellis/scripts/hermes/report.py quality-gate --task {task}"
+    service_enqueue: "python3 ./.trellis/scripts/hermes/service.py enqueue --task {task} --job-id {job_id} --command {command}"
+    service_status: "python3 ./.trellis/scripts/hermes/service.py status --task {task}"
+    service_cancel: "python3 ./.trellis/scripts/hermes/service.py cancel --task {task} --job-id {job_id} --reason {reason}"
+    service_retry: "python3 ./.trellis/scripts/hermes/service.py retry --task {task} --job-id {job_id} --source-job-id {source_job_id} --command {command}"
+
+approval:
+  mode: "append-only-records"
+  required_transition: "claim_ready -> approved"
+  required_record_type: "human_approval"
+  authority: "human/root"
+  boundary: "approval_records require external human/root approval; JSONL is not tamper-proof storage."
+
+append_only:
+  enabled: true
+  rule: "Never rewrite, reorder, truncate, or silently delete Hermes records. Add a later correction record instead."

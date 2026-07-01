@@ -1,0 +1,14 @@
+# Hermes metrics schema.
+#
+# Metric, split, and baseline changes require HumanGate. Keep the schema stable
+# unless a human has reviewed the new definition.
+
+metrics:
+  - name: "example_metric"
+    direction: "higher_is_better"
+    unit: "count"
+    aggregation: "mean"
+    split: "by_task"
+    split_version: "split-v1"
+    baseline: "previous_run"
+    baseline_version: "baseline-v1"

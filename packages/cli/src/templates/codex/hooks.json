@@ -1,0 +1,49 @@
+{
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "{{PYTHON_CMD}} -X utf8 .codex/hooks/inject-workflow-state.py",
+            "timeout": 15
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit|Bash|apply_patch",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "{{PYTHON_CMD}} -X utf8 .codex/hooks/hermes-runtime-guard.py",
+            "timeout": 15
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "{{PYTHON_CMD}} -X utf8 .codex/hooks/hermes-runtime-guard.py",
+            "timeout": 15
+          }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "{{PYTHON_CMD}} -X utf8 .codex/hooks/hermes-runtime-guard.py",
+            "timeout": 15
+          }
+        ]
+      }
+    ]
+  }
+}

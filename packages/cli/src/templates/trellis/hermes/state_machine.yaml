@@ -1,0 +1,55 @@
+# Hermes MVP research state machine.
+
+machine: "hermes-research-mvp"
+version: "0.1.0"
+
+# Single allowed forward flow:
+# planning -> running -> review -> claim_ready -> approved
+states:
+  planning:
+    description: "Research question, method, evidence standard, and task scope are being prepared."
+  running:
+    description: "Experiments, searches, implementation, or analysis are being performed."
+  review:
+    description: "Evidence and claims are checked for traceability, reproducibility, and scope."
+  claim_ready:
+    description: "A claim has enough linked evidence to be proposed, but it is not approved."
+  approved:
+    description: "A human/root approval record has accepted the claim for use outside the task."
+
+allowed_transitions:
+  - from: planning
+    to: running
+    requires:
+      - "task research brief or PRD exists"
+      - "expected evidence standard is recorded"
+  - from: running
+    to: review
+    requires:
+      - "evidence records were appended under the task Hermes records directory"
+      - "outputs, commands, or source references are traceable"
+  - from: review
+    to: claim_ready
+    requires:
+      - "claim record links to evidence record ids"
+      - "review notes identify scope limits and open risks"
+  - from: claim_ready
+    to: approved
+    requires:
+      - "human approval record appended to the task approval records ledger"
+      - "approval record references the claim id and reviewer context"
+
+blocked_transitions:
+  - from: planning
+    to: claim_ready
+    reason: "Claims require running and review records first."
+  - from: running
+    to: approved
+    reason: "Approval requires claim_ready plus a human approval record."
+  - from: review
+    to: approved
+    reason: "Review can prepare a claim, but cannot replace human approval."
+
+notes:
+  - "Agents may propose transitions by appending records; they do not silently mutate history."
+  - "claim_ready to approved requires a human approval record."

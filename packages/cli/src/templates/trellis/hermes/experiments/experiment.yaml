@@ -1,0 +1,20 @@
+# Hermes experiment template.
+
+question: ""
+hypothesis: ""
+dataset: ""
+model: ""
+metrics:
+  - ""
+seed: 0
+environment:
+  os: "ubuntu-24.04"
+  shell: "bash"
+allowed_commands:
+  - "python3"
+sandbox:
+  mode: "none"
+  required: false
+  image: ""
+  command: ""
+artifact_dir: ".trellis/tasks/{task}/hermes/experiments"
