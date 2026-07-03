@@ -6,10 +6,12 @@ import sys
 
 from runtime import (
     ensure_run_manifest,
+    ensure_worker_records,
     experiment_path,
     repo_root,
     run_manifest_path,
     validate_experiment_config,
+    worker_records_path,
     write_experiment_skeleton,
 )
 
@@ -29,6 +31,7 @@ def main() -> int:
     try:
         exp_path = experiment_path(root, args.task)
         manifest_path = run_manifest_path(root, args.task)
+        worker_path = worker_records_path(root, args.task)
     except ValueError as exc:
         print(str(exc), file=sys.stderr)
         return 2
@@ -36,8 +39,10 @@ def main() -> int:
     if args.command == "init":
         write_experiment_skeleton(exp_path, args.task)
         ensure_run_manifest(manifest_path)
+        ensure_worker_records(worker_path)
         print(f"experiment config: {exp_path.relative_to(root)}")
         print(f"run manifest: {manifest_path.relative_to(root)}")
+        print(f"worker records: {worker_path.relative_to(root)}")
         return 0
 
     if args.command == "validate":

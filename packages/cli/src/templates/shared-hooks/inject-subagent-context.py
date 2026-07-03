@@ -153,6 +153,58 @@ def ensure_shared_worktree_bootstrap(repo_root: str, task_dir: str | None) -> No
         worktree_sync.sync_task_snapshot(main_root, worktree_root, task_dir_name)
 
 
+def shared_worktree_unavailable_reason(repo_root: str, task_dir: str | None) -> str | None:
+    if not task_dir:
+        return "Trellis shared worktree signal was present, but no task directory could be resolved."
+
+    worktree_sync = _load_worktree_sync(repo_root)
+    if worktree_sync is None:
+        return "Trellis shared worktree signal was present, but worktree helpers are unavailable."
+
+    task_dir_name = Path(task_dir).name
+    if not task_dir_name:
+        return "Trellis shared worktree signal was present, but the task directory name is invalid."
+
+    repo_path = Path(repo_root).resolve()
+    if (
+        repo_path.name == task_dir_name
+        and repo_path.parent.name == "trellis-worktrees"
+        and (repo_path / task_dir).is_dir()
+    ):
+        main_root = repo_path.parent.parent.parent
+        if worktree_sync.is_registered_git_worktree(main_root, repo_path):
+            return None
+        return (
+            "Trellis shared worktree signal was present, but the current "
+            "managed worktree directory is not a registered Git worktree "
+            "for the main workspace."
+        )
+
+    try:
+        resolved = worktree_sync.resolve_shared_worktree_roots(
+            repo_path,
+            task_dir_name,
+        )
+    except Exception as exc:
+        return f"Trellis shared worktree could not be validated: {exc}"
+
+    if not resolved:
+        _, create_error = worktree_sync.ensure_registered_shared_worktree(
+            repo_path,
+            task_dir_name,
+        )
+        if create_error is None:
+            return None
+        return (
+            "Trellis shared worktree signal was present, but the shared worktree "
+            f"`./.trellis/trellis-worktrees/{task_dir_name}` could not be "
+            "created or validated as a registered Git worktree for the main "
+            f"workspace: {create_error}. Keeping Claude isolation unchanged "
+            "and blocking dispatch."
+        )
+    return None
+
+
 def _detect_platform(input_data: dict) -> str | None:
     if isinstance(input_data.get("cursor_version"), str):
         return "cursor"
@@ -1021,6 +1073,21 @@ def _build_shared_worktree_conflict_system_message(task_dir: str | None) -> str:
     )
 
 
+def deny_pretooluse(reason: str) -> None:
+    print(json.dumps(
+        {
+            "hookSpecificOutput": {
+                "hookEventName": "PreToolUse",
+                "permissionDecision": "deny",
+                "permissionDecisionReason": reason,
+            },
+            "permission": "deny",
+        },
+        ensure_ascii=False,
+    ))
+    sys.exit(0)
+
+
 def main():
     if os.environ.get("TRELLIS_HOOKS") == "0" or os.environ.get("TRELLIS_DISABLE_HOOKS") == "1":
         sys.exit(0)
@@ -1073,6 +1140,9 @@ def main():
             cwd,
         )
         if shared_worktree_signal:
+            reason = shared_worktree_unavailable_reason(repo_root, task_dir)
+            if reason:
+                deny_pretooluse(reason)
             ensure_shared_worktree_bootstrap(repo_root, task_dir)
             normalized_tool_input, stripped = strip_conflicting_worktree_isolation(tool_input)
             if stripped:

@@ -115,6 +115,14 @@ def validate_worker_records(root: Path, runtime_root: Path, task: str) -> str | 
     return None
 
 
+def missing_worker_records_reason(worker_records: Path) -> str:
+    return (
+        "Hermes Runtime: active task has no worker_records.jsonl at "
+        f"{worker_records.as_posix()}; denying by default until a unique "
+        "task_card is recorded."
+    )
+
+
 def read_worker_records(path: Path) -> list[dict[str, Any]]:
     records: list[dict[str, Any]] = []
     try:
@@ -128,6 +136,10 @@ def read_worker_records(path: Path) -> list[dict[str, Any]]:
     except (OSError, json.JSONDecodeError, UnicodeDecodeError):
         return []
     return records
+
+
+def has_task_card(records: list[dict[str, Any]]) -> bool:
+    return any(record.get("type") == "task_card" for record in records)
 
 
 def normalize_target_path(root: Path, raw_path: str) -> str | None:
@@ -415,21 +427,37 @@ def main() -> int:
     worker_records = (
         root / ".trellis" / "tasks" / task / "hermes" / "worker_records.jsonl"
     )
-    if not worker_records.exists():
-        return 0
 
     event_name = str(data.get("hook_event_name") or "")
     runtime_root = root / ".trellis" / "scripts" / "hermes"
 
     if event_name in {"Stop", "SubagentStop"}:
+        if not worker_records.exists():
+            print(json.dumps(
+                block_payload(event_name, missing_worker_records_reason(worker_records)),
+                ensure_ascii=False,
+            ))
+            return 0
         reason = validate_worker_records(root, runtime_root, task)
         if reason is not None:
             print(json.dumps(block_payload(event_name, reason), ensure_ascii=False))
+            return 0
+        if not has_task_card(read_worker_records(worker_records)):
+            print(json.dumps(
+                block_payload(event_name, "Hermes worker records are missing task_card."),
+                ensure_ascii=False,
+            ))
             return 0
 
     if event_name == "PreToolUse":
         tool_name = str(data.get("tool_name") or "")
         if tool_name in WRITE_TOOL_NAMES:
+            if not worker_records.exists():
+                print(json.dumps(
+                    deny_tool_payload(event_name, missing_worker_records_reason(worker_records)),
+                    ensure_ascii=False,
+                ))
+                return 0
             reason = validate_worker_records(root, runtime_root, task)
             if reason is not None:
                 print(json.dumps(deny_tool_payload(event_name, reason), ensure_ascii=False))

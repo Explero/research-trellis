@@ -160,6 +160,29 @@ function setupManagedWorktreeRepo(
   writeTaskArtifacts(worktreeRoot, taskName, prd, implementPlan);
 }
 
+function setupSharedGitWorktree(repoRoot: string, taskName: string): string {
+  commitRepoState(repoRoot, "main workspace");
+  const worktreeRoot = path.join(
+    repoRoot,
+    ".trellis",
+    "trellis-worktrees",
+    taskName,
+  );
+  fs.mkdirSync(path.dirname(worktreeRoot), { recursive: true });
+  const result = spawnSync(
+    "git",
+    ["worktree", "add", "-q", worktreeRoot, "-b", `trellis-${taskName}`],
+    {
+      cwd: repoRoot,
+      encoding: "utf-8",
+    },
+  );
+  if (result.status !== 0) {
+    throw new Error(result.stderr || result.stdout || "git worktree add failed");
+  }
+  return worktreeRoot;
+}
+
 function commitRepoState(repoRoot: string, message = "init"): void {
   spawnSync("git", ["config", "user.email", "test@example.com"], {
     cwd: repoRoot,
@@ -224,6 +247,8 @@ function runPreToolUseHook(
   hookSpecificOutput?: {
     updatedInput?: Record<string, unknown>;
     additionalContext?: string;
+    permissionDecision?: string;
+    permissionDecisionReason?: string;
   };
   updatedInput?: Record<string, unknown>;
   updated_input?: Record<string, unknown>;
@@ -267,6 +292,7 @@ function runPreToolUseHook(
 function runHermesRuntimeGuard(
   cwd: string,
   input: Record<string, unknown>,
+  env: NodeJS.ProcessEnv = {},
 ): { stdout: string; stderr: string; status: number | null } {
   const hook = getSharedHookScripts().find(
     (h) => h.name === "hermes-runtime-guard.py",
@@ -286,6 +312,7 @@ function runHermesRuntimeGuard(
       env: {
         ...process.env,
         CLAUDE_PROJECT_DIR: cwd,
+        ...env,
       },
       input: JSON.stringify(input),
     });
@@ -481,7 +508,8 @@ describe.skipIf(!hasPython())(
     });
 
     it("removes conflicting Claude worktree isolation when cwd is already the shared worktree", () => {
-      setupManagedWorktreeRepo(worktreeRoot, taskName, "# prd\n");
+      setupMainRepo(repoRoot, taskName, "# prd\n");
+      worktreeRoot = setupSharedGitWorktree(repoRoot, taskName);
 
       const result = runPreToolUseHook(
         worktreeRoot,
@@ -515,13 +543,7 @@ describe.skipIf(!hasPython())(
 
     it("uses structured tool_input path fields as the shared worktree signal without active task state", () => {
       setupMainRepo(repoRoot, taskName, "# prd\n", "# implement\n");
-      const sharedWorktreeRoot = path.join(
-        repoRoot,
-        ".trellis",
-        "trellis-worktrees",
-        taskName,
-      );
-      fs.mkdirSync(sharedWorktreeRoot, { recursive: true });
+      const sharedWorktreeRoot = setupSharedGitWorktree(repoRoot, taskName);
 
       const result = runPreToolUseHook(
         repoRoot,
@@ -556,13 +578,8 @@ describe.skipIf(!hasPython())(
       ).toBe(true);
     });
 
-    it("bootstraps runtime bundle into the shared worktree before dispatch", () => {
-      setupMainRepo(
-        repoRoot,
-        taskName,
-        "# prd\n",
-        "# implement\n- 开发模式：subagent\n- 分支策略：worktree（路径：./.trellis/trellis-worktrees/06-05-hook-isolation-fix）\n",
-      );
+    it("denies Claude dispatch when the shared worktree signal points at a plain directory", () => {
+      setupMainRepo(repoRoot, taskName, "# prd\n", "# implement\n");
       const sharedWorktreeRoot = path.join(
         repoRoot,
         ".trellis",
@@ -570,6 +587,120 @@ describe.skipIf(!hasPython())(
         taskName,
       );
       fs.mkdirSync(sharedWorktreeRoot, { recursive: true });
+
+      const result = runPreToolUseHook(
+        repoRoot,
+        {
+          cwd: repoRoot,
+          tool_name: "Agent",
+          tool_input: {
+            subagent_type: "trellis-implement",
+            prompt: "Implement the requested fix.",
+            target_path: `./.trellis/trellis-worktrees/${taskName}/src/index.ts`,
+            isolation: "worktree",
+          },
+        },
+        {
+          CLAUDE_PROJECT_DIR: repoRoot,
+        },
+      );
+
+      expect(result.hookSpecificOutput?.permissionDecision).toBe("deny");
+      expect(result.hookSpecificOutput?.permissionDecisionReason).toContain(
+        "Git worktree",
+      );
+      expect(result.hookSpecificOutput?.updatedInput).toBeUndefined();
+    });
+
+    it("denies Claude dispatch when the shared worktree path is an unrelated git repository", () => {
+      setupMainRepo(repoRoot, taskName, "# prd\n", "# implement\n");
+      const sharedWorktreeRoot = path.join(
+        repoRoot,
+        ".trellis",
+        "trellis-worktrees",
+        taskName,
+      );
+      setupManagedWorktreeRepo(sharedWorktreeRoot, taskName, "# prd\n");
+
+      const result = runPreToolUseHook(
+        repoRoot,
+        {
+          cwd: repoRoot,
+          tool_name: "Agent",
+          tool_input: {
+            subagent_type: "trellis-implement",
+            prompt: "Implement the requested fix.",
+            target_path: `./.trellis/trellis-worktrees/${taskName}/src/index.ts`,
+            isolation: "worktree",
+          },
+        },
+        {
+          CLAUDE_PROJECT_DIR: repoRoot,
+        },
+      );
+
+      expect(result.hookSpecificOutput?.permissionDecision).toBe("deny");
+      expect(result.hookSpecificOutput?.permissionDecisionReason).toContain(
+        "registered Git worktree",
+      );
+      expect(result.hookSpecificOutput?.updatedInput).toBeUndefined();
+    });
+
+    it("creates the shared worktree before stripping isolation when the shared worktree is missing", () => {
+      setupMainRepo(repoRoot, taskName, "# prd\n", "# implement\n");
+      commitRepoState(repoRoot, "main workspace");
+
+      const result = runPreToolUseHook(
+        repoRoot,
+        {
+          cwd: repoRoot,
+          tool_name: "Agent",
+          tool_input: {
+            subagent_type: "trellis-implement",
+            prompt: "Implement the requested fix.",
+            target_path: `./.trellis/trellis-worktrees/${taskName}/src/index.ts`,
+            isolation: "worktree",
+          },
+        },
+        {
+          CLAUDE_PROJECT_DIR: repoRoot,
+        },
+      );
+
+      const sharedWorktreeRoot = path.join(
+        repoRoot,
+        ".trellis",
+        "trellis-worktrees",
+        taskName,
+      );
+      expect(result.hookSpecificOutput?.permissionDecision).not.toBe("deny");
+      expect(result.hookSpecificOutput?.updatedInput?.isolation).toBeUndefined();
+      expect(result.hookSpecificOutput?.updatedInput?.prompt).toContain(
+        "<!-- trellis-hook-injected -->",
+      );
+      expect(
+        fs.existsSync(path.join(sharedWorktreeRoot, ".git")),
+      ).toBe(true);
+      const listed = spawnSync("git", ["worktree", "list", "--porcelain"], {
+        cwd: repoRoot,
+        encoding: "utf-8",
+      });
+      expect(listed.stdout).toContain(`worktree ${sharedWorktreeRoot}`);
+      expect(
+        fs.existsSync(
+          path.join(sharedWorktreeRoot, ".trellis", "scripts", "task.py"),
+        ),
+      ).toBe(true);
+    });
+
+    it("bootstraps runtime bundle into the shared worktree before dispatch", () => {
+      setupMainRepo(
+        repoRoot,
+        taskName,
+        "# prd\n",
+        "# implement\n- 开发模式：subagent\n- 分支策略：worktree（路径：./.trellis/trellis-worktrees/06-05-hook-isolation-fix）\n",
+      );
+      const sharedWorktreeRoot = setupSharedGitWorktree(repoRoot, taskName);
       const contextId = setSessionActiveTask(
         repoRoot,
         taskName,
@@ -617,6 +748,7 @@ describe.skipIf(!hasPython())(
         "# prd\n## 开发策略\n- 开发模式：subagent\n- 分支策略：worktree（路径：./.trellis/trellis-worktrees/06-05-hook-isolation-fix）\n",
         "# implement\n",
       );
+      setupSharedGitWorktree(repoRoot, taskName);
       const contextId = setSessionActiveTask(
         repoRoot,
         taskName,
@@ -697,6 +829,7 @@ describe.skipIf(!hasPython())(
         "# prd\n",
         "# implement\nReview-gate contract: explicit-selection-v1\n\n### A. 开发模式\n- 选择：A2 subagent\n\n### B. 分支 / worktree 方式\n- 选择：B2 worktree（路径：./.trellis/trellis-worktrees/06-05-hook-isolation-fix）\n\n### C. 开发流与架构指导\n- 选择：C1 默认流程\n",
       );
+      setupSharedGitWorktree(repoRoot, taskName);
       const contextId = setSessionActiveTask(
         repoRoot,
         taskName,
@@ -735,7 +868,8 @@ describe.skipIf(!hasPython())(
     });
 
     it("uses the current shared worktree path as a Claude-only signal even without prompt hints", () => {
-      setupManagedWorktreeRepo(worktreeRoot, taskName, "# prd\n");
+      setupMainRepo(repoRoot, taskName, "# prd\n");
+      worktreeRoot = setupSharedGitWorktree(repoRoot, taskName);
 
       const result = runPreToolUseHook(
         worktreeRoot,
@@ -762,6 +896,39 @@ describe.skipIf(!hasPython())(
       expect(result.hookSpecificOutput?.updatedInput?.prompt).toContain(
         "<!-- trellis-hook-injected -->",
       );
+    });
+
+    it("denies Claude dispatch when cwd is a managed-worktree-shaped plain directory", () => {
+      setupMainRepo(repoRoot, taskName, "# prd\n", "# implement\n");
+      const plainWorktreeRoot = path.join(
+        repoRoot,
+        ".trellis",
+        "trellis-worktrees",
+        taskName,
+      );
+      writeTaskArtifacts(plainWorktreeRoot, taskName, "# prd\n");
+
+      const result = runPreToolUseHook(
+        plainWorktreeRoot,
+        {
+          cwd: plainWorktreeRoot,
+          tool_name: "Agent",
+          tool_input: {
+            subagent_type: "trellis-implement",
+            prompt: "Implement the requested fix.",
+            isolation: "worktree",
+          },
+        },
+        {
+          CLAUDE_PROJECT_DIR: plainWorktreeRoot,
+        },
+      );
+
+      expect(result.hookSpecificOutput?.permissionDecision).toBe("deny");
+      expect(result.hookSpecificOutput?.permissionDecisionReason).toContain(
+        "Git worktree",
+      );
+      expect(result.hookSpecificOutput?.updatedInput).toBeUndefined();
     });
 
     it("keeps isolation untouched on non-Claude platforms even when the shared worktree path appears", () => {
@@ -814,7 +981,11 @@ describe.skipIf(!hasPython())("shared session-start worktree bootstrap", () => {
 
   it("bootstraps runtime bundle and planning snapshot into a Trellis-managed worktree", () => {
     setupMainRepo(repoRoot, taskName, "main planning\n");
-    fs.mkdirSync(worktreeRoot, { recursive: true });
+    worktreeRoot = setupSharedGitWorktree(repoRoot, taskName);
+    fs.rmSync(path.join(worktreeRoot, ".trellis"), {
+      recursive: true,
+      force: true,
+    });
 
     const raw = runSessionStart(worktreeRoot);
     const parsed = JSON.parse(raw) as {
@@ -860,7 +1031,7 @@ describe.skipIf(!hasPython())("shared session-start worktree bootstrap", () => {
 
   it("reports planning drift and asks for explicit main-workspace overwrite when the populated worktree is git-clean", () => {
     setupMainRepo(repoRoot, taskName, "main planning\n");
-    setupManagedWorktreeRepo(worktreeRoot, taskName, "main planning\n");
+    worktreeRoot = setupSharedGitWorktree(repoRoot, taskName);
     fs.mkdirSync(path.join(worktreeRoot, "src"), { recursive: true });
     fs.writeFileSync(
       path.join(worktreeRoot, "src", "index.ts"),
@@ -893,7 +1064,7 @@ describe.skipIf(!hasPython())("shared session-start worktree bootstrap", () => {
 
   it("blocks auto-overwrite when the populated worktree has local code changes", () => {
     setupMainRepo(repoRoot, taskName, "main planning\n");
-    setupManagedWorktreeRepo(worktreeRoot, taskName, "main planning\n");
+    worktreeRoot = setupSharedGitWorktree(repoRoot, taskName);
     fs.mkdirSync(path.join(worktreeRoot, "src"), { recursive: true });
     const sourceFile = path.join(worktreeRoot, "src", "index.ts");
     fs.writeFileSync(sourceFile, "export const clean = true;\n");
@@ -938,7 +1109,7 @@ describe.skipIf(!hasPython())("hermes runtime guard hook", () => {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
-  it("stays silent when a task has no Hermes worker records", () => {
+  it("blocks Stop when an active task has no Hermes worker records", () => {
     const result = runHermesRuntimeGuard(repoRoot, {
       cwd: repoRoot,
       hook_event_name: "Stop",
@@ -946,8 +1117,137 @@ describe.skipIf(!hasPython())("hermes runtime guard hook", () => {
     });
 
     expect(result.status).toBe(0);
+    const payload = JSON.parse(result.stdout) as {
+      decision?: string;
+      reason?: string;
+    };
+    expect(payload.decision).toBe("block");
+    expect(payload.reason).toContain("worker_records.jsonl");
+    expect(result.stderr).toBe("");
+  });
+
+  it("honors TRELLIS_HOOKS=0 when Hermes worker records are missing", () => {
+    const result = runHermesRuntimeGuard(
+      repoRoot,
+      {
+        cwd: repoRoot,
+        hook_event_name: "Stop",
+        session_id: "test-session",
+      },
+      { TRELLIS_HOOKS: "0" },
+    );
+
+    expect(result.status).toBe(0);
     expect(result.stdout).toBe("");
     expect(result.stderr).toBe("");
+  });
+
+  it("blocks Stop when Hermes worker records are empty", () => {
+    const hermesDir = path.join(
+      repoRoot,
+      ".trellis",
+      "tasks",
+      taskName,
+      "hermes",
+    );
+    fs.mkdirSync(hermesDir, { recursive: true });
+    fs.writeFileSync(path.join(hermesDir, "worker_records.jsonl"), "", "utf-8");
+
+    const result = runHermesRuntimeGuard(repoRoot, {
+      cwd: repoRoot,
+      hook_event_name: "Stop",
+      session_id: "test-session",
+    });
+
+    expect(result.status).toBe(0);
+    const payload = JSON.parse(result.stdout) as {
+      decision?: string;
+      reason?: string;
+    };
+    expect(payload.decision).toBe("block");
+    expect(payload.reason).toContain("missing task_card");
+  });
+
+  it("denies PreToolUse write tools when an active task has no Hermes worker records", () => {
+    const result = runHermesRuntimeGuard(repoRoot, {
+      cwd: repoRoot,
+      hook_event_name: "PreToolUse",
+      tool_name: "Write",
+      tool_input: {
+        file_path: "src/app.ts",
+      },
+      session_id: "test-session",
+    });
+
+    expect(result.status).toBe(0);
+    const payload = JSON.parse(result.stdout) as {
+      hookSpecificOutput?: {
+        permissionDecision?: string;
+        permissionDecisionReason?: string;
+      };
+    };
+    expect(payload.hookSpecificOutput?.permissionDecision).toBe("deny");
+    expect(payload.hookSpecificOutput?.permissionDecisionReason).toContain(
+      "worker_records.jsonl",
+    );
+  });
+
+  it("denies PreToolUse write tools when records have no unique active task_card", () => {
+    const hermesDir = path.join(
+      repoRoot,
+      ".trellis",
+      "tasks",
+      taskName,
+      "hermes",
+    );
+    fs.mkdirSync(hermesDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(hermesDir, "worker_records.jsonl"),
+      ["job-a", "job-b"]
+        .map((jobId) =>
+          JSON.stringify({
+            type: "task_card",
+            id: `tc-${jobId}`,
+            timestamp: "2026-06-29T00:00:00Z",
+            job_id: jobId,
+            role: "coder",
+            worktree_id: "main",
+            status: "queued",
+            allowed_files: ["src/**"],
+            forbidden_files: [],
+            heartbeat_interval: "5m",
+            timeout_at: "2099-01-01T00:00:00Z",
+            checkpoint: "not-started",
+            resume_from: "task_card",
+            record_uri: `.trellis/tasks/${taskName}/hermes/worker_records.jsonl`,
+            evidence_refs: [],
+            risk_flags: [],
+          }),
+        )
+        .join("\n") + "\n",
+    );
+
+    const result = runHermesRuntimeGuard(repoRoot, {
+      cwd: repoRoot,
+      hook_event_name: "PreToolUse",
+      tool_name: "Write",
+      tool_input: {
+        file_path: "src/app.ts",
+      },
+      session_id: "test-session",
+    });
+
+    expect(result.status).toBe(0);
+    const payload = JSON.parse(result.stdout) as {
+      hookSpecificOutput?: {
+        permissionDecision?: string;
+        permissionDecisionReason?: string;
+      };
+    };
+    expect(payload.hookSpecificOutput?.permissionDecision).toBe("deny");
+    expect(payload.hookSpecificOutput?.permissionDecisionReason).toMatch(
+      /unique active task_card|multiple active writers/,
+    );
   });
 
   it("blocks Stop when Hermes worker records are invalid", () => {

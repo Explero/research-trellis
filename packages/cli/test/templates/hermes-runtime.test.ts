@@ -418,8 +418,13 @@ describe("Hermes runtime scripts", () => {
     expect(init.status).toBe(0);
     expect(init.stdout).toContain(".trellis/tasks/01-test/hermes/experiment.yaml");
     expect(init.stdout).toContain(".trellis/tasks/01-test/hermes/run_manifest.jsonl");
+    expect(init.stdout).toContain(".trellis/tasks/01-test/hermes/worker_records.jsonl");
     expect(fs.existsSync(path.join(taskDir, "hermes", "experiment.yaml"))).toBe(true);
     expect(fs.existsSync(path.join(taskDir, "hermes", "run_manifest.jsonl"))).toBe(true);
+    expect(fs.readFileSync(
+      path.join(taskDir, "hermes", "worker_records.jsonl"),
+      "utf-8",
+    )).toBe("");
   });
 
   it("rejects worker results when there is no task_card", () => {
@@ -2757,12 +2762,24 @@ describe("Hermes runtime scripts", () => {
     expect(aggregate.status).toBe(0);
     expect(aggregate.stdout).toContain("aggregate written");
 
+    interface AggregateReport {
+      run_count: number;
+      failure_count: number;
+      exceptions: { run_id: string; error: string }[];
+      duration_seconds: { mean: number; variance: number };
+      outputs_count: { mean: number };
+      metrics: {
+        accuracy: { mean: number; variance: number };
+      };
+      output_hashes: string[];
+    }
+
     const result = JSON.parse(
       fs.readFileSync(
         path.join(taskDir, "hermes", "aggregate.json"),
         "utf-8",
       ),
-    ) as Record<string, any>;
+    ) as AggregateReport;
     expect(result.run_count).toBe(2);
     expect(result.failure_count).toBe(1);
     expect(result.exceptions).toEqual([
@@ -3467,7 +3484,16 @@ describe("Hermes runtime scripts", () => {
     ]);
 
     expect(review.status).toBe(0);
-    const result = JSON.parse(review.stdout) as Record<string, any>;
+    interface ClaimReviewResult {
+      supported: boolean;
+      claims: {
+        claim_id: string;
+        supported: boolean;
+        evidence_ids: string[];
+      }[];
+    }
+
+    const result = JSON.parse(review.stdout) as ClaimReviewResult;
     expect(result.supported).toBe(true);
     expect(result.claims[0]).toMatchObject({
       claim_id: "cl-20260629-000000-demo",

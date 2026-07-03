@@ -343,6 +343,10 @@ def run_manifest_path(root: Path, task: str) -> Path:
     return hermes_dir(root, task) / RUN_MANIFEST_FILE
 
 
+def worker_records_path(root: Path, task: str) -> Path:
+    return hermes_dir(root, task) / WORKER_FILE
+
+
 def compare_path(root: Path, task: str) -> Path:
     return hermes_dir(root, task) / COMPARE_FILE
 
@@ -1786,6 +1790,14 @@ def write_experiment_skeleton(path: Path, task: str) -> bool:
 
 
 def ensure_run_manifest(path: Path) -> bool:
+    if path.exists():
+        return False
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("", encoding="utf-8")
+    return True
+
+
+def ensure_worker_records(path: Path) -> bool:
     if path.exists():
         return False
     path.parent.mkdir(parents=True, exist_ok=True)

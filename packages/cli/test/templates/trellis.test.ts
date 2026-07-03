@@ -596,9 +596,12 @@ describe("task.py Hermes lifecycle", () => {
       const taskName = path.basename(taskDir);
       const experimentPath = path.join(taskDir, "hermes", "experiment.yaml");
       const runManifestPath = path.join(taskDir, "hermes", "run_manifest.jsonl");
+      const workerRecordsPath = path.join(taskDir, "hermes", "worker_records.jsonl");
 
       expect(fs.existsSync(experimentPath)).toBe(true);
       expect(fs.existsSync(runManifestPath)).toBe(true);
+      expect(fs.existsSync(workerRecordsPath)).toBe(true);
+      expect(fs.readFileSync(workerRecordsPath, "utf-8")).toBe("");
       expect(fs.readFileSync(experimentPath, "utf-8")).toContain(
         `artifact_dir: ".trellis/tasks/${taskName}/hermes/runs"`,
       );
@@ -665,6 +668,7 @@ describe("task.py Hermes lifecycle", () => {
       expect(result.status, result.stderr).toBe(0);
       expect(fs.existsSync(path.join(taskDir, "hermes", "experiment.yaml"))).toBe(true);
       expect(fs.existsSync(path.join(taskDir, "hermes", "run_manifest.jsonl"))).toBe(true);
+      expect(fs.existsSync(path.join(taskDir, "hermes", "worker_records.jsonl"))).toBe(true);
       const taskJson = JSON.parse(
         fs.readFileSync(path.join(taskDir, "task.json"), "utf-8"),
       ) as { status: string };

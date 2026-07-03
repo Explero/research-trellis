@@ -10,12 +10,17 @@
  */
 
 import { describe, expect, it } from "vitest";
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { AI_TOOLS } from "../src/types/ai-tools.js";
 import {
   PLATFORM_IDS,
 } from "../src/configurators/index.js";
 
 const COMMANDER_RESERVED_FLAGS = ["help", "version", "V", "h"];
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const repoRoot = path.resolve(__dirname, "../../..");
 
 // =============================================================================
 // Internal Consistency (SQLite-style invariant checks)
@@ -86,6 +91,30 @@ describe("registry internal consistency", () => {
     }
   });
 
+});
+
+describe("release metadata invariants", () => {
+  it("published package repository URLs point at the Hermes release repository", () => {
+    for (const packagePath of [
+      path.join(repoRoot, "packages", "cli", "package.json"),
+      path.join(repoRoot, "packages", "core", "package.json"),
+    ]) {
+      const packageJson = JSON.parse(fs.readFileSync(packagePath, "utf-8")) as {
+        repository?: { url?: string };
+      };
+
+      expect(packageJson.repository?.url).toBe(
+        "https://github.com/LonelyHerbivore/Trellis-Hermes.git",
+      );
+    }
+  });
+
+  it("root README does not advertise the old Herbivore release repository", () => {
+    const readme = fs.readFileSync(path.join(repoRoot, "README.md"), "utf-8");
+
+    expect(readme).not.toContain("Trellis-Herbivore");
+    expect(readme).toContain("Trellis-Hermes");
+  });
 });
 
 // =============================================================================

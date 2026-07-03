@@ -1393,29 +1393,34 @@ describe("regression: current-task path normalization", () => {
     return content ?? "";
   }
 
-  it("[session-current-task] task.py start without context key enters degraded mode (returns 0, no pointer)", () => {
-    // 0.5.3 hotfix: task.py start no longer hard-fails when no session identity
-    // is available (Windows + Claude Code, --continue resume, etc.). Instead it
-    // prints a degraded-mode warning and returns 0 so the AI workflow can
-    // proceed.
+  it("[session-current-task] task.py start without context key refuses to enter an untracked active state", () => {
     setupTaskRepo();
     const taskScriptPath = path.join(tmpDir, ".trellis", "scripts", "task.py");
 
-    const output = execSync(
-      `${pythonCmd} ${JSON.stringify(taskScriptPath)} start ${JSON.stringify(".trellis\\\\tasks\\\\issue-106")}`,
-      {
-        cwd: tmpDir,
-        encoding: "utf-8",
-        env: sessionEnv(),
-      },
-    );
+    let output = "";
+    let status = 0;
+    try {
+      execSync(
+        `${pythonCmd} ${JSON.stringify(taskScriptPath)} start ${JSON.stringify(".trellis\\\\tasks\\\\issue-106")}`,
+        {
+          cwd: tmpDir,
+          encoding: "utf-8",
+          env: sessionEnv(),
+        },
+      );
+    } catch (error) {
+      status =
+        typeof (error as { status?: unknown }).status === "number"
+          ? ((error as { status: number }).status)
+          : 1;
+      output = String((error as { stdout?: unknown }).stdout ?? "");
+    }
 
+    expect(status).toBe(1);
     expect(output).toContain("Session identity not available");
-    expect(output).toContain("degraded");
-    expect(output).toContain("conversation context");
+    expect(output).toContain("task start aborted");
     expect(output).toContain("TRELLIS_CONTEXT_ID");
 
-    // No active-task pointer written
     expect(
       fs.existsSync(path.join(tmpDir, ".trellis", ".current-task")),
     ).toBe(false);
@@ -1436,10 +1441,7 @@ describe("regression: current-task path normalization", () => {
     expect(taskJson.status).toBe("in_progress");
   });
 
-  it("[session-current-task] task.py start in degraded mode flips planning → in_progress", () => {
-    // Verify the status flip path of degraded mode by setting up a task with
-    // status=planning explicitly, then asserting the flip happened without a
-    // session identity being available.
+  it("[session-current-task] task.py start without context key keeps planning tasks in planning", () => {
     setupTaskRepo();
     const taskJsonPath = path.join(
       tmpDir,
@@ -1453,14 +1455,25 @@ describe("regression: current-task path normalization", () => {
     fs.writeFileSync(taskJsonPath, JSON.stringify(taskJson, null, 2), "utf-8");
 
     const taskScriptPath = path.join(tmpDir, ".trellis", "scripts", "task.py");
-    const output = execSync(
-      `${pythonCmd} ${JSON.stringify(taskScriptPath)} start ${JSON.stringify(".trellis\\\\tasks\\\\issue-106")}`,
-      { cwd: tmpDir, encoding: "utf-8", env: sessionEnv() },
-    );
+    let output = "";
+    let status = 0;
+    try {
+      execSync(
+        `${pythonCmd} ${JSON.stringify(taskScriptPath)} start ${JSON.stringify(".trellis\\\\tasks\\\\issue-106")}`,
+        { cwd: tmpDir, encoding: "utf-8", env: sessionEnv() },
+      );
+    } catch (error) {
+      status =
+        typeof (error as { status?: unknown }).status === "number"
+          ? ((error as { status: number }).status)
+          : 1;
+      output = String((error as { stdout?: unknown }).stdout ?? "");
+    }
 
-    expect(output).toContain("planning → in_progress");
+    expect(status).toBe(1);
+    expect(output).toContain("task start aborted");
     const after = JSON.parse(fs.readFileSync(taskJsonPath, "utf-8"));
-    expect(after.status).toBe("in_progress");
+    expect(after.status).toBe("planning");
   });
 
   it("[session-current-task] task.py start writes session runtime state when TRELLIS_CONTEXT_ID is set", () => {

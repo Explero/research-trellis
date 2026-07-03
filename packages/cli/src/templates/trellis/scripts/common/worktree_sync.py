@@ -78,14 +78,107 @@ def task_dir(repo_root: Path, task_dir_name: str) -> Path:
     return repo_root / DIR_WORKFLOW / "tasks" / task_dir_name
 
 
+def is_git_worktree_root(path: Path) -> bool:
+    if not path.is_dir():
+        return False
+    code, stdout, _ = run_git(["rev-parse", "--show-toplevel"], cwd=path)
+    if code != 0:
+        return False
+    try:
+        return Path(stdout.strip()).resolve() == path.resolve()
+    except OSError:
+        return False
+
+
+def is_registered_git_worktree(main_root: Path, worktree_root: Path) -> bool:
+    if not is_git_worktree_root(main_root) or not is_git_worktree_root(worktree_root):
+        return False
+    code, stdout, _ = run_git(["worktree", "list", "--porcelain"], cwd=main_root)
+    if code != 0:
+        return False
+    try:
+        target = worktree_root.resolve()
+    except OSError:
+        return False
+    for line in stdout.splitlines():
+        if not line.startswith("worktree "):
+            continue
+        try:
+            listed = Path(line[len("worktree "):]).resolve()
+        except OSError:
+            continue
+        if listed == target:
+            return True
+    return False
+
+
+def _shared_worktree_root(main_root: Path, task_dir_name: str) -> Path:
+    return main_root / WORKTREE_PARENT_DIR / WORKTREE_ROOT_DIR / task_dir_name
+
+
+def _shared_worktree_branch(task_dir_name: str) -> str:
+    chars: list[str] = []
+    for char in task_dir_name.replace("\\", "/"):
+        if char.isalnum() or char in {"-", "_", ".", "/"}:
+            chars.append(char)
+        else:
+            chars.append("-")
+    branch_leaf = "/".join(part for part in "".join(chars).split("/") if part)
+    branch_leaf = branch_leaf.strip(".-/")
+    return f"trellis/{branch_leaf or 'task'}"
+
+
+def ensure_registered_shared_worktree(
+    main_root: Path,
+    task_dir_name: str,
+) -> tuple[Path | None, str | None]:
+    if not is_git_worktree_root(main_root):
+        return None, "main workspace is not a Git worktree root"
+    if not (main_root / DIR_WORKFLOW / "scripts").is_dir():
+        return None, "main workspace is missing .trellis/scripts"
+    if not task_dir(main_root, task_dir_name).is_dir():
+        return None, f"task directory .trellis/tasks/{task_dir_name} does not exist"
+
+    worktree_root = _shared_worktree_root(main_root, task_dir_name)
+    if is_registered_git_worktree(main_root, worktree_root):
+        return worktree_root, None
+    if worktree_root.exists():
+        return (
+            None,
+            f"{worktree_root.as_posix()} exists but is not a registered Git worktree",
+        )
+
+    worktree_root.parent.mkdir(parents=True, exist_ok=True)
+    branch = _shared_worktree_branch(task_dir_name)
+    branch_ref = f"refs/heads/{branch}"
+    branch_exists, _, _ = run_git(
+        ["show-ref", "--verify", "--quiet", branch_ref],
+        cwd=main_root,
+    )
+    if branch_exists == 0:
+        args = ["worktree", "add", str(worktree_root), branch]
+    else:
+        args = ["worktree", "add", "-b", branch, str(worktree_root), "HEAD"]
+    code, _, stderr = run_git(args, cwd=main_root)
+    if code != 0:
+        return None, stderr.strip() or f"failed to create shared worktree {worktree_root}"
+    if not is_registered_git_worktree(main_root, worktree_root):
+        return None, f"{worktree_root.as_posix()} was created but is not registered"
+    return worktree_root, None
+
+
 def detect_trellis_managed_worktree(repo_root: Path) -> tuple[Path, str] | None:
     try:
         if repo_root.parent.name != WORKTREE_ROOT_DIR:
             return None
         if repo_root.parent.parent.name != WORKTREE_PARENT_DIR:
             return None
+        if not is_git_worktree_root(repo_root):
+            return None
         main_root = repo_root.parent.parent.parent
         if not (main_root / ".git").exists():
+            return None
+        if not is_registered_git_worktree(main_root, repo_root):
             return None
         return main_root, repo_root.name
     except Exception:
@@ -114,10 +207,12 @@ def resolve_shared_worktree_roots(
         return main_root, repo_root
 
     main_root = repo_root
-    worktree_root = repo_root / WORKTREE_PARENT_DIR / WORKTREE_ROOT_DIR / task_dir_name
-    if not worktree_root.exists():
+    worktree_root = _shared_worktree_root(repo_root, task_dir_name)
+    if not is_git_worktree_root(worktree_root):
         return None
     if not (main_root / DIR_WORKFLOW / "scripts").is_dir():
+        return None
+    if not is_registered_git_worktree(main_root, worktree_root):
         return None
     return main_root, worktree_root
 
