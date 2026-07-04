@@ -20,7 +20,7 @@ import type { Readable, Writable } from "node:stream";
 import {
   DEFAULT_INBOX_POLICY,
   type InboxPolicy,
-} from "trellis-hgl-core/channel";
+} from "trellis-hermes-core/channel";
 
 import { getAdapter, type Provider } from "./adapters/index.js";
 import { appendEvent } from "./store/events.js";

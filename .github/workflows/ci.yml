@@ -36,4 +36,4 @@ jobs:
         run: pnpm build
 
       - name: Hermes preflight
-        run: pnpm --filter trellis-hgl hermes:preflight
+        run: pnpm --filter trellis-hermes hermes:preflight

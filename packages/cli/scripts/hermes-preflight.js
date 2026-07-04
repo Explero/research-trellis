@@ -310,30 +310,30 @@ export function runPreflight(options = {}) {
   if (quick) {
     checks.push(
       result("Template tests", true, [
-        `${YELLOW}quick mode${RESET}: skipped; run pnpm --filter trellis-hgl exec vitest run test/templates/hermes-runtime.test.ts test/templates/trellis.test.ts test/templates/claude.test.ts test/templates/codex.test.ts test/templates/shared-hooks.test.ts`,
+        `${YELLOW}quick mode${RESET}: skipped; run pnpm --filter trellis-hermes exec vitest run test/templates/hermes-runtime.test.ts test/templates/trellis.test.ts test/templates/claude.test.ts test/templates/codex.test.ts test/templates/shared-hooks.test.ts`,
       ]),
       result("Typecheck", true, [
-        `${YELLOW}quick mode${RESET}: skipped; run pnpm --filter trellis-hgl typecheck`,
+        `${YELLOW}quick mode${RESET}: skipped; run pnpm --filter trellis-hermes typecheck`,
       ]),
       result("Build", true, [
-        `${YELLOW}quick mode${RESET}: skipped; run pnpm --filter trellis-hgl build`,
+        `${YELLOW}quick mode${RESET}: skipped; run pnpm --filter trellis-hermes build`,
       ]),
     );
   } else {
     checks.push(
       runCommandCheck("Template tests", repoRoot, "pnpm", [
         "--filter",
-        "trellis-hgl",
+        "trellis-hermes",
         ...TEMPLATE_TEST_ARGS,
       ]),
       runCommandCheck("Typecheck", repoRoot, "pnpm", [
         "--filter",
-        "trellis-hgl",
+        "trellis-hermes",
         "typecheck",
       ]),
       runCommandCheck("Build", repoRoot, "pnpm", [
         "--filter",
-        "trellis-hgl",
+        "trellis-hermes",
         "build",
       ]),
     );

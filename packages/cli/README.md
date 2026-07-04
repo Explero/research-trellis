@@ -9,6 +9,8 @@
 
 当前状态：可以放进低风险真实科研项目里试部署；不建议直接用于不可回滚的关键项目。
 
+准备发布到 npm 时，CLI 包名使用 `trellis-hermes`，核心包名使用 `trellis-hermes-core`。
+
 ## 这是什么
 
 `Trellis-Hermes`（科研改造版）是一个本地开发工具，用来把 AI 协作开发过程里的关键动作落到仓库文件中：
@@ -29,7 +31,7 @@ pnpm install --frozen-lockfile
 pnpm lint
 pnpm test
 pnpm build
-pnpm --filter trellis-hgl hermes:preflight
+pnpm --filter trellis-hermes hermes:preflight
 ```
 
 这些检查覆盖：
@@ -54,7 +56,7 @@ pnpm --filter trellis-hgl hermes:preflight
 
 ## 从源码试用
 
-当前建议从 GitHub 源码运行，不建议按正式 npm 包来安装。
+当前建议从 GitHub 源码运行；等 npm 发布完成后，再改用 `npm install -g trellis-hermes`。
 
 ```bash
 git clone git@github.com:Explero/Trellis-Hermes.git
@@ -186,7 +188,7 @@ node /path/to/Trellis-Hermes/packages/cli/bin/trellis.js update
 pnpm lint
 pnpm test
 pnpm build
-pnpm --filter trellis-hgl hermes:preflight
+pnpm --filter trellis-hermes hermes:preflight
 ```
 
 如果改动涉及 Hermes 模板、hook 或任务流，优先补充对应测试，再看 GitHub Actions 结果。

@@ -104,7 +104,7 @@ describe("release metadata invariants", () => {
       };
 
       expect(packageJson.repository?.url).toBe(
-        "https://github.com/LonelyHerbivore/Trellis-Hermes.git",
+        "git+https://github.com/Explero/Trellis-Hermes.git",
       );
     }
   });

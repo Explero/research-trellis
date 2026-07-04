@@ -8,16 +8,16 @@
 1. 先运行 quick gate：
 
 ```bash
-pnpm --filter trellis-hgl hermes:preflight -- --quick
+pnpm --filter trellis-hermes hermes:preflight -- --quick
 ```
 
 2. 发布前补跑完整验证：
 
 ```bash
-pnpm --filter trellis-hgl exec vitest run test/templates/hermes-runtime.test.ts test/templates/trellis.test.ts test/templates/claude.test.ts test/templates/codex.test.ts test/templates/shared-hooks.test.ts
+pnpm --filter trellis-hermes exec vitest run test/templates/hermes-runtime.test.ts test/templates/trellis.test.ts test/templates/claude.test.ts test/templates/codex.test.ts test/templates/shared-hooks.test.ts
 PYTHONPYCACHEPREFIX=/tmp/trellis-hermes-pycache python3 -m py_compile packages/cli/src/templates/trellis/scripts/hermes/*.py packages/cli/src/templates/shared-hooks/hermes-runtime-guard.py
-pnpm --filter trellis-hgl typecheck
-pnpm --filter trellis-hgl build
+pnpm --filter trellis-hermes typecheck
+pnpm --filter trellis-hermes build
 ```
 
 3. 若 Python 编译后出现 `__pycache__` 或 `.pyc` 在模板目录内，不能发布；用 `gio trash` 或 `trash` 清理后重跑 preflight。

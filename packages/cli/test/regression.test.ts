@@ -96,8 +96,8 @@ describe("regression: workflow archive without commit", () => {
   });
 });
 
-describe("regression: package rename to trellis-hgl", () => {
-  it("[rename] CLI package template metadata points to trellis-hgl package name", () => {
+describe("regression: package rename to trellis-hermes", () => {
+  it("[rename] CLI package template metadata is publish-safe for npm bin links", () => {
     const packageJsonPath = path.resolve(
       fileURLToPath(new URL("../package.json", import.meta.url)),
     );
@@ -105,10 +105,10 @@ describe("regression: package rename to trellis-hgl", () => {
       fs.readFileSync(packageJsonPath, "utf-8"),
     ) as { name: string; bin?: Record<string, string> };
 
-    expect(packageJson.name).toBe("trellis-hgl");
+    expect(packageJson.name).toBe("trellis-hermes");
     expect(packageJson.bin).toMatchObject({
-      trellis: "./bin/trellis.js",
-      tl: "./bin/trellis.js",
+      trellis: "bin/trellis.js",
+      tl: "bin/trellis.js",
     });
   });
 });
