@@ -1,149 +1,206 @@
-<p align="center">
-<picture>
-<source srcset="assets/trellis.png" media="(prefers-color-scheme: dark)">
-<source srcset="assets/trellis.png" media="(prefers-color-scheme: light)">
-<img src="assets/trellis.png" alt="Trellis Logo" width="500" style="image-rendering: -webkit-optimize-contrast; image-rendering: crisp-edges;">
-</picture>
-</p>
+# Trellis-Hermes
 
-<p align="center">
-<strong>Make AI coding reliable at team scale.</strong><br/>
-<sub>A team AI coding harness for progressive specs, custom workflows, task context, and memory across Claude Code, Cursor, Codex, OpenCode, Pi Agent, and more.</sub>
-</p>
+面向科研项目的 `Trellis`（原版 Trellis）实验性改造分支。
 
-<p align="center">
-<a href="./README_CN.md">简体中文</a> •
-<a href="https://docs.trytrellis.app/">Docs</a> •
-<a href="https://docs.trytrellis.app/start/install-and-first-task">Quick Start</a> •
-<a href="https://docs.trytrellis.app/advanced/multi-platform">Supported Platforms</a> •
-<a href="https://docs.trytrellis.app/start/real-world-scenarios">Use Cases</a>
-</p>
+[![CI](https://github.com/Explero/Trellis-Hermes/actions/workflows/ci.yml/badge.svg)](https://github.com/Explero/Trellis-Hermes/actions/workflows/ci.yml)
+[![License: AGPL-3.0](https://img.shields.io/badge/license-AGPL--3.0-16a34a.svg?style=flat-square)](LICENSE)
 
-<p align="center">
-<a href="https://www.npmjs.com/package/trellis-hgl"><img src="https://img.shields.io/npm/v/trellis-hgl.svg?style=flat-square&color=2563eb" alt="npm version" /></a>
-<a href="https://www.npmjs.com/package/trellis-hgl"><img src="https://img.shields.io/npm/dw/trellis-hgl?style=flat-square&color=cb3837&label=downloads" alt="npm downloads" /></a>
-<a href="https://github.com/mindfold-ai/Trellis/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-AGPL--3.0-16a34a.svg?style=flat-square" alt="license" /></a>
-<a href="https://github.com/mindfold-ai/Trellis/stargazers"><img src="https://img.shields.io/github/stars/mindfold-ai/Trellis?style=flat-square&color=eab308" alt="stars" /></a>
-<a href="https://docs.trytrellis.app/"><img src="https://img.shields.io/badge/docs-trytrellis.app-0f766e?style=flat-square" alt="docs" /></a>
-<a href="https://discord.com/invite/tWcCZ3aRHc"><img src="https://img.shields.io/badge/Discord-Join-5865F2?style=flat-square&logo=discord&logoColor=white" alt="Discord" /></a>
-<a href="https://linux.do"><img src="https://img.shields.io/badge/LINUX-DO-FFB003.svg?logo=data:image/svg%2bxml;base64,DQo8c3ZnIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyIgd2lkdGg9IjEwMCIgaGVpZ2h0PSIxMDAiPjxwYXRoIGQ9Ik00Ni44Mi0uMDU1aDYuMjVxMjMuOTY5IDIuMDYyIDM4IDIxLjQyNmM1LjI1OCA3LjY3NiA4LjIxNSAxNi4xNTYgOC44NzUgMjUuNDV2Ni4yNXEtMi4wNjQgMjMuOTY4LTIxLjQzIDM4LTExLjUxMiA3Ljg4NS0yNS40NDUgOC44NzRoLTYuMjVxLTIzLjk3LTIuMDY0LTM4LjAwNC0yMS40M1EuOTcxIDY3LjA1Ni0uMDU0IDUzLjE4di02LjQ3M0MxLjM2MiAzMC43ODEgOC41MDMgMTguMTQ4IDIxLjM3IDguODE3IDI5LjA0NyAzLjU2MiAzNy41MjcuNjA0IDQ2LjgyMS0uMDU2IiBzdHlsZT0ic3Ryb2tlOm5vbmU7ZmlsbC1ydWxlOmV2ZW5vZGQ7ZmlsbDojZWNlY2VjO2ZpbGwtb3BhY2l0eToxIi8+PHBhdGggZD0iTTQ3LjI2NiAyLjk1N3EyMi41My0uNjUgMzcuNzc3IDE1LjczOGE0OS43IDQ5LjcgMCAwIDEgNi44NjcgMTAuMTU3cS00MS45NjQuMjIyLTgzLjkzIDAgOS43NS0xOC42MTYgMzAuMDI0LTI0LjM4N2E2MSA2MSAwIDAgMSA5LjI2Mi0xLjUwOCIgc3R5bGU9InN0cm9rZTpub25lO2ZpbGwtcnVsZTpldmVub2RkO2ZpbGw6IzE5MTkxOTtmaWxsLW9wYWNpdHk6MSIvPjxwYXRoIGQ9Ik03Ljk4IDcwLjkyNmMyNy45NzctLjAzNSA1NS45NTQgMCA4My45My4xMTNRODMuNDI2IDg3LjQ3MyA2Ni4xMyA5NC4wODZxLTE4LjgxIDYuNTQ0LTM2LjgzMi0xLjg5OC0xNC4yMDMtNy4wOS0yMS4zMTctMjEuMjYyIiBzdHlsZT0ic3Ryb2tlOm5vbmU7ZmlsbC1ydWxlOmV2ZW5vZGQ7ZmlsbDojZjlhZjAwO2ZpbGwtb3BhY2l0eToxIi8+PC9zdmc+&style=flat-square" alt="LINUX DO" /></a>
-<a href="https://github.com/mindfold-ai/Trellis/issues"><img src="https://img.shields.io/github/issues/mindfold-ai/Trellis?style=flat-square&color=e67e22" alt="open issues" /></a>
-<a href="https://github.com/mindfold-ai/Trellis/pulls"><img src="https://img.shields.io/github/issues-pr/mindfold-ai/Trellis?style=flat-square&color=9b59b6" alt="open PRs" /></a>
-<a href="https://deepwiki.com/mindfold-ai/Trellis"><img src="https://img.shields.io/badge/Ask-DeepWiki-blue?style=flat-square" alt="Ask DeepWiki" /></a>
-<a href="https://chatgpt.com/?q=Explain+the+project+mindfold-ai/Trellis+on+GitHub"><img src="https://img.shields.io/badge/Ask-ChatGPT-74aa9c?style=flat-square&logo=openai&logoColor=white" alt="Ask ChatGPT" /></a>
-</p>
+这个仓库不是原版 `Trellis`（原版项目）的替代品，也不是已经准备大规模发布的 npm 包。它更接近一个科研项目里的工作流工具实验：在原版 Trellis 的任务、规范、平台接入基础上，加入更强的 `Hermes`（科研工作流）记录、门禁和子代理协作约束。
 
-<p align="center">
-<img src="assets/trellis-demo.gif" alt="Trellis workflow demo" width="100%">
-</p>
+当前状态：可以放进低风险真实科研项目里试部署；不建议直接用于不可回滚的关键项目。
 
-## What is Trellis?
+## 这是什么
 
-Trellis is a built-in AI coding harness for teams. It turns the huge system prompt you would normally put in `CLAUDE.md`, `AGENTS.md`, or `.cursorrules` into a progressive wiki of specs, tasks, workflows, and journals that agents load only when needed.
+`Trellis-Hermes`（科研改造版）是一个本地开发工具，用来把 AI 协作开发过程里的关键动作落到仓库文件中：
 
-It gives Claude Code, Cursor, Codex, OpenCode, Pi Agent, and other agents the same project source of truth: team standards, task decisions, runbooks, and session memory, without stuffing the whole codebase into every prompt. Trellis is used by individual builders, open-source maintainers, teams inside tech giants, top university labs, and public-company engineering departments working on production monorepos with hundreds of thousands of lines of code.
+- 需求、设计、实现计划和检查记录放进 `.trellis/tasks/`；
+- 项目规范和工作流规则放进 `.trellis/spec/` 与 `.trellis/workflow.md`；
+- 子代理执行记录、实验配置、指标结构和报告模板放进 `.trellis/hermes/` 相关目录；
+- 关键门禁采用“缺记录就失败”的方式，减少 AI 在流程里跳步。
 
-## How it works
+它的目标不是让 AI 更快地直接写代码，而是让科研项目里的 AI 协作更可追踪、可复盘、可审查。
 
-Trellis installs a `.trellis/` directory into your repository and generates the right entry points for each AI coding platform you use.
+## 当前验证状态
 
-| Layer                  | Purpose                                                                                |
-| ---------------------- | -------------------------------------------------------------------------------------- |
-| `.trellis/spec/`       | Team standards and coding guidelines that agents can load automatically.               |
-| `.trellis/tasks/`      | PRDs, task context, status, review notes, and acceptance criteria.                     |
-| `.trellis/workspace/`  | Developer-level journals, decisions, and handoff notes for session continuity.         |
-| `.trellis/workflow.md` | The shared lifecycle for planning, building, checking, finishing, and learning.        |
-| Platform adapters      | Generated commands, hooks, skills, prompts, workflows, and agent files for your tools. |
-
-The core loop is short:
-
-1. Capture the task as a PRD.
-2. Inject the relevant project specs.
-3. Let the agent implement inside a clear boundary.
-4. Run checks before handoff.
-5. Promote reusable lessons back into specs.
-6. Record the session so the next agent starts with the decisions and context it needs.
-
-For the deeper product model, see the [docs](https://docs.trytrellis.app/) and [real-world scenarios](https://docs.trytrellis.app/start/real-world-scenarios).
-
-## Install
-
-Prerequisites:
-
-- **Node.js** >= 18
-- **Python** >= 3.9 for hooks and automation scripts
-
-Install Trellis:
+远程 `CI`（持续集成）已经配置在 GitHub Actions 中。每次推送到 `main`（主分支）或提交 `pull request`（合并请求）时，会运行：
 
 ```bash
-npm install -g trellis-hgl@beta
+pnpm install --frozen-lockfile
+pnpm lint
+pnpm test
+pnpm build
+pnpm --filter trellis-hgl hermes:preflight
 ```
 
-Initialize a repository:
+这些检查覆盖：
+
+- TypeScript 代码规范；
+- 核心包与 CLI 的自动化测试；
+- 构建产物生成；
+- Hermes 模板、Python 文件、门禁配置和预检逻辑。
+
+你可以在 GitHub 的 `Actions`（自动化运行）页面里查看最新结果。绿色通过只说明当前仓库在干净环境里能安装、测试、构建和通过 Hermes 预检；它不等于已经完成公开发布级验证。
+
+## 适合先放到什么项目里试
+
+建议先选择一个低风险真实项目：
+
+- 有真实科研流程，不是空目录；
+- 即使工具生成内容不理想，也能通过 git 回滚；
+- 不包含必须保密的凭据、数据或不可提交文件；
+- 当前任务规模适中，适合观察完整流程。
+
+不建议一开始就放进最重要的主项目，尤其不要在没有备份的情况下直接覆盖现有 `.trellis/`、`.claude/`、`.codex/` 或 `AGENTS.md`。
+
+## 从源码试用
+
+当前建议从 GitHub 源码运行，不建议按正式 npm 包来安装。
 
 ```bash
-# Start Trellis and create a developer workspace
-trellis init -u your-name
+git clone git@github.com:Explero/Trellis-Hermes.git
+cd Trellis-Hermes
+corepack enable
+pnpm install --frozen-lockfile
+pnpm build
 ```
 
-See the [Quick Start](https://docs.trytrellis.app/start/install-and-first-task) and [Supported Platforms](https://docs.trytrellis.app/advanced/multi-platform) guides for setup details.
+然后进入要试部署的科研项目：
 
-## First task
+```bash
+cd /path/to/your/research-project
+git status
+git add .
+git commit -m "chore: checkpoint before Trellis-Hermes trial"
+node /path/to/Trellis-Hermes/packages/cli/bin/trellis.js init -u your-name --claude
+```
 
-Trellis 0.5 is skill-first. On hook-capable or extension-capable platforms, session context loads automatically. On platforms that need a manual entry point, start with:
+如果项目里已经有 Trellis，可以先用 `update`（更新）而不是重新初始化：
+
+```bash
+node /path/to/Trellis-Hermes/packages/cli/bin/trellis.js update
+```
+
+执行前请先看清楚提示，涉及覆盖文件时不要盲目确认。
+
+## 建议的真实项目试跑方式
+
+第一次试跑不要追求复杂任务，先验证一条短链路：
 
 ```text
-/start or /trellis:start  # Load project context
+准备一个干净 git checkpoint
+→ 初始化或更新 Trellis-Hermes
+→ 用自然语言提出一个小任务
+→ 让 AI 创建任务并补齐 planning
+→ 检查 .trellis/tasks/ 下的 prd/design/implement 产物
+→ 派发一个低风险实现或检查子任务
+→ 查看 Hermes worker records、报告和门禁结果
+→ 运行项目自己的测试
+→ 决定保留、回滚或继续调整
 ```
 
-Then describe the task in natural language. Trellis routes the work through skills for brainstorming, spec loading, implementation checks, and knowledge capture. Use `continue` to advance the current task and `finish-work` after human testing and commit.
+这一步主要验证三件事：
 
-## Learn more
+1. 它能不能适配你的项目结构；
+2. 它生成的任务文档是否方便你审阅；
+3. Hermes 门禁是否真的能阻止“没有记录就继续”的情况。
 
-| Need                            | Link                                                                           |
-| ------------------------------- | ------------------------------------------------------------------------------ |
-| Install Trellis in a repo       | [Quick Start](https://docs.trytrellis.app/start/install-and-first-task)        |
-| Understand platform differences | [Supported Platforms](https://docs.trytrellis.app/advanced/multi-platform)     |
-| See the workflow in practice    | [Real-World Scenarios](https://docs.trytrellis.app/start/real-world-scenarios) |
-| Start from spec templates       | [Spec Templates](https://docs.trytrellis.app/templates/specs-index)            |
-| Track releases                  | [Changelog](https://docs.trytrellis.app/changelog/v0.5.0-beta.16)              |
+## Hermes 改造重点
 
-## FAQ
+### 1. 子代理记录必须可追踪
 
-<details>
-<summary><strong>How is Trellis different from <code>CLAUDE.md</code>, <code>AGENTS.md</code>, or <code>.cursorrules</code>?</strong></summary>
+科研项目里最麻烦的不是 AI 没做事，而是做了什么说不清。这个分支要求关键子代理动作写入记录文件，后续检查会读取这些记录。
 
-Those files are useful entry points, but they tend to become monolithic. Trellis adds scoped specs, task PRDs, workflow gates, workspace memory, and platform-aware generated files around them.
+如果记录缺失、为空或格式不对，相关门禁会失败，而不是默认放行。
 
-</details>
+### 2. 任务计划先落盘
 
-<details>
-<summary><strong>Is Trellis only for Claude Code?</strong></summary>
+任务不再只是聊天里的临时约定。`prd.md`、`design.md`、`implement.md`、`implement.jsonl` 和 `check.jsonl` 用来保存需求、设计、实现策略和子代理上下文。
 
-No. Trellis is a project layer that works across multiple coding agents and IDEs.
+这样做的代价是流程会慢一点；收益是后面可以 review、复盘和修正。
 
-</details>
+### 3. 共享 worktree 策略更严格
 
-<details>
-<summary><strong>Is Trellis for solo developers or teams?</strong></summary>
+对于需要子代理实现的任务，科研版更强调使用明确的共享工作目录，避免多个代理在不同目录里重复实现同一个任务。
 
-Both. Solo developers use it for memory and repeatable workflow. Teams get the larger benefit: shared standards, task boundaries, reviewable context, and platform portability.
+如果配置指向普通目录、无关仓库或不可识别的 worktree，流程会拒绝继续。
 
-</details>
+### 4. 预检不是形式检查
 
-## Star History
+`hermes:preflight`（Hermes 预检）会检查模板文件、Python 编译、Hermes hook、门禁文档、沙箱配置、模板测试、类型检查和构建。
 
-[![Star History Chart](https://api.star-history.com/svg?repos=mindfold-ai/Trellis&type=Date)](https://star-history.com/#mindfold-ai/Trellis&Date)
+它不能证明项目已经适合生产环境，但可以挡住一批明显会在使用阶段爆出来的问题。
 
-## Community & Resources
+## 与原版 Trellis 的关系
 
-- [Official Docs](https://docs.trytrellis.app/)
-- [GitHub Issues](https://github.com/mindfold-ai/Trellis/issues)
-- [Discord](https://discord.com/invite/tWcCZ3aRHc)
-- [Tech Blog](https://docs.trytrellis.app/blog)
+这个项目基于原版 `Trellis`（原版 AI coding 工作流工具）继续改造，仍然保留：
 
-<p align="center">
-<a href="https://github.com/mindfold-ai/Trellis">Official Repository</a> •
-<a href="https://github.com/mindfold-ai/Trellis/blob/main/LICENSE">AGPL-3.0 License</a> •
-Built by <a href="https://github.com/mindfold-ai">Mindfold</a>
-</p>
+- `trellis init` / `trellis update`；
+- `.trellis/spec/` 项目规范；
+- `.trellis/tasks/` 任务系统；
+- 多平台接入模板；
+- CLI 构建与测试体系。
+
+科研版新增或强化的部分主要在：
+
+- Hermes 实验记录；
+- 子代理记录门禁；
+- planning 产物约束；
+- 共享 worktree 检查；
+- 发布前预检。
+
+后续如果要改名并正式开源或发布 npm，需要再做一次包名、仓库链接、许可证说明、上游致谢、发布脚本和安装文档的集中整理。
+
+## 目录速览
+
+```text
+.
+├── .github/workflows/ci.yml          # GitHub Actions 远程检测
+├── packages/core/                    # 核心领域逻辑
+├── packages/cli/                     # trellis CLI 和模板
+├── packages/cli/src/templates/       # 初始化到用户项目里的模板
+├── packages/cli/src/templates/trellis/hermes/
+│   ├── config.yaml                   # Hermes 配置
+│   ├── state_machine.yaml            # Hermes 状态机
+│   ├── records/                      # 子代理记录协议
+│   ├── roles/                        # 科研角色提示词
+│   ├── metrics/                      # 指标结构
+│   └── reports/                      # 报告模板
+└── package.json                      # workspace 脚本
+```
+
+真实项目初始化后，重点看目标项目里的：
+
+```text
+.trellis/
+├── spec/
+├── tasks/
+├── workflow.md
+└── hermes/
+```
+
+## 本地开发检查
+
+修改这个仓库后，至少运行：
+
+```bash
+pnpm lint
+pnpm test
+pnpm build
+pnpm --filter trellis-hgl hermes:preflight
+```
+
+如果改动涉及 Hermes 模板、hook 或任务流，优先补充对应测试，再看 GitHub Actions 结果。
+
+## 重要边界
+
+- 这不是操作系统级沙箱，不能防止恶意命令执行。
+- Hermes 的 JSONL 记录不是防篡改存储。
+- `allowed_commands`（允许命令）只能作为流程门禁的一部分，不应理解成强安全边界。
+- 不要把 API Key、密码、令牌、私有数据或 `.env` 文件提交进仓库。
+- 真实科研项目试部署前，先做 git checkpoint。
+
+## License
+
+本项目沿用 `AGPL-3.0-only`（AGPL 3.0 许可证）。
+
+如果后续公开发布，需要明确保留上游 Trellis 的许可证与来源说明，并把当前科研改造部分的维护者、仓库地址和发布名称单独整理清楚。

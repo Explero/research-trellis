@@ -1,343 +1,206 @@
-<p align="center">
-<picture>
-<source srcset="assets/trellis.png" media="(prefers-color-scheme: dark)">
-<source srcset="assets/trellis.png" media="(prefers-color-scheme: light)">
-<img src="assets/trellis.png" alt="Trellis Logo" width="500" style="image-rendering: -webkit-optimize-contrast; image-rendering: crisp-edges;">
-</picture>
-</p>
+# Trellis-Hermes
 
-<p align="center">
-<strong>面向 Claude Code 的 Trellis 魔改工作流</strong><br/>
-<sub>把需求对齐、任务规划、开发策略、实现门禁、架构收敛和会话记忆落到仓库文件里，而不是塞进一段越来越长的系统提示词。</sub>
-</p>
+面向科研项目的 `Trellis`（原版 Trellis）实验性改造分支。
 
-<p align="center">
-<a href="./README_CN.md">原中文版</a> •
-<a href="https://docs.trytrellis.app/zh">官方文档</a> •
-<a href="#快速开始">快速开始</a> •
-<a href="#工作流总览">工作流总览</a> •
-<a href="#目录结构">目录结构</a> •
-<a href="https://linux.do">LinuxDo</a>
-</p>
+[![CI](https://github.com/Explero/Trellis-Hermes/actions/workflows/ci.yml/badge.svg)](https://github.com/Explero/Trellis-Hermes/actions/workflows/ci.yml)
+[![License: AGPL-3.0](https://img.shields.io/badge/license-AGPL--3.0-16a34a.svg?style=flat-square)](LICENSE)
 
-<p align="center">
-<a href="https://www.npmjs.com/package/trellis-hgl"><img src="https://img.shields.io/npm/v/trellis-hgl.svg?style=flat-square&color=2563eb" alt="npm version" /></a>
-<a href="https://www.npmjs.com/package/trellis-hgl"><img src="https://img.shields.io/npm/dw/trellis-hgl?style=flat-square&color=cb3837&label=downloads" alt="npm downloads" /></a>
-<a href="https://github.com/LonelyHerbivore/Trellis-Hermes/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-AGPL--3.0-16a34a.svg?style=flat-square" alt="license" /></a>
-<a href="https://linux.do"><img src="https://img.shields.io/badge/LINUX-DO-FFB003.svg?style=flat-square" alt="LinuxDo" /></a>
-</p>
+这个仓库不是原版 `Trellis`（原版项目）的替代品，也不是已经准备大规模发布的 npm 包。它更接近一个科研项目里的工作流工具实验：在原版 Trellis 的任务、规范、平台接入基础上，加入更强的 `Hermes`（科研工作流）记录、门禁和子代理协作约束。
 
-<p align="center">
-<img src="assets/workflow.png" alt="Trellis 魔改工作流示意图" width="100%">
-</p>
+当前状态：可以放进低风险真实科研项目里试部署；不建议直接用于不可回滚的关键项目。
 
 ## 这是什么
 
-这个分支不是在重新发明一个新的 AI coding 工具，而是在 `Trellis-0.6.0-beta.17` 的基础上，针对 **Claude Code 单工具工作流** 做定向增强：
+`Trellis-Hermes`（科研改造版）是一个本地开发工具，用来把 AI 协作开发过程里的关键动作落到仓库文件中：
 
-- 保留 Trellis 原有的 `init`、任务系统、Spec 系统、workspace 记忆、平台接入与 npm 发布能力
-- 把需求对齐、开发策略决策、多重 review gate、架构约束和最终收尾流程进一步前置、显式化
-- 强调“**先规划，再实现；先对齐，再放行**”
-- 尽量让真正重要的过程信息沉淀到仓库文件，而不是散落在聊天上下文里
+- 需求、设计、实现计划和检查记录放进 `.trellis/tasks/`；
+- 项目规范和工作流规则放进 `.trellis/spec/` 与 `.trellis/workflow.md`；
+- 子代理执行记录、实验配置、指标结构和报告模板放进 `.trellis/hermes/` 相关目录；
+- 关键门禁采用“缺记录就失败”的方式，减少 AI 在流程里跳步。
 
-一句话说，这个分支想把 Trellis 调整成更适合 **自然语言驱动 + Claude Code 主导 + 中文文档可审阅** 的工程化工作流。
+它的目标不是让 AI 更快地直接写代码，而是让科研项目里的 AI 协作更可追踪、可复盘、可审查。
 
-## 为什么要做这个魔改
+## 当前验证状态
 
-这个分支的目标很明确：
+远程 `CI`（持续集成）已经配置在 GitHub Actions 中。每次推送到 `main`（主分支）或提交 `pull request`（合并请求）时，会运行：
 
-1. **只做加法，不做减法**
-   - 保留 Trellis 现有能力
-   - 在其上融入更强的需求对齐、策略决策和质量门禁
+```bash
+pnpm install --frozen-lockfile
+pnpm lint
+pnpm test
+pnpm build
+pnpm --filter trellis-hgl hermes:preflight
+```
 
-2. **把“如何和 AI 协作开发”变成明确流程**
-   - 不是用户一句“去做吧”，AI 就直接写代码
-   - 而是先进入任务、PRD、brainstorm、grill、策略决策，再进入实现
+这些检查覆盖：
 
-3. **让开发策略本身成为任务文档的一部分**
-   - 当前会话直做，还是 subagent
-   - 当前分支直改，还是 worktree
-   - 默认流程，还是 TDD
-   - 这次任务要不要启用 `trellis-spec-review`、`trellis-code-review`、`trellis-code-architecture-review`、`trellis-improve-codebase-architecture`、`trellis-merge-review`
+- TypeScript 代码规范；
+- 核心包与 CLI 的自动化测试；
+- 构建产物生成；
+- Hermes 模板、Python 文件、门禁配置和预检逻辑。
 
-4. **把 AI 容易忽略的工程门禁变成显式节点**
-   - 固定保留：`trellis-check`
-   - 任务级可选：`trellis-spec-review`
-   - 任务级可选：`trellis-code-review`
-   - 任务级可选：`trellis-code-architecture-review`
-   - 任务级可选：`trellis-improve-codebase-architecture`
-   - 任务级可选：`trellis-merge-review`
-   - 最终 build/test 继续保留
-  
-5. **随时可跳出Trellis流程**
-   - 随时都可以直接对Claude说: "当前任务直接存档"，即可跳出工作流直接结束任务
+你可以在 GitHub 的 `Actions`（自动化运行）页面里查看最新结果。绿色通过只说明当前仓库在干净环境里能安装、测试、构建和通过 Hermes 预检；它不等于已经完成公开发布级验证。
 
-## 核心理念
+## 适合先放到什么项目里试
 
-### 1. Spec 是注入的，不是靠记忆的
+建议先选择一个低风险真实项目：
 
-项目规范写进 `.trellis/spec/` 之后，AI 不需要在每次会话里重新听一遍“这个仓库怎么做事”，而是按任务、按阶段加载真正相关的部分。
+- 有真实科研流程，不是空目录；
+- 即使工具生成内容不理想，也能通过 git 回滚；
+- 不包含必须保密的凭据、数据或不可提交文件；
+- 当前任务规模适中，适合观察完整流程。
 
-### 2. 任务是工作流载体，不只是待办项
+不建议一开始就放进最重要的主项目，尤其不要在没有备份的情况下直接覆盖现有 `.trellis/`、`.claude/`、`.codex/` 或 `AGENTS.md`。
 
-在这个分支里，任务目录不只是记录状态，还承载：
+## 从源码试用
 
-- `prd.md`：需求与验收标准
-- `design.md`：复杂任务的技术设计
-- `implement.md`：实现策略、review gate、验证与回滚点
-- `implement.jsonl` / `check.jsonl`：给 implement / check agent 装配上下文
+当前建议从 GitHub 源码运行，不建议按正式 npm 包来安装。
 
-### 3. 需求对齐与开发策略必须显式落盘
+```bash
+git clone git@github.com:Explero/Trellis-Hermes.git
+cd Trellis-Hermes
+corepack enable
+pnpm install --frozen-lockfile
+pnpm build
+```
 
-这里最强调的一点是：
+然后进入要试部署的科研项目：
 
-- `trellis-brainstorm` 不等于需求已经收敛
-- `trellis-grill-me` 不等于开发策略已经确定
-- `task.py start` 之前，必须把关键决策写进任务文档
+```bash
+cd /path/to/your/research-project
+git status
+git add .
+git commit -m "chore: checkpoint before Trellis-Hermes trial"
+node /path/to/Trellis-Hermes/packages/cli/bin/trellis.js init -u your-name --claude
+```
 
-### 4. Review gate 不是一次性“跑个检查”
+如果项目里已经有 Trellis，可以先用 `update`（更新）而不是重新初始化：
 
-这个分支把质量控制拆成几层：
+```bash
+node /path/to/Trellis-Hermes/packages/cli/bin/trellis.js update
+```
 
-- 固定检查：`trellis-check`
-- 任务级可选 gate：
-  - `trellis-spec-review`
-  - `trellis-code-review`
-  - `trellis-code-architecture-review`
-  - `trellis-improve-codebase-architecture`
-  - `trellis-merge-review`
-- 其中 `trellis-spec-review` → `trellis-code-review` → `trellis-code-architecture-review` 一旦启用，仍保持这个顺序
-- 对新任务，这 5 个可选 gate 默认全关；对老任务，若任务文档没有选择记录，则沿用旧行为
-- 最终 `build/test` 继续保留
+执行前请先看清楚提示，涉及覆盖文件时不要盲目确认。
 
-## 工作流总览
+## 建议的真实项目试跑方式
 
-更贴近这个本地分支真实意图的一条主线是：
+第一次试跑不要追求复杂任务，先验证一条短链路：
 
 ```text
-用户自然语言提出需求
-→ 判断是否需要创建 Trellis 任务
-→ task.py create
-→ trellis-brainstorm
-→ trellis-grill-me
-→ 开发策略决策（同一选项块里确定 subagent/worktree/TDD/review gates）
-→ （按需）trellis-improve-codebase-architecture guidance
-→ task.py start
-→ trellis-implement
-→ trellis-check
-→ （按任务选择）trellis-spec-review
-→ （按任务选择）trellis-code-review
-→ （按任务选择）trellis-code-architecture-review
-→ （按任务选择）trellis-improve-codebase-architecture deep-review
-→ trellis-update-spec
-→ 提交代码
-→ 主 agent 合并
-→ （按任务选择）trellis-merge-review
-→ build/test
-→ /trellis:finish-work
+准备一个干净 git checkpoint
+→ 初始化或更新 Trellis-Hermes
+→ 用自然语言提出一个小任务
+→ 让 AI 创建任务并补齐 planning
+→ 检查 .trellis/tasks/ 下的 prd/design/implement 产物
+→ 派发一个低风险实现或检查子任务
+→ 查看 Hermes worker records、报告和门禁结果
+→ 运行项目自己的测试
+→ 决定保留、回滚或继续调整
 ```
 
-### 开发策略决策包含什么
+这一步主要验证三件事：
 
-进入实现前，至少要明确五项：
+1. 它能不能适配你的项目结构；
+2. 它生成的任务文档是否方便你审阅；
+3. Hermes 门禁是否真的能阻止“没有记录就继续”的情况。
 
-1. 当前会话持续开发，还是 subagent
-2. 当前分支直接开发，还是 worktree
-3. 走 Trellis 默认开发流程，还是 TDD
-4. 这次任务要启用哪些 review gate（5 个可选 gate 必须落盘为 `Review-gate contract: explicit-selection-v1` + `Optional review gates status: configured` + enabled/disabled 列表；就算 5 个都不启用，也要显式写进 disabled，`trellis-check` 固定保留）
-5. 是否在进入实现前运行 `trellis-improve-codebase-architecture guidance`（这不会隐式开启 deep-review；后者仍需在 review gate 里显式选择，而且 deep-review 依赖 `trellis-code-architecture-review`）
+## Hermes 改造重点
 
-如果选择 `subagent + worktree`，本分支约定所有代码开发子代理固定使用同一个路径：
+### 1. 子代理记录必须可追踪
 
-```text
-./.trellis/trellis-worktrees/<task-dir-name>
-```
+科研项目里最麻烦的不是 AI 没做事，而是做了什么说不清。这个分支要求关键子代理动作写入记录文件，后续检查会读取这些记录。
 
-这和 Claude Code 宿主级的 `Agent(..., isolation: "worktree")` 不是一回事。共享路径策略下，不要再额外启用宿主 isolation worktree；如果真实派发仍带上这个输入，Trellis 的 Claude hook 会自动移除它并给出提示。
+如果记录缺失、为空或格式不对，相关门禁会失败，而不是默认放行。
 
-这样可以避免多个 worktree 上重复实现同一个任务，浪费上下文和 token。
+### 2. 任务计划先落盘
 
-### 为什么要有 `trellis-improve-codebase-architecture`
+任务不再只是聊天里的临时约定。`prd.md`、`design.md`、`implement.md`、`implement.jsonl` 和 `check.jsonl` 用来保存需求、设计、实现策略和子代理上下文。
 
-这个 skill 不是普通 code review 的别名，它在这个分支里承担两种不同职责：
+这样做的代价是流程会慢一点；收益是后面可以 review、复盘和修正。
 
-1. **guidance（开发前指导）**
-   - 放在 `task.py start` 之前
-   - 针对架构敏感任务，先给边界、抽象与风险建议
-   - 结果追加到 `design.md`
+### 3. 共享 worktree 策略更严格
 
-2. **deep-review（深度审查）**
-   - 放在 `trellis-code-architecture-review` 之后
-   - 作为额外的结构性深审
-   - 如果失败，要打回实现并重走 review 流程
+对于需要子代理实现的任务，科研版更强调使用明确的共享工作目录，避免多个代理在不同目录里重复实现同一个任务。
 
-因此，它不能被 `trellis-code-architecture-review` 隐含覆盖。
+如果配置指向普通目录、无关仓库或不可识别的 worktree，流程会拒绝继续。
 
-## 目录结构
+### 4. 预检不是形式检查
 
-```text
-.trellis/
-├── spec/                    # 项目规范、模式和指南（按 package/layer 组织）
-├── tasks/                   # 任务 PRD、设计、实现计划、状态与上下文
-├── workspace/               # Journal 和开发者级连续性
-├── workflow.md              # 三阶段工作流与 breadcrumb 真相源
-└── scripts/                 # 驱动任务、上下文与收尾流程的脚本
-```
+`hermes:preflight`（Hermes 预检）会检查模板文件、Python 编译、Hermes hook、门禁文档、沙箱配置、模板测试、类型检查和构建。
 
-除此之外，Trellis 还会根据平台生成接入文件，例如：
-
-- `.claude/`
-- `.cursor/`
-- `.codex/`
-- `.agents/`
-- `AGENTS.md`
-
-但对这个分支来说，**主要关注点默认是 Claude Code**。
-
-## Claude Code 下的自动注入
-
-以当前根目录 `Trellis-0.6.0-beta.17` 为例，自动注入主要看这 3 个文件：
-
-1. `.claude/hooks/session-start.py`
-   - 触发时机：`startup`、`clear`、`compact`
-   - 注入内容：`<session-context>`、`<first-reply-notice>`、`<current-state>`、`<trellis-workflow>`、`<guidelines>`、`<task-status>`、`<ready>`
-   - 作用：开场先把仓库状态、任务状态和 workflow 摘要喂给主会话
-
-2. `.claude/hooks/inject-workflow-state.py`
-   - 触发时机：每次用户提交消息前（`UserPromptSubmit`）
-   - 注入内容：简短的 `<workflow-state>`
-   - 作用：提示当前 task 状态和下一步该走的 workflow
-
-3. `.claude/hooks/inject-subagent-context.py`
-   - 触发时机：调用 `Task` / `Agent` 子代理前（`PreToolUse`）
-   - 注入内容：`implement.jsonl`、`check.jsonl`、`prd.md`、`design.md`、`implement.md`
-   - 作用：把任务文档自动拼进 implement / check / research 子代理的 prompt
-
-一句话：**开头看全局，发言前看状态，调子代理前看任务文件。**
-
-## 快速开始
-
-### 前置要求
-
-- **Node.js** >= 18
-- **Python** >= 3.9
-
-### 安装
-
-```bash
-npm install -g trellis-hgl@beta
-```
-
-### 卸载
-
-```bash
-npm uninstall -g trellis-hgl
-```
-
-### 替换原版trellis
-
-```bash
-# 卸载旧版 trellis
-npm uninstall -g @mindfoldhq/trellis
-
-# 安装最新版 trellis-hgl
-npm install -g trellis-hgl@beta
-
-# 进入你自己的项目目录
-cd /path/to/your/project
-
-# 已经初始化过的项目，执行更新（按需选择文件是否OverWrite）
-trellis update
-
-# 第一次使用的项目，执行初始化
-trellis init -u yourname --claude
-```
-
-### 初始化仓库
-
-```bash
-# 创建开发者 workspace
-trellis init -u your-name --claude
-```
-
-如果你需要按平台生成接入文件，也可以组合初始化参数；但这个分支的默认关注点是 Claude Code 路径。
-
-### 第一次使用
-
-更符合这个分支预期的使用方式是：
-
-1. 在项目里完成 `trellis init`
-2. 用自然语言告诉 Claude Code 你的需求
-3. 让 Claude 根据 workflow 先进入任务与 planning
-4. 在 planning 完整之后再进入实现
-
-也就是说，推荐心智模型不是“先找命令再操作”，而是：
-
-> **先用自然语言发起需求，后台再由 Trellis 把需求变成任务、产物和流程。**
-
-## 适合什么场景
-
-### 1. 希望 AI 不要一上来就写代码
-
-如果你更在意先对齐需求、先收敛边界、先确定实现策略，这个分支会更适合你。
-
-### 2. 希望把开发策略也纳入规范
-
-很多团队会规定代码风格，但不会规定“什么时候用 subagent、什么时候上 worktree、什么时候切到 TDD”。这个分支专门把这些决策前置到 planning 阶段。
-
-### 3. 希望让质量门禁更难被跳过
-
-它不是只跑一次检查，而是把实现后检查、正式 review gate、架构深审、merge review 和最终 build/test 分层表达出来。
-
-### 4. 希望文档和任务产物可以用中文审阅
-
-这个分支强调规划文档、任务文档、流程文档和说明性产物默认用中文写，方便直接 review。
+它不能证明项目已经适合生产环境，但可以挡住一批明显会在使用阶段爆出来的问题。
 
 ## 与原版 Trellis 的关系
 
-这个分支依然保留 Trellis 作为“团队 AI coding harness”的核心结构：
+这个项目基于原版 `Trellis`（原版 AI coding 工作流工具）继续改造，仍然保留：
 
-- `.trellis/spec/`
-- `.trellis/tasks/`
-- `.trellis/workspace/`
-- `.trellis/workflow.md`
-- 各平台适配层
+- `trellis init` / `trellis update`；
+- `.trellis/spec/` 项目规范；
+- `.trellis/tasks/` 任务系统；
+- 多平台接入模板；
+- CLI 构建与测试体系。
 
-区别在于，它把下面这些能力进一步拉高为一等公民：
+科研版新增或强化的部分主要在：
 
-- `trellis-grill-me`
-- 开发策略决策
-- `trellis-improve-codebase-architecture`
-- 多重 review gate
-- merge 后再验证
-- 中文产物优先
+- Hermes 实验记录；
+- 子代理记录门禁；
+- planning 产物约束；
+- 共享 worktree 检查；
+- 发布前预检。
 
-## 进一步了解
+后续如果要改名并正式开源或发布 npm，需要再做一次包名、仓库链接、许可证说明、上游致谢、发布脚本和安装文档的集中整理。
 
-如果你想继续理解这个分支，建议按这个顺序看：
+## 目录速览
 
-1. `.trellis/workflow.md`
-2. `CLAUDE.md`
-3. `packages/cli/src/templates/trellis/workflow.md`
-4. `packages/cli/src/configurators/`
-5. `packages/cli/src/commands/`
+```text
+.
+├── .github/workflows/ci.yml          # GitHub Actions 远程检测
+├── packages/core/                    # 核心领域逻辑
+├── packages/cli/                     # trellis CLI 和模板
+├── packages/cli/src/templates/       # 初始化到用户项目里的模板
+├── packages/cli/src/templates/trellis/hermes/
+│   ├── config.yaml                   # Hermes 配置
+│   ├── state_machine.yaml            # Hermes 状态机
+│   ├── records/                      # 子代理记录协议
+│   ├── roles/                        # 科研角色提示词
+│   ├── metrics/                      # 指标结构
+│   └── reports/                      # 报告模板
+└── package.json                      # workspace 脚本
+```
 
-其中：
+真实项目初始化后，重点看目标项目里的：
 
-- `.trellis/workflow.md` 更接近当前本地运行状态
-- `packages/cli/src/templates/trellis/workflow.md` 更接近模板真相源和后续生成逻辑
-- `packages/cli/src/configurators/` 与 `packages/cli/src/commands/` 适合继续追踪初始化、模板生成和命令入口
+```text
+.trellis/
+├── spec/
+├── tasks/
+├── workflow.md
+└── hermes/
+```
 
-## 社区与资源
+## 本地开发检查
 
-- [官方文档](https://docs.trytrellis.app/zh)
-- [快速开始](https://docs.trytrellis.app/zh/guide/ch02-quick-start)
-- [支持平台](https://docs.trytrellis.app/zh/guide/ch13-multi-platform)
-- [使用场景](https://docs.trytrellis.app/zh/guide/ch08-real-world)
-- [更新日志](https://docs.trytrellis.app/zh/changelog/v0.3.6)
-- [GitHub Issues](https://github.com/LonelyHerbivore/Trellis-Hermes/issues)
+修改这个仓库后，至少运行：
 
-<p align="center">
-<a href="https://github.com/LonelyHerbivore/Trellis-Hermes">当前发布仓库</a> •
-<a href="https://github.com/LonelyHerbivore/Trellis-Hermes/blob/main/LICENSE">AGPL-3.0 License</a>
-</p>
+```bash
+pnpm lint
+pnpm test
+pnpm build
+pnpm --filter trellis-hgl hermes:preflight
+```
+
+如果改动涉及 Hermes 模板、hook 或任务流，优先补充对应测试，再看 GitHub Actions 结果。
+
+## 重要边界
+
+- 这不是操作系统级沙箱，不能防止恶意命令执行。
+- Hermes 的 JSONL 记录不是防篡改存储。
+- `allowed_commands`（允许命令）只能作为流程门禁的一部分，不应理解成强安全边界。
+- 不要把 API Key、密码、令牌、私有数据或 `.env` 文件提交进仓库。
+- 真实科研项目试部署前，先做 git checkpoint。
+
+## License
+
+本项目沿用 `AGPL-3.0-only`（AGPL 3.0 许可证）。
+
+如果后续公开发布，需要明确保留上游 Trellis 的许可证与来源说明，并把当前科研改造部分的维护者、仓库地址和发布名称单独整理清楚。
