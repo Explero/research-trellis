@@ -383,6 +383,9 @@ describe("trellis template constants", () => {
     const subagentProtocol = readTemplateFile(
       "trellis/hermes/records/subagent_protocol.md",
     );
+    const mainAgentBootGuard = readTemplateFile(
+      "trellis/hermes/HERMES_MAIN_AGENT_BOOT_GUARD.md",
+    );
     const reportTemplate = readTemplateFile("trellis/hermes/reports/report.md");
     const ledgersReadme = readTemplateFile("trellis/hermes/ledgers/README.md");
     const metricsSchema = readTemplateFile("trellis/hermes/metrics/metrics_schema.yaml");
@@ -534,6 +537,12 @@ describe("trellis template constants", () => {
     expect(subagentProtocol).toContain("stalled");
     expect(subagentProtocol).toContain("resume_from");
     expect(subagentProtocol).toContain("one active writer");
+
+    expect(mainAgentBootGuard).toContain("Main Agent / Main Pilot");
+    expect(mainAgentBootGuard).toContain("minimal_file_context");
+    expect(mainAgentBootGuard).toContain("No record means no completion");
+    expect(mainAgentBootGuard).toContain("claim_allowed=true");
+    expect(mainAgentBootGuard).toContain("human / PI");
   });
 
   it("getAllHermesTemplates exposes files needed by init and update", () => {
@@ -552,6 +561,7 @@ describe("trellis template constants", () => {
       "records/README.md",
       "records/recordbus.md",
       "records/subagent_protocol.md",
+      "HERMES_MAIN_AGENT_BOOT_GUARD.md",
       "reports/report.md",
       "ledgers/README.md",
       "ledgers/.gitkeep",
@@ -567,6 +577,9 @@ describe("trellis template constants", () => {
     const templates = getAllHermesTemplates();
     expect(templates.get("config.yaml")).toContain("append-only-records");
     expect(templates.get("state_machine.yaml")).toContain("claim_ready");
+    expect(templates.get("HERMES_MAIN_AGENT_BOOT_GUARD.md")).toContain(
+      "Main Agent / Main Pilot",
+    );
     expect(templates.get("metrics/metrics_schema.yaml")).toContain("HumanGate");
     expect(templates.get("reports/report.md")).toContain("Core Conclusions");
   });

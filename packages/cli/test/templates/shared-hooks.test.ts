@@ -482,6 +482,35 @@ describe("shared-hooks capability table", () => {
     expect(content).not.toContain("Status: READY");
     expect(content).not.toContain("<workflow>");
   });
+
+  it("shared session-start.py injects only a compact Hermes main-agent boot guard", () => {
+    const sessionStart = getSharedHookScripts().find(
+      (h) => h.name === "session-start.py",
+    );
+    expect(sessionStart).toBeDefined();
+    const content = sessionStart?.content ?? "";
+    expect(content).toContain("_build_hermes_main_agent_boot_guard");
+    expect(content).toContain("<main-agent-boot-guard>");
+    expect(content).toContain(
+      ".trellis/hermes/HERMES_MAIN_AGENT_BOOT_GUARD.md",
+    );
+    expect(content).toContain("minimal_file_context");
+    expect(content).not.toContain("You are running inside a Hermes-governed");
+  });
+
+  it("codex workflow-state hook emits a short Hermes boot-guard reminder instead of full guard text", () => {
+    const workflowState = getSharedHookScripts().find(
+      (h) => h.name === "inject-workflow-state.py",
+    );
+    expect(workflowState).toBeDefined();
+    const content = workflowState?.content ?? "";
+    expect(content).toContain("_build_codex_hermes_boot_guard_notice");
+    expect(content).toContain("<main-agent-boot-guard>");
+    expect(content).toContain(
+      ".trellis/hermes/HERMES_MAIN_AGENT_BOOT_GUARD.md",
+    );
+    expect(content).not.toContain("You are running inside a Hermes-governed");
+  });
 });
 
 describe.skipIf(!hasPython())(

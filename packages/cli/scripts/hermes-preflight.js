@@ -22,6 +22,7 @@ const RESET = "\x1b[0m";
 
 const REQUIRED_FILES = [
   "packages/cli/src/templates/trellis/hermes/config.yaml",
+  "packages/cli/src/templates/trellis/hermes/HERMES_MAIN_AGENT_BOOT_GUARD.md",
   "packages/cli/src/templates/trellis/hermes/experiments/experiment.yaml",
   "packages/cli/src/templates/trellis/hermes/metrics/metrics_schema.yaml",
   "packages/cli/src/templates/trellis/hermes/reports/report.md",

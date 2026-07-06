@@ -36,6 +36,20 @@ describe("copilot getAllHooks", () => {
 		expect(content).not.toContain("currently ignores sessionStart hook output");
 		expect(content).not.toMatch(/Copilot[^\n]*ignores hook output/);
 	});
+
+	it("session-start.py injects compact Hermes main-agent boot guard guidance", () => {
+		const hooks = getAllHooks();
+		const sessionStart = hooks.find((h) => h.name === "session-start.py");
+		expect(sessionStart).toBeDefined();
+		const content = sessionStart?.content ?? "";
+		expect(content).toContain("_build_hermes_main_agent_boot_guard");
+		expect(content).toContain("<main-agent-boot-guard>");
+		expect(content).toContain(
+			".trellis/hermes/HERMES_MAIN_AGENT_BOOT_GUARD.md",
+		);
+		expect(content).toContain("minimal_file_context");
+		expect(content).not.toContain("You are running inside a Hermes-governed");
+	});
 });
 
 describe("copilot getHooksConfig", () => {
