@@ -40,6 +40,7 @@ Recommended append-only files:
 
 - `evidence_ledger.jsonl`
 - `claim_ledger.jsonl`
+- `plan_change_log.jsonl`
 - `approval_records.jsonl`
 - `state_transition_log.jsonl`
 - `worker_records.jsonl`
@@ -61,6 +62,8 @@ Runtime helpers are available under `.trellis/scripts/hermes/`:
 
 - `python3 ./.trellis/scripts/hermes/record.py append --task <task> --record-type worker --json '<json>'`
 - `python3 ./.trellis/scripts/hermes/validate.py --task <task> --kind worker`
+- `python3 ./.trellis/scripts/hermes/record.py append --task <task> --record-type plan_change --json '<json>'`
+- `python3 ./.trellis/scripts/hermes/validate.py --task <task> --kind plan_change`
 - `python3 ./.trellis/scripts/hermes/guard.py --task <task> --job-id <job> --changed-files <files>`
 - `python3 ./.trellis/scripts/hermes/heartbeat.py beat --task <task> --job-id <job> --checkpoint <checkpoint> --summary <summary>`
 - `python3 ./.trellis/scripts/hermes/heartbeat.py watch --task <task> --job-id <job> --checkpoint <checkpoint> --summary <summary> --interval 5m`
@@ -137,6 +140,18 @@ Minimum fields:
 ```
 
 Claims without evidence ids are drafts, not claim-ready records.
+
+## Append Plan Change Records
+
+Append one JSON object per line to `plan_change_log.jsonl` whenever a research
+plan, PRD, contract, or experiment config changes. Do not rewrite prior plan
+records.
+
+Minimum fields:
+
+```json
+{"type":"plan_change","id":"pc-YYYYMMDD-HHMMSS-slug","timestamp":"YYYY-MM-DDTHH:MM:SSZ","plan_ref":"prd.md","change_summary":"what changed","reason":"why it changed","requested_by":"human/root|agent-id","decision_state":"proposed|accepted|rejected|superseded","evidence_refs":[],"supersedes":[]}
+```
 
 ## Append Approval Records
 

@@ -287,6 +287,195 @@ describe("Hermes runtime scripts", () => {
     expect(validate.stdout).toContain("valid");
   });
 
+  it("appends and validates plan change records as JSONL", () => {
+    const planChange = {
+      type: "plan_change",
+      id: "pc-20260706-000000-demo",
+      timestamp: "2026-07-06T00:00:00Z",
+      plan_ref: "prd.md",
+      change_summary: "Narrow evaluation to one dataset split.",
+      reason: "Initial scope was too broad for the task budget.",
+      requested_by: "human/root",
+      decision_state: "accepted",
+      evidence_refs: [],
+      supersedes: [],
+    };
+
+    const append = runHermes(tmpDir, "record.py", [
+      "append",
+      "--task",
+      "01-test",
+      "--record-type",
+      "plan_change",
+      "--json",
+      JSON.stringify(planChange),
+    ]);
+
+    expect(append.status).toBe(0);
+    expect(append.stdout).toContain("appended");
+
+    const records = fs
+      .readFileSync(
+        path.join(taskDir, "hermes", "plan_change_log.jsonl"),
+        "utf-8",
+      )
+      .trim()
+      .split("\n")
+      .map((line) => JSON.parse(line) as Record<string, unknown>);
+
+    expect(records).toHaveLength(1);
+    expect(records[0].type).toBe("plan_change");
+
+    const validate = runHermes(tmpDir, "validate.py", [
+      "--task",
+      "01-test",
+      "--kind",
+      "plan_change",
+    ]);
+
+    expect(validate.status).toBe(0);
+    expect(validate.stdout).toContain("valid");
+  });
+
+  it("rejects plan change records with invalid decision_state", () => {
+    writeJsonl(path.join(taskDir, "hermes", "plan_change_log.jsonl"), [
+      {
+        type: "plan_change",
+        id: "pc-20260706-000000-demo",
+        timestamp: "2026-07-06T00:00:00Z",
+        plan_ref: "prd.md",
+        change_summary: "Narrow evaluation to one dataset split.",
+        reason: "Initial scope was too broad for the task budget.",
+        requested_by: "human/root",
+        decision_state: "approved",
+        evidence_refs: [],
+        supersedes: [],
+      },
+    ]);
+
+    const validate = runHermes(tmpDir, "validate.py", [
+      "--task",
+      "01-test",
+      "--kind",
+      "plan_change",
+    ]);
+
+    expect(validate.status).toBe(1);
+    expect(validate.stderr).toContain("decision_state must be one of");
+  });
+
+  it("rejects non-plan-change records in the plan change log", () => {
+    writeJsonl(path.join(taskDir, "hermes", "plan_change_log.jsonl"), [
+      {
+        type: "claim",
+        id: "cl-20260706-000000-demo",
+        timestamp: "2026-07-06T00:00:00Z",
+        text: "The plan changed.",
+        evidence_ids: [],
+        scope: "unit test",
+        limits: "none",
+        state: "draft",
+      },
+    ]);
+
+    const validate = runHermes(tmpDir, "validate.py", [
+      "--task",
+      "01-test",
+      "--kind",
+      "plan_change",
+    ]);
+
+    expect(validate.status).toBe(1);
+    expect(validate.stderr).toContain("expected plan_change record");
+  });
+
+  it("rejects plan change records with missing required fields", () => {
+    writeJsonl(path.join(taskDir, "hermes", "plan_change_log.jsonl"), [
+      {
+        type: "plan_change",
+        id: "pc-20260706-000000-demo",
+        timestamp: "2026-07-06T00:00:00Z",
+        plan_ref: "prd.md",
+        change_summary: "Narrow evaluation to one dataset split.",
+        requested_by: "human/root",
+        decision_state: "accepted",
+        evidence_refs: [],
+        supersedes: [],
+      },
+    ]);
+
+    const validate = runHermes(tmpDir, "validate.py", [
+      "--task",
+      "01-test",
+      "--kind",
+      "plan_change",
+    ]);
+
+    expect(validate.status).toBe(1);
+    expect(validate.stderr).toContain("missing required fields: reason");
+  });
+
+  it("rejects plan change records with an empty plan_ref", () => {
+    writeJsonl(path.join(taskDir, "hermes", "plan_change_log.jsonl"), [
+      {
+        type: "plan_change",
+        id: "pc-20260706-000000-demo",
+        timestamp: "2026-07-06T00:00:00Z",
+        plan_ref: "   ",
+        change_summary: "Narrow evaluation to one dataset split.",
+        reason: "Initial scope was too broad for the task budget.",
+        requested_by: "human/root",
+        decision_state: "accepted",
+        evidence_refs: [],
+        supersedes: [],
+      },
+    ]);
+
+    const validate = runHermes(tmpDir, "validate.py", [
+      "--task",
+      "01-test",
+      "--kind",
+      "plan_change",
+    ]);
+
+    expect(validate.status).toBe(1);
+    expect(validate.stderr).toContain(
+      "plan_change plan_ref must be a non-empty string",
+    );
+  });
+
+  it("rejects plan change records with non-string reference arrays", () => {
+    writeJsonl(path.join(taskDir, "hermes", "plan_change_log.jsonl"), [
+      {
+        type: "plan_change",
+        id: "pc-20260706-000000-demo",
+        timestamp: "2026-07-06T00:00:00Z",
+        plan_ref: "prd.md",
+        change_summary: "Narrow evaluation to one dataset split.",
+        reason: "Initial scope was too broad for the task budget.",
+        requested_by: "human/root",
+        decision_state: "accepted",
+        evidence_refs: ["ev-demo", 123],
+        supersedes: [false],
+      },
+    ]);
+
+    const validate = runHermes(tmpDir, "validate.py", [
+      "--task",
+      "01-test",
+      "--kind",
+      "plan_change",
+    ]);
+
+    expect(validate.status).toBe(1);
+    expect(validate.stderr).toContain(
+      "evidence_refs must contain only non-empty strings",
+    );
+    expect(validate.stderr).toContain(
+      "supersedes must contain only non-empty strings",
+    );
+  });
+
   it("rejects artifact ledger records when the artifact file is missing", () => {
     writeJsonl(path.join(taskDir, "hermes", "artifact_ledger.jsonl"), [
       {

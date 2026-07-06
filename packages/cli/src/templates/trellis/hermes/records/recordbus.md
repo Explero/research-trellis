@@ -52,6 +52,9 @@ store task-specific evidence, claims, approvals, worker logs, or review results.
 - Audit records go to `audit_ledger.jsonl` for security gates, external write
   boundaries, secret redaction, sandbox gate decisions, and approval boundary
   events.
+- Plan change records go to `plan_change_log.jsonl` when a PRD, contract,
+  experiment config, or other research plan changes. Append a new record instead
+  of rewriting the old plan trail.
 - The local service queue goes to `service_queue.jsonl`; it supports enqueue,
   status, cancel, and retry records without a daemon.
 - Worker validation enforces one unfinished active writer per worktree. Active
@@ -104,6 +107,8 @@ Hermes runtime scripts live under `.trellis/scripts/hermes/`.
 - Validate run manifests with `python3 ./.trellis/scripts/hermes/validate.py --task <task> --kind run_manifest`.
 - Validate provenance records with `python3 ./.trellis/scripts/hermes/validate.py --task <task> --kind provenance`.
 - Validate audit records with `python3 ./.trellis/scripts/hermes/validate.py --task <task> --kind audit`.
+- Append plan change records with `python3 ./.trellis/scripts/hermes/record.py append --task <task> --record-type plan_change --json '<json>'`.
+- Validate plan change records with `python3 ./.trellis/scripts/hermes/validate.py --task <task> --kind plan_change`.
 - Aggregate run manifests with `python3 ./.trellis/scripts/hermes/report.py aggregate --task <task> --output .trellis/tasks/<task>/hermes/aggregate.json`.
 - Append a compare record with `python3 ./.trellis/scripts/hermes/report.py compare --task <task> --metric <metric> --baseline <value> --new <value> --threshold <value> --direction higher_is_better`.
 - Generate a task report with `python3 ./.trellis/scripts/hermes/report.py report --task <task> --question <text> --method <text> --data <text> --metrics <text> --limitations <text> --risks <text>`.
@@ -170,6 +175,15 @@ Append an `audit` record when a security or approval boundary is checked.
 
 ```json
 {"type":"audit","id":"au-YYYYMMDD-HHMMSS-slug","timestamp":"YYYY-MM-DDTHH:MM:SSZ","event":"security_gate|external_write_boundary|secret_redaction|sandbox_gate|approval_boundary","actor":"runner.py","boundary":"allowed_commands","decision":"blocked","summary":"short reason"}
+```
+
+### plan_change
+
+Append a `plan_change` record when a research plan, PRD, contract, or
+experiment config changes.
+
+```json
+{"type":"plan_change","id":"pc-YYYYMMDD-HHMMSS-slug","timestamp":"YYYY-MM-DDTHH:MM:SSZ","plan_ref":"prd.md","change_summary":"what changed","reason":"why it changed","requested_by":"human/root|agent-id","decision_state":"proposed|accepted|rejected|superseded","evidence_refs":["ev-..."],"supersedes":["pc-..."]}
 ```
 
 ### result
