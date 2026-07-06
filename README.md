@@ -114,19 +114,25 @@ node /path/to/Trellis-Hermes/packages/cli/bin/trellis.js update
 
 如果记录缺失、为空或格式不对，相关门禁会失败，而不是默认放行。
 
-### 2. 任务计划先落盘
+### 2. 三道闸门形成闭环
+
+`PreToolUse`（工具使用前）负责拦写入权限和危险动作；`RecordBus`（记录总线）负责保存每个 `agent`（代理）的 `JSONL`（逐行 JSON）记录；`Stop`（结束前）只读取 `RecordBus`（记录总线）、`git diff`（Git 差异）和测试运行记录做最终判定。
+
+也就是说：没有完成的 `coder`（编码代理）记录、没有 `passing`（通过）的 `runner`（运行代理）测试记录、没有 `reviewer`（审核代理）记录，任务就不能被判定为完成。
+
+### 3. 任务计划先落盘
 
 任务不再只是聊天里的临时约定。`prd.md`、`design.md`、`implement.md`、`implement.jsonl` 和 `check.jsonl` 用来保存需求、设计、实现策略和子代理上下文。
 
 这样做的代价是流程会慢一点；收益是后面可以 review、复盘和修正。
 
-### 3. 共享 worktree 策略更严格
+### 4. 共享 worktree 策略更严格
 
 对于需要子代理实现的任务，科研版更强调使用明确的共享工作目录，避免多个代理在不同目录里重复实现同一个任务。
 
 如果配置指向普通目录、无关仓库或不可识别的 worktree，流程会拒绝继续。
 
-### 4. 预检不是形式检查
+### 5. 预检不是形式检查
 
 `hermes:preflight`（Hermes 预检）会检查模板文件、Python 编译、Hermes hook、门禁文档、沙箱配置、模板测试、类型检查和构建。
 

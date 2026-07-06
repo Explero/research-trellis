@@ -9,15 +9,25 @@ records are not tamper-proof storage, and Hermes is not an OS sandbox.
 
 ## Role And Task Card Guide
 
-Use task cards to assign one bounded worker at a time. The supported worker
-roles for task cards are `coder`, `runner`, `evaluator`, `reviewer`, and
-`literature`.
+Hermes separates coordination from execution.
 
-- `coder` changes source files inside `allowed_files`.
+The main agent is the coordinator: planner, dispatcher, verifier, and
+communicator. It may read RecordBus, git status/diff/log, test results, and up
+to 5 files for routing. Once the implementation surface is identified, the main
+agent must dispatch the bounded work instead of doing it directly.
+
+Use task cards to assign one bounded worker at a time. The supported worker
+roles for task cards are `coder`, `runner`, `evaluator`, `reviewer`,
+`literature`, `researcher`, and `analyst`. Host-level `builder` identity maps
+to the `coder` mutation owner.
+
+- `builder` / `coder` owns code mutation inside `allowed_files`.
 - `runner` executes commands or tests and reports structured output.
 - `evaluator` compares outputs against the requested evidence standard.
-- `reviewer` checks diffs, records, and task scope before handoff.
-- `literature` gathers outside sources and citations for the task.
+- `reviewer` owns quality and security review before handoff.
+- `researcher` / `literature` gathers outside sources, citations, and source
+  reading evidence.
+- `analyst` owns root-cause analysis, tradeoff analysis, and decision framing.
 
 Every task card should point at `.trellis/tasks/<task>/hermes/worker_records.jsonl`
 and should carry both `allowed_files` and `forbidden_files`. RecordBus records
@@ -63,6 +73,15 @@ store task-specific evidence, claims, approvals, worker logs, or review results.
 - A `coder` result whose `status` or `handoff` enters `review` or `claim_ready`
   must already have a related `runner` result and a related `reviewer` result
   or checkpoint in `worker_records.jsonl`.
+- `PreToolUse` hooks act as a role firewall and quality gate. They deny main
+  agent mutation, execution, package/test commands, git mutation, and removal
+  commands, then point to the appropriate subagent. Subagents still use the
+  existing `task_card` plus `allowed_files` / `forbidden_files` file boundary.
+- The final `Stop` hook is a read-only gate. It reads RecordBus,
+  `run_manifest.jsonl`, and git changed files. It does not run tests or rewrite
+  records. Completion is blocked until a completed coder result covers the
+  current non-`.trellis/` git diff, a related runner result points to a passing
+  run manifest, and a related reviewer checkpoint or result exists.
 - Metric, split, and baseline changes belong behind HumanGate. Record the
   rationale in task notes and do not encode a human approval UI here.
 
@@ -126,7 +145,7 @@ Hermes runtime scripts live under `.trellis/scripts/hermes/`.
 Append a `task_card` record when dispatching a worker.
 
 ```json
-{"type":"task_card","id":"tc-YYYYMMDD-HHMMSS-slug","timestamp":"YYYY-MM-DDTHH:MM:SSZ","job_id":"job-YYYYMMDD-HHMMSS-slug","role":"coder|runner|evaluator|reviewer|literature","worktree_id":"main|worktree-name","status":"queued","allowed_files":["path/**"],"forbidden_files":["path/**"],"heartbeat_interval":"5m","timeout_at":"YYYY-MM-DDTHH:MM:SSZ","checkpoint":"not-started","resume_from":"task_card","record_uri":".trellis/tasks/<task>/hermes/worker_records.jsonl","evidence_refs":[],"risk_flags":[]}
+{"type":"task_card","id":"tc-YYYYMMDD-HHMMSS-slug","timestamp":"YYYY-MM-DDTHH:MM:SSZ","job_id":"job-YYYYMMDD-HHMMSS-slug","role":"coder|runner|evaluator|reviewer|literature|researcher|analyst","worktree_id":"main|worktree-name","status":"queued","allowed_files":["path/**"],"forbidden_files":["path/**"],"heartbeat_interval":"5m","timeout_at":"YYYY-MM-DDTHH:MM:SSZ","checkpoint":"not-started","resume_from":"task_card","record_uri":".trellis/tasks/<task>/hermes/worker_records.jsonl","evidence_refs":[],"risk_flags":[]}
 ```
 
 ### heartbeat
