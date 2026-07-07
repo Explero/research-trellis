@@ -5,11 +5,22 @@
 [![CI](https://github.com/Explero/Trellis-Hermes/actions/workflows/ci.yml/badge.svg)](https://github.com/Explero/Trellis-Hermes/actions/workflows/ci.yml)
 [![License: AGPL-3.0](https://img.shields.io/badge/license-AGPL--3.0-16a34a.svg?style=flat-square)](LICENSE)
 
-这个仓库不是原版 `Trellis`（原版项目）的替代品，也不是已经准备大规模发布的 npm 包。它更接近一个科研项目里的工作流工具实验：在原版 Trellis 的任务、规范、平台接入基础上，加入更强的 `Hermes`（科研工作流）记录、门禁和子代理协作约束。
+这个仓库是在原版 `Trellis`（原版项目）基础上改造出来的科研实验分支，不是上游官方版本，也不代表上游项目立场。它更接近一个科研项目里的工作流工具实验：在原版 Trellis 的任务、规范、平台接入基础上，加入更强的 `Hermes`（科研工作流）记录、门禁和子代理协作约束。
 
 当前状态：可以放进低风险真实科研项目里试部署；不建议直接用于不可回滚的关键项目。
 
 准备发布到 npm 时，CLI 包名使用 `trellis-hermes`，核心包名使用 `trellis-hermes-core`。
+
+## 上游来源与修改声明
+
+本项目基于 `mindfold-ai/Trellis`（上游 Trellis 项目）继续修改，原项目地址为 `https://github.com/mindfold-ai/Trellis`（上游仓库）。
+
+为了避免混淆，这里先说明几个边界：
+
+- `Trellis-Hermes`（科研改造版）不是上游 `Trellis`（原版项目）的官方发布版本；
+- 仓库中的原始 Trellis 代码、模板、文档结构和许可证声明应继续归属于其原始作者和贡献者；
+- 本仓库新增和改动的部分主要围绕 `Hermes`（科研工作流）、记录门禁、子代理治理、科研计划变更记录和发布前预检；
+- 如果后续公开发布到 `npm`（包平台）或 `GitHub`（代码托管平台），应继续保留上游来源、许可证和修改说明。
 
 ## 这是什么
 
@@ -209,6 +220,6 @@ pnpm --filter trellis-hermes hermes:preflight
 
 ## License
 
-本项目沿用 `AGPL-3.0-only`（AGPL 3.0 许可证）。
+本项目沿用上游项目的 `AGPL-3.0-only`（AGPL 3.0 许可证）。
 
-如果后续公开发布，需要明确保留上游 Trellis 的许可证与来源说明，并把当前科研改造部分的维护者、仓库地址和发布名称单独整理清楚。
+本仓库是基于 `mindfold-ai/Trellis`（上游 Trellis 项目）的修改版本。公开发布或分发时，应保留上游许可证、上游来源和本仓库的修改说明；当前仓库名称、包名和 `Hermes`（科研工作流）相关改造不表示上游官方认可或背书。
