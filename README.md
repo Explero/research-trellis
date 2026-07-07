@@ -54,6 +54,33 @@ pnpm --filter trellis-hermes hermes:preflight
 
 你可以在 GitHub 的 `Actions`（自动化运行）页面里查看最新结果。绿色通过只说明当前仓库在干净环境里能安装、测试、构建和通过 Hermes 预检；它不等于已经完成公开发布级验证。
 
+## CD 发布准备
+
+仓库已经准备了 `.github/workflows/publish.yml`（发布流程）。这个流程不会在普通 `push`（推送）时发布，只会在 GitHub 上发布 `Release`（发布版本）时触发。
+
+发布流程会重新运行：
+
+```bash
+pnpm lint
+pnpm test
+pnpm build
+pnpm --filter trellis-hermes hermes:preflight
+node packages/cli/scripts/release-preflight.js check-versions --require-tag
+node packages/cli/scripts/release-preflight.js verify-packed-cli
+```
+
+检查通过后，它会先发布 `trellis-hermes-core`（核心包），再发布 `trellis-hermes`（CLI 包），最后从 npm registry 验证两个包是否可见。
+
+发布前还需要在 `npm`（包平台）侧完成：
+
+- 创建或认领 `trellis-hermes-core` 与 `trellis-hermes` 两个包；
+- 给两个包配置 `trusted publishing`（可信发布）；
+- `Owner`（所有者）填写 `Explero`，`Repository`（仓库）填写 `Trellis-Hermes`；
+- `Workflow filename`（流程文件名）填写 `publish.yml`；
+- `Environment`（环境）填写 `npm-production`。
+
+这个仓库不会保存 `NPM_TOKEN`（npm 令牌）。发布依赖 GitHub Actions 的 `id-token: write`（OIDC 身份令牌权限）和 npm 的 `trusted publishing`（可信发布）配置。
+
 ## 适合先放到什么项目里试
 
 建议先选择一个低风险真实项目：

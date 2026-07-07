@@ -1,0 +1,89 @@
+name: Publish
+
+on:
+  release:
+    types:
+      - published
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: npm-publish-${{ github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Publish npm packages
+    runs-on: ubuntu-latest
+    environment: npm-production
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Check release tag
+        run: |
+          case "$GITHUB_REF_NAME" in
+            v*) ;;
+            *)
+              echo "Release tag must start with v, got: $GITHUB_REF_NAME"
+              exit 1
+              ;;
+          esac
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org/
+
+      - name: Enable Corepack
+        run: corepack enable
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Verify
+        run: |
+          pnpm lint
+          pnpm test
+          pnpm build
+          pnpm --filter trellis-hermes hermes:preflight
+          node packages/cli/scripts/release-preflight.js check-versions --require-tag
+          node packages/cli/scripts/release-preflight.js verify-packed-cli
+
+      - name: Plan publish
+        id: plan
+        run: node packages/cli/scripts/release-preflight.js publish-plan --github
+
+      - name: Pack publish artifacts
+        run: node packages/cli/scripts/release-preflight.js pack-publish-artifacts > publish-artifacts.json
+
+      - name: Resolve artifact paths
+        id: artifacts
+        run: |
+          node <<'NODE' >> "$GITHUB_OUTPUT"
+          const fs = require("node:fs");
+          const data = JSON.parse(fs.readFileSync("publish-artifacts.json", "utf8"));
+          console.log(`core_tarball=${data.core.tarball}`);
+          console.log(`cli_tarball=${data.cli.tarball}`);
+          NODE
+
+      - name: Publish core
+        if: steps.plan.outputs.core_publish == 'true'
+        run: npm publish "${{ steps.artifacts.outputs.core_tarball }}" --access public --tag "${{ steps.plan.outputs.tag }}" --provenance
+
+      - name: Verify core on npm
+        run: node packages/cli/scripts/release-preflight.js verify-npm --package core
+
+      - name: Publish CLI
+        if: steps.plan.outputs.cli_publish == 'true'
+        run: npm publish "${{ steps.artifacts.outputs.cli_tarball }}" --access public --tag "${{ steps.plan.outputs.tag }}" --provenance
+
+      - name: Verify published CLI manifest
+        run: node packages/cli/scripts/release-preflight.js verify-published-cli-manifest
+
+      - name: Verify npm packages
+        run: node packages/cli/scripts/release-preflight.js verify-npm --package all
