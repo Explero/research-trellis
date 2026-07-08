@@ -2,7 +2,7 @@
 
 ## Source
 
-`/Users/taosu/Library/Containers/com.tencent.xinWeChat/.../rollout-2026-04-23T13-13-57-019db8c2-...jsonl`
+`<LOCAL_APP_CONTAINER>/.../rollout-2026-04-23T13-13-57-019db8c2-...jsonl`
 
 ## Session Meta
 

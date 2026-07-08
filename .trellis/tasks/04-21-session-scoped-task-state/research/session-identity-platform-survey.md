@@ -173,7 +173,7 @@ Real local Cursor hook payload observed in the log:
   "session_id": "5aeeea93-c6f8-4bab-971d-06c78786933d",
   "hook_event_name": "sessionStart",
   "cursor_version": "3.1.17",
-  "workspace_roots": ["/Users/taosu/workspace/company/mindfold/product/share-public/Trellis"],
+  "workspace_roots": ["<REPO_ROOT>"],
   "transcript_path": null
 }
 ```

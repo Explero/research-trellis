@@ -113,7 +113,7 @@ lastUserMessage.parts.splice(textPartIndex, 0, syntheticPart)
 
 ## ⚠️ 模板注意事项
 
-**当前本地配置使用 Claude Max 反代 (localhost:3456)**，做模板时需要：
+**当前本地配置使用 Claude Max 反代 (localhost:<redacted-port>)**，做模板时需要：
 - [ ] Research OpenCode 标准 provider 配置方式
 - [ ] 提供多种 provider 选项（Anthropic API、OpenAI、本地模型等）
 - [ ] 模板中不能硬编码 localhost 地址

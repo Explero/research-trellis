@@ -2,7 +2,7 @@
 
 ## Source
 
-`/Users/taosu/Library/Containers/com.tencent.xinWeChat/.../rollout-2026-04-23T08-45-47-019db7cc-...jsonl`
+`<LOCAL_APP_CONTAINER>/.../rollout-2026-04-23T08-45-47-019db7cc-...jsonl`
 2323 lines, 4.0 MB.
 
 ## Session Meta

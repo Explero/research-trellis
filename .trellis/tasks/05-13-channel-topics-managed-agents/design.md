@@ -41,11 +41,11 @@ Channel create events 可以包含 scope、type、labels、description 和 linke
   "linkedContext": [
     {
       "type": "file",
-      "path": "/Users/taosu/workspace/company/mindfold/product/share-public/Trellis/.trellis/tasks/05-13-channel-topics-managed-agents/prd.md"
+      "path": "<REPO_ROOT>/.trellis/tasks/05-13-channel-topics-managed-agents/prd.md"
     },
     {
       "type": "file",
-      "path": "/Users/taosu/workspace/company/mindfold/product/share-public/Trellis/.trellis/spec/cli/backend/commands-channel.md"
+      "path": "<REPO_ROOT>/.trellis/spec/cli/backend/commands-channel.md"
     },
     {
       "type": "raw",
@@ -84,7 +84,7 @@ Thread events 使用一个 event kind，并用单独的 action 表达状态变�
   "linkedContext": [
     {
       "type": "file",
-      "path": "/Users/taosu/workspace/company/mindfold/product/share-public/Trellis/packages/cli/src/commands/uninstall.ts"
+      "path": "<REPO_ROOT>/packages/cli/src/commands/uninstall.ts"
     },
     {
       "type": "raw",
@@ -188,8 +188,8 @@ trellis channel create trellis-issues \
   --type thread \
   --labels trellis,feedback,issue-board \
   --description "Global feedback and issue threads for Trellis maintenance." \
-  --linked-context-file /Users/taosu/workspace/company/mindfold/product/share-public/Trellis/.trellis/tasks/05-13-channel-topics-managed-agents/prd.md \
-  --linked-context-file /Users/taosu/workspace/company/mindfold/product/share-public/Trellis/.trellis/spec/cli/backend/commands-channel.md \
+  --linked-context-file <REPO_ROOT>/.trellis/tasks/05-13-channel-topics-managed-agents/prd.md \
+  --linked-context-file <REPO_ROOT>/.trellis/spec/cli/backend/commands-channel.md \
   --linked-context-raw "Use this channel for Trellis channel/thread design discussion."
 
 trellis channel messages trellis-issues
@@ -200,7 +200,7 @@ trellis channel post trellis-issues \
   --title "uninstall should not hash user files" \
   --description "Uninstall should avoid treating user-edited files as pristine template output." \
   --label bug \
-  --linked-context-file /Users/taosu/workspace/company/mindfold/product/share-public/Trellis/packages/cli/src/commands/uninstall.ts \
+  --linked-context-file <REPO_ROOT>/packages/cli/src/commands/uninstall.ts \
   --linked-context-raw "Reporter observed uninstall touching user-edited files in a local project." \
   --stdin
 

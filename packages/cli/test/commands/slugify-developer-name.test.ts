@@ -11,11 +11,11 @@ import { slugifyDeveloperName } from "../../src/commands/init.js";
 
 describe("slugifyDeveloperName()", () => {
   it("lowercases simple ASCII", () => {
-    expect(slugifyDeveloperName("taosu")).toBe("taosu");
+    expect(slugifyDeveloperName("example-user")).toBe("example-user");
   });
 
   it("replaces spaces with hyphens", () => {
-    expect(slugifyDeveloperName("Tao Su")).toBe("tao-su");
+    expect(slugifyDeveloperName("Example User")).toBe("example-user");
   });
 
   it("collapses npm scope punctuation to hyphens", () => {

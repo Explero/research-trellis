@@ -7,13 +7,13 @@
   "dev_type": null,
   "scope": null,
   "priority": "P2",
-  "creator": "kleinhe",
-  "assignee": "kleinhe",
+  "creator": "example-collaborator",
+  "assignee": "example-collaborator",
   "createdAt": "2026-01-22",
   "completedAt": "2026-03-04",
   "branch": "feature/trellis-agents",
   "base_branch": "main",
-  "worktree_path": "/Users/kleincr/Dev/mindfold/trellis-worktrees/feature/trellis-agents",
+  "worktree_path": "<WORKTREE_ROOT>/feature/trellis-agents",
   "current_phase": 0,
   "next_action": [
     {

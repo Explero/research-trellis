@@ -11,7 +11,7 @@
     {
       "type": "fix",
       "scope": "scripts",
-      "description": "Remove hardcoded 'taosu' in status.sh help example"
+      "description": "Remove hardcoded 'example-user' in status.sh help example"
     },
     {
       "type": "fix",

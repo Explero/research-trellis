@@ -25,9 +25,9 @@ list_repos → get_repo_structure → get_package_structure → get_file_structu
    ```
    HTTP mode exists in source but is **not wired to CLI** (issue #137). For benchmark, treat as **stdio only**.
 
-**Local install detected**: `/Users/taosu/.local/bin/abcoder`. AST cache at `/Users/taosu/.asts/` already holds 30+ pre-parsed repos. User MCP config in `~/.claude.json` already wired:
+**Local install note**: use a locally installed `abcoder` binary and an isolated AST cache for benchmark runs. Example MCP config:
 ```json
-"abcoder": { "command": "abcoder", "args": ["mcp", "/Users/taosu/.asts"] }
+"abcoder": { "command": "abcoder", "args": ["mcp", "<ABCODER_CACHE>"] }
 ```
 
 ## 2. GitNexus
@@ -57,7 +57,7 @@ Each `analyze` writes `.gitnexus/` inside the repo and registers in `~/.gitnexus
 
 **Transport**: `gitnexus mcp` → stdio. Also `gitnexus serve` (HTTP) and `gitnexus eval-server` (HTTP for evaluation; interesting for benchmarking but standard MCP transport is stdio).
 
-**Local install detected**: `/Users/taosu/.nvm/versions/node/v24.10.0/bin/gitnexus`. Registry at `~/.gitnexus/registry.json` shows ~10 indexed repos. Already wired in `~/.claude.json`:
+**Local install detected**: `<NODE_BIN>/gitnexus`. Registry at `~/.gitnexus/registry.json` shows ~10 indexed repos. Already wired in `~/.claude.json`:
 ```json
 "gitnexus": { "type": "stdio", "command": "npx", "args": ["-y", "gitnexus@latest", "mcp"] }
 ```
@@ -88,7 +88,7 @@ options = ClaudeAgentOptions(
         "abcoder": {
             "type": "stdio",
             "command": "abcoder",
-            "args": ["mcp", "/Users/taosu/.asts"],
+            "args": ["mcp", "<ABCODER_CACHE>"],
         },
         "gitnexus": {
             "type": "stdio",
@@ -112,7 +112,7 @@ for await (const message of query({
   options: {
     settingSources: [],
     mcpServers: {
-      abcoder: { command: "abcoder", args: ["mcp", "/Users/taosu/.asts"] },
+      abcoder: { command: "abcoder", args: ["mcp", "<ABCODER_CACHE>"] },
       gitnexus: { command: "npx", args: ["-y", "gitnexus@1.6.0", "mcp"] },
     },
     allowedTools: ["mcp__abcoder__*", "mcp__gitnexus__*"],
@@ -125,7 +125,7 @@ Tool naming convention: `mcp__<server-name>__<tool>`, so `mcp__abcoder__get_ast_
 ## 5. Existing MCP usage in this repo
 
 - `Trellis/.claude/` has `agents/`, `commands/`, `hooks/`, `settings.json` but **no `.mcp.json`**.
-- Live config at user level: `~/.claude.json` declares 12 MCP servers including abcoder, gitnexus, lark-mcp, playwright, chrome-devtools, codex-cli, notify, reddit, sequential-thinking, context7.
+- User-level MCP config may include unrelated servers.
 - The benchmark driver should NOT depend on `~/.claude.json`; pass `mcp_servers` programmatically and set `setting_sources=[]` for hermeticity.
 - **No existing examples** in Trellis source of programmatic Claude Agent SDK MCP wiring — this benchmark will be the first.
 
@@ -136,18 +136,18 @@ Tool naming convention: `mcp__<server-name>__<tool>`, so `mcp__abcoder__get_ast_
 
 ## Key local paths
 
-- `/Users/taosu/.local/bin/abcoder`
-- `/Users/taosu/.nvm/versions/node/v24.10.0/bin/gitnexus`
-- `/Users/taosu/.asts/` — ABCoder cache (populated)
-- `/Users/taosu/.gitnexus/registry.json` — GitNexus registry
-- `/Users/taosu/.claude.json` — user MCP config (already has both)
+- `<LOCAL_BIN>/abcoder`
+- `<NODE_BIN>/gitnexus`
+- `<ABCODER_CACHE>/` — isolated ABCoder cache
+- `<GITNEXUS_REGISTRY>` — isolated GitNexus registry
+- `<CLAUDE_HOME>.json` — user MCP config location; do not depend on it for benchmark isolation
 
 ## Caveats
 
 - **ABCoder HTTP not exposed** — stdio only.
 - **TS monorepo silent fail** if `--tsconfig` missing (AST <1KB). Sanity-check size after parse.
 - **Pin both versions** for reproducibility; `gitnexus@latest` resolves at install time.
-- **Inherited MCP servers**: with default `setting_sources`, SDK loads ALL 12 servers from `~/.claude.json`. Must set `setting_sources=[]` and pass only abcoder + gitnexus.
+- **Inherited MCP servers**: with default `setting_sources`, SDK can load unrelated user-level servers from `~/.claude.json`. Must set `setting_sources=[]` and pass only abcoder + gitnexus.
 - **Indexing wall-time at scale**: pre-index once at fixture creation, not per attempt.
 
 ## Implications for benchmark

@@ -245,18 +245,18 @@ The shared `inject-subagent-context.py` would need to emit `{"additionalContext"
 
 Local repo (absolute paths):
 
-- `/Users/taosu/workspace/company/mindfold/product/share-public/Trellis/packages/cli/src/templates/copilot/hooks.json` — drop `userPromptSubmitted` command hook (or keep as audit-only); decide on `SessionStart` → `prompt` type or drop.
-- `/Users/taosu/workspace/company/mindfold/product/share-public/Trellis/packages/cli/src/templates/copilot/hooks/session-start.py` — repurpose or delete. If repurposed: write to a path-specific instructions file instead of emitting to stdout.
-- `/Users/taosu/workspace/company/mindfold/product/share-public/Trellis/packages/cli/src/configurators/copilot.ts` — add a step that writes `.github/instructions/trellis-workflow-state.instructions.md` with `applyTo: "**"` containing initial breadcrumb content. This is the analogue to the codex `inject-workflow-state.py` UserPromptSubmit hook (changelog v0.5.7).
-- `/Users/taosu/workspace/company/mindfold/product/share-public/Trellis/packages/cli/src/templates/shared-hooks/inject-workflow-state.py` — already platform-aware (`_detect_platform` checks `COPILOT_PROJECT_DIR`). Either:
+- `<REPO_ROOT>/packages/cli/src/templates/copilot/hooks.json` — drop `userPromptSubmitted` command hook (or keep as audit-only); decide on `SessionStart` → `prompt` type or drop.
+- `<REPO_ROOT>/packages/cli/src/templates/copilot/hooks/session-start.py` — repurpose or delete. If repurposed: write to a path-specific instructions file instead of emitting to stdout.
+- `<REPO_ROOT>/packages/cli/src/configurators/copilot.ts` — add a step that writes `.github/instructions/trellis-workflow-state.instructions.md` with `applyTo: "**"` containing initial breadcrumb content. This is the analogue to the codex `inject-workflow-state.py` UserPromptSubmit hook (changelog v0.5.7).
+- `<REPO_ROOT>/packages/cli/src/templates/shared-hooks/inject-workflow-state.py` — already platform-aware (`_detect_platform` checks `COPILOT_PROJECT_DIR`). Either:
   - Add a "copilot" branch that, instead of printing JSON, atomic-writes the breadcrumb body into `.github/instructions/trellis-workflow-state.instructions.md`; or
   - Move the file-write side-effect to `task.py` lifecycle methods so Copilot doesn't need a per-turn hook at all.
-- `/Users/taosu/workspace/company/mindfold/product/share-public/Trellis/packages/cli/src/configurators/shared.ts` — if a new `writeCopilotPathInstructions` helper is needed, add it here for symmetry with `writeSharedHooks`.
-- For #249's Pi parity: `/Users/taosu/workspace/company/mindfold/product/share-public/Trellis/packages/cli/src/templates/pi/extensions/trellis/index.ts` (or wherever the Pi extension currently lives — confirm path) needs the `before_agent_start` handler to actually compute the breadcrumb (read workflow.md `[workflow-state:STATUS]` block + active task) and return `{ message: ..., systemPrompt: ... }`. Pi's host *does* respect that return shape; Trellis just isn't filling it in.
+- `<REPO_ROOT>/packages/cli/src/configurators/shared.ts` — if a new `writeCopilotPathInstructions` helper is needed, add it here for symmetry with `writeSharedHooks`.
+- For #249's Pi parity: `<REPO_ROOT>/packages/cli/src/templates/pi/extensions/trellis/index.ts` (or wherever the Pi extension currently lives — confirm path) needs the `before_agent_start` handler to actually compute the breadcrumb (read workflow.md `[workflow-state:STATUS]` block + active task) and return `{ message: ..., systemPrompt: ... }`. Pi's host *does* respect that return shape; Trellis just isn't filling it in.
 
 ### Reference for "after" state pattern
 
-The codex precedent (changelog v0.5.7, file `/Users/taosu/workspace/company/mindfold/product/share-public/Trellis/packages/cli/src/templates/codex/hooks.json`) shows the analogous shape for a host that *does* honor `UserPromptSubmit` output:
+The codex precedent (changelog v0.5.7, file `<REPO_ROOT>/packages/cli/src/templates/codex/hooks.json`) shows the analogous shape for a host that *does* honor `UserPromptSubmit` output:
 
 ```json
 {

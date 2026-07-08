@@ -43,6 +43,6 @@
 
 ## Notes
 
-- 已完成 GitNexus 重索引；abcoder 已为 `packages/core` 和 `packages/cli` 重新生成本机 AST JSON。
+- 已完成 GitNexus 重索引；abcoder 已为 `packages/core` 和 `packages/cli` 重新生成本地 AST JSON。
 - 已用 GitNexus 查看 `runMem`、`cmdSearch`、`cmdContext`、`cmdList`、`parseChannelType`、`postThread`、`readThreadsChannelEvents`、`reduceThreads` 的调用关系和影响面；设计与实现计划已按结果修正。
 - 当前讨论先停留在规划阶段；最终 architecture opposition review 已完成，发现的 manifest、CLI 示例、legacy event-log、export-map blocker 已写回 `design.md` 和 `implement.md`。

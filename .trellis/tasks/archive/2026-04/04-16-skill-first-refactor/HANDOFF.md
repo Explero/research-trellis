@@ -314,4 +314,4 @@ init-context 是旧版 "一键填预设模板" 的思路，但每个 task 真正
 - **各子 task 详细 PRD**：`.trellis/tasks/04-17-*/prd.md`
 - **workflow.md draft**：`.trellis/tasks/04-16-rewrite-workflow-full/workflow-draft.md`（420 行）
 - **Trellis spec**：`.trellis/spec/cli/backend/platform-integration.md`（已更新反映新架构）
-- **上 session transcript**：`~/.claude/projects/-Users-taosu-.../06eed46c-48c9-45ed-bdf0-4fbcc619decb.jsonl`（本 session）
+- **上 session transcript**：`~/.claude/projects/<PROJECT_KEY>/06eed46c-48c9-45ed-bdf0-4fbcc619decb.jsonl`（本 session）

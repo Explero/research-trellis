@@ -12,7 +12,7 @@
 - v12 报告（Windows native PowerShell + Claude Code 2.1.129）：
   - `task.py start` 报 "Cannot set active task without a session identity"
   - AI 内通过 Bash tool 调 `os.environ.get("TRELLIS_CONTEXT_ID")` 返回 `None`
-  - taosu 在 Mac 同样上下文返回 `claude_<id>` ✓
+  - example-user 在 Mac 同样上下文返回 `claude_<id>` ✓
 - 假设：bash 脚本在 PowerShell 不会被 source，env 进不去——但**这只是猜测，未经验证**。Claude Code 在 Windows 可能有完全不同的 env 注入机制（.ps1 / .cmd / Win32 lpEnvironment / 不注入 / 注入但通过别的渠道）。
 - 我们目前不确定的事：
   - Claude Code Windows 是否暴露 `CLAUDE_ENV_FILE` 等价物

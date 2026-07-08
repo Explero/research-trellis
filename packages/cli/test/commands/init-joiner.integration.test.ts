@@ -236,16 +236,16 @@ describe("init() joiner onboarding", () => {
   it("#5a developer name with spaces → filesystem-safe slug", async () => {
     simulateExistingCheckout();
 
-    await init({ yes: true, user: "Tao Su", force: true });
+    await init({ yes: true, user: "Example User", force: true });
 
-    const joiner = path.join(tmpDir, PATHS.TASKS, "00-join-tao-su");
+    const joiner = path.join(tmpDir, PATHS.TASKS, "00-join-example-user");
     expect(fs.existsSync(joiner)).toBe(true);
 
     const taskJson = JSON.parse(
       fs.readFileSync(path.join(joiner, FILE_NAMES.TASK_JSON), "utf-8"),
     );
-    expect(taskJson.creator).toBe("Tao Su");
-    expect(taskJson.title).toContain("Tao Su");
+    expect(taskJson.creator).toBe("Example User");
+    expect(taskJson.title).toContain("Example User");
   });
 
   it("#5b developer name with '/' → slug strips separator", async () => {
