@@ -58,7 +58,11 @@
     "agent",
     "events"
   ],
-  "author": "Mindfold LLC",
+  "author": "Explero",
+  "contributors": [
+    "Mindfold LLC",
+    "Trellis contributors"
+  ],
   "license": "AGPL-3.0-only",
   "devDependencies": {
     "@eslint/js": "^9.18.0",

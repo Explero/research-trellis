@@ -51,7 +51,11 @@
     "memory",
     "trellis"
   ],
-  "author": "Mindfold LLC",
+  "author": "Explero",
+  "contributors": [
+    "Mindfold LLC",
+    "Trellis contributors"
+  ],
   "license": "AGPL-3.0-only",
   "dependencies": {
     "trellis-hermes-core": "workspace:*",
