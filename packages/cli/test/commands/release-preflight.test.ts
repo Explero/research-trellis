@@ -233,17 +233,17 @@ describe("release-preflight check-versions", () => {
 });
 
 describe("release-preflight npm-tag", () => {
-  it("always prints latest", () => {
+  it("prints the prerelease channel for beta versions", () => {
     const out = execFileSync(process.execPath, [scriptPath, "npm-tag"], {
       cwd: repoRoot,
       encoding: "utf-8",
     });
-    expect(out.trim()).toBe("latest");
+    expect(out.trim()).toBe("beta");
   });
 });
 
 describe("release-preflight publish-plan", () => {
-  it("always plans npm publishes with latest", () => {
+  it("plans prerelease versions on their prerelease channel", () => {
     const body =
       process.platform === "win32"
         ? `@echo off\r\nif "%1"=="view" (\r\n  echo npm ERR! code E404 1>&2\r\n  echo npm ERR! 404 Not Found 1>&2\r\n  exit /b 1\r\n)\r\necho unexpected args: %* 1>&2\r\nexit /b 1\r\n`
@@ -263,7 +263,7 @@ describe("release-preflight publish-plan", () => {
         },
       );
       const plan = JSON.parse(out) as { tag: string };
-      expect(plan.tag).toBe("latest");
+      expect(plan.tag).toBe("beta");
     });
   });
 });
@@ -274,7 +274,7 @@ describe("release-preflight verify-npm", () => {
       name: string;
       version: string;
     };
-    const tag = "latest";
+    const tag = "beta";
     const counterPath = path.join(
       os.tmpdir(),
       `trellis-release-preflight-npm-counter-${process.pid}-${Date.now()}.txt`,
