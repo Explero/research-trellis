@@ -5,7 +5,8 @@
  * One source of truth for:
  *   1. Version match between the CLI package and core package (and the current git tag when checked from
  *      a tag context).
- *   2. The npm dist-tag is always `latest`.
+ *   2. Stable versions use the `latest` npm dist-tag; prereleases use their
+ *      first prerelease identifier (`beta`, `rc`, and so on).
  *   3. An idempotent publish plan that checks npm for each package + version
  *      and reports whether a fresh publish is needed.
  *
@@ -100,8 +101,9 @@ function tagVersionFromEnv() {
   return m ? m[1] : null;
 }
 
-export function computeNpmTag() {
-  return "latest";
+export function computeNpmTag(version = readVersions().cliVersion) {
+  const prerelease = version.match(/-([0-9A-Za-z-]+)/);
+  return prerelease ? prerelease[1] : "latest";
 }
 
 export function npmVersionExists(pkgName, version) {
