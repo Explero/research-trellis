@@ -41,7 +41,7 @@
  * version/tag mismatch. Version equality is checked first; npm existence
  * decides per-package skip.
  */
-import { execSync } from "node:child_process";
+import { execFileSync, execSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -311,7 +311,7 @@ function withSyncedPackageDocs(packageDir, callback) {
 
 function packWorkspacePackage(packageDir, destinationDir) {
   return withSyncedPackageDocs(packageDir, () => {
-    const out = execSync(`pnpm pack --pack-destination ${destinationDir}`, {
+    const out = execFileSync("pnpm", ["pack", "--pack-destination", destinationDir], {
       cwd: packageDir,
       encoding: "utf-8",
       stdio: ["pipe", "pipe", "pipe"],
@@ -359,7 +359,7 @@ function requiredPackedCoreFiles() {
 
 function verifyPackedCoreTarball(packed) {
   const manifest = new Set(
-    execSync(`tar -tzf ${path.basename(packed)}`, {
+    execFileSync("tar", ["-tzf", path.basename(packed)], {
       cwd: path.dirname(packed),
       encoding: "utf-8",
       stdio: ["pipe", "pipe", "pipe"],
