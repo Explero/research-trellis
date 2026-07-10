@@ -1,0 +1,9 @@
+{
+  "version": "0.6.0-beta.30",
+  "description": "Beta 补丁：仅加固 npm 发布归档完整性与来源证明流程，不包含运行时功能或迁移。",
+  "breaking": false,
+  "recommendMigrate": false,
+  "changelog": "**发布加固：**\n- fix(release): 核心包发布归档现在会同步根目录 README.md 与 LICENSE，并在发布前检查 package.json 及全部 dist 入口是否完整。\n- fix(release): CI 打包发布产物时会执行同一归档校验，并保留 npm provenance 来源证明流程。\n\n**说明：**\n- 本版本仅调整发布归档与来源证明，不包含运行时功能变化，也不需要执行迁移。",
+  "migrations": [],
+  "notes": "本版本仅加固发布归档完整性与 npm provenance 来源证明；无运行时功能变化，无需手动迁移。"
+}
