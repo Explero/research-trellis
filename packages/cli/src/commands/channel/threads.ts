@@ -8,7 +8,7 @@ import {
   type ChannelScope,
   type ContextChannelEvent,
   type ThreadChannelEvent,
-} from "trellis-hgl-core/channel";
+} from "trellis-hermes-core/channel";
 
 import {
   parseChannelScope,

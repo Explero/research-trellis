@@ -270,6 +270,20 @@ def read_file(path: Path, fallback: str = "") -> str:
         return fallback
 
 
+def _build_hermes_main_agent_boot_guard(trellis_dir: Path) -> str:
+    guard_path = trellis_dir / "hermes" / "HERMES_MAIN_AGENT_BOOT_GUARD.md"
+    if not guard_path.is_file():
+        return ""
+    return """<main-agent-boot-guard>
+Source: .trellis/hermes/HERMES_MAIN_AGENT_BOOT_GUARD.md. Read it before governance-sensitive work; keep this SessionStart payload compact.
+Role: Main Agent / Main Pilot coordinates Hermes state, bounded subagent routing, record validation, handoff, and human/PI stop points.
+Hard limits: do not directly modify source, metrics, dataset splits, baselines, official evaluation, claim_allowed=true, or main merge unless Hermes state and human/root authority allow it.
+Subagent context policy: minimal_file_context. Give role, task ID, allowed files, forbidden files, required output, stop condition, record schema, and claim boundary. Do not fork full chat by default.
+Record policy: chat is not completion; completed, failed, blocked, stale, interrupted, or capacity-blocked work needs structured records.
+Claim boundary: keep engineering success, runner success, evaluator approval, proxy evidence, scientific evidence, claim approval, and merge approval separate.
+</main-agent-boot-guard>"""
+
+
 def _repo_relative(repo_root: Path, path: Path) -> str:
     try:
         return path.relative_to(repo_root).as_posix()
@@ -911,6 +925,11 @@ Trellis compact SessionStart context. Use it to orient the session; load details
     legacy_warning = _check_legacy_spec(trellis_dir, is_mono, packages)
     if legacy_warning:
         output.write(f"<migration-warning>\n{legacy_warning}\n</migration-warning>\n\n")
+
+    hermes_boot_guard = _build_hermes_main_agent_boot_guard(trellis_dir)
+    if hermes_boot_guard:
+        output.write(hermes_boot_guard)
+        output.write("\n\n")
 
     output.write("<current-state>\n")
     output.write(_build_compact_current_state(trellis_dir, hook_input, spec_index_paths))

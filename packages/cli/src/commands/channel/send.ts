@@ -2,7 +2,7 @@ import {
   parseDeliveryMode,
   sendMessage as coreSendMessage,
   type ChannelScope,
-} from "trellis-hgl-core/channel";
+} from "trellis-hermes-core/channel";
 
 import { parseChannelScope, parseCsv } from "./store/schema.js";
 import { resolveChannelTextBody } from "./text-body.js";

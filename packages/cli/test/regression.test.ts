@@ -96,8 +96,8 @@ describe("regression: workflow archive without commit", () => {
   });
 });
 
-describe("regression: package rename to trellis-hgl", () => {
-  it("[rename] CLI package template metadata points to trellis-hgl package name", () => {
+describe("regression: package rename to trellis-hermes", () => {
+  it("[rename] CLI package template metadata is publish-safe for npm bin links", () => {
     const packageJsonPath = path.resolve(
       fileURLToPath(new URL("../package.json", import.meta.url)),
     );
@@ -105,10 +105,10 @@ describe("regression: package rename to trellis-hgl", () => {
       fs.readFileSync(packageJsonPath, "utf-8"),
     ) as { name: string; bin?: Record<string, string> };
 
-    expect(packageJson.name).toBe("trellis-hgl");
+    expect(packageJson.name).toBe("trellis-hermes");
     expect(packageJson.bin).toMatchObject({
-      trellis: "./bin/trellis.js",
-      tl: "./bin/trellis.js",
+      trellis: "bin/trellis.js",
+      tl: "bin/trellis.js",
     });
   });
 });
@@ -573,19 +573,19 @@ describe("regression: task directory paths (0.2.14, 0.2.15, beta.13)", () => {
   });
 
   it("[beta.13] cli_adapter.py does not contain hardcoded developer paths", () => {
-    expect(commonCliAdapter).not.toMatch(/workspace\/taosu/);
+    expect(commonCliAdapter).not.toMatch(/workspace\/example-user/);
     expect(commonCliAdapter).not.toMatch(/workspace\/[a-z]+\/tasks/);
   });
 
-  it("[0.2.15] no script templates contain hardcoded 'taosu' in path patterns", () => {
+  it("[0.2.15] no script templates contain hardcoded 'example-user' in path patterns", () => {
     const scripts = getAllScripts();
     for (const [name, content] of scripts) {
-      // Check for hardcoded username in path patterns (workspace/taosu, /Users/taosu)
-      // but allow usage examples like "python3 status.py -a taosu"
+      // Check for hardcoded username in path patterns (workspace/example-user, <USER_HOME>)
+      // but allow usage examples like "python3 status.py -a example-user"
       expect(
         content,
         `${name} should not contain hardcoded username in paths`,
-      ).not.toMatch(/workspace\/taosu|\/Users\/taosu/);
+      ).not.toMatch(/workspace\/example-user|\/Users\/example-user/);
     }
   });
 });

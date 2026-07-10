@@ -482,6 +482,35 @@ describe("shared-hooks capability table", () => {
     expect(content).not.toContain("Status: READY");
     expect(content).not.toContain("<workflow>");
   });
+
+  it("shared session-start.py injects only a compact Hermes main-agent boot guard", () => {
+    const sessionStart = getSharedHookScripts().find(
+      (h) => h.name === "session-start.py",
+    );
+    expect(sessionStart).toBeDefined();
+    const content = sessionStart?.content ?? "";
+    expect(content).toContain("_build_hermes_main_agent_boot_guard");
+    expect(content).toContain("<main-agent-boot-guard>");
+    expect(content).toContain(
+      ".trellis/hermes/HERMES_MAIN_AGENT_BOOT_GUARD.md",
+    );
+    expect(content).toContain("minimal_file_context");
+    expect(content).not.toContain("You are running inside a Hermes-governed");
+  });
+
+  it("codex workflow-state hook emits a short Hermes boot-guard reminder instead of full guard text", () => {
+    const workflowState = getSharedHookScripts().find(
+      (h) => h.name === "inject-workflow-state.py",
+    );
+    expect(workflowState).toBeDefined();
+    const content = workflowState?.content ?? "";
+    expect(content).toContain("_build_codex_hermes_boot_guard_notice");
+    expect(content).toContain("<main-agent-boot-guard>");
+    expect(content).toContain(
+      ".trellis/hermes/HERMES_MAIN_AGENT_BOOT_GUARD.md",
+    );
+    expect(content).not.toContain("You are running inside a Hermes-governed");
+  });
 });
 
 describe.skipIf(!hasPython())(
@@ -1109,6 +1138,163 @@ describe.skipIf(!hasPython())("hermes runtime guard hook", () => {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
+  function writeHermesWorkerRecords(records: Record<string, unknown>[]): void {
+    const hermesDir = path.join(
+      repoRoot,
+      ".trellis",
+      "tasks",
+      taskName,
+      "hermes",
+    );
+    fs.mkdirSync(hermesDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(hermesDir, "worker_records.jsonl"),
+      records.map((record) => JSON.stringify(record)).join("\n") + "\n",
+      "utf-8",
+    );
+  }
+
+  function taskCard(
+    jobId: string,
+    role: string,
+    extra: Record<string, unknown> = {},
+  ): Record<string, unknown> {
+    return {
+      type: "task_card",
+      id: `tc-${jobId}`,
+      timestamp: "2026-06-29T00:00:00Z",
+      job_id: jobId,
+      role,
+      worktree_id: "main",
+      status: "queued",
+      allowed_files: ["src/**"],
+      forbidden_files: [],
+      heartbeat_interval: "5m",
+      timeout_at: "2099-01-01T00:00:00Z",
+      checkpoint: "not-started",
+      resume_from: "task_card",
+      record_uri: `.trellis/tasks/${taskName}/hermes/worker_records.jsonl`,
+      evidence_refs: [],
+      risk_flags: [],
+      ...extra,
+    };
+  }
+
+  function checkpoint(
+    jobId: string,
+    checkpointName: string,
+  ): Record<string, unknown> {
+    return {
+      type: "checkpoint",
+      id: `cp-${jobId}`,
+      timestamp: "2026-06-29T00:01:00Z",
+      job_id: jobId,
+      checkpoint: checkpointName,
+      resume_from: "continue from checkpoint",
+      evidence_refs: [],
+      open_items: [],
+    };
+  }
+
+  function heartbeat(jobId: string): Record<string, unknown> {
+    return {
+      type: "heartbeat",
+      id: `hb-${jobId}`,
+      timestamp: "2026-06-29T00:01:00Z",
+      job_id: jobId,
+      status: "running",
+      checkpoint: "in-progress",
+      summary: "active",
+      next_check_at: "2099-01-01T00:00:00Z",
+    };
+  }
+
+  function resultRecord(
+    jobId: string,
+    summary: string,
+    extra: Record<string, unknown> = {},
+  ): Record<string, unknown> {
+    return {
+      type: "result",
+      id: `rs-${jobId}`,
+      timestamp: "2026-06-29T00:02:00Z",
+      job_id: jobId,
+      status: "done",
+      summary,
+      changed_files: ["src/app.ts"],
+      evidence_refs: [],
+      risk_flags: [],
+      handoff: "review",
+      ...extra,
+    };
+  }
+
+  function writeRunManifest(exitCode: number): void {
+    const hermesDir = path.join(
+      repoRoot,
+      ".trellis",
+      "tasks",
+      taskName,
+      "hermes",
+    );
+    fs.mkdirSync(hermesDir, { recursive: true });
+    fs.writeFileSync(path.join(hermesDir, "stdout.txt"), "ok\n");
+    fs.writeFileSync(
+      path.join(hermesDir, "run_manifest.jsonl"),
+      JSON.stringify({
+        id: "run-tests",
+        command: "pnpm test",
+        cwd: ".",
+        env_summary: { node: "test" },
+        inputs: ["src/app.ts"],
+        outputs: [`.trellis/tasks/${taskName}/hermes/stdout.txt`],
+        exit_code: exitCode,
+        started_at: "2026-06-29T00:03:00Z",
+        finished_at: "2026-06-29T00:04:00Z",
+      }) + "\n",
+      "utf-8",
+    );
+  }
+
+  function writeIdleSession(contextId = "idle-session"): void {
+    const sessionsDir = path.join(repoRoot, ".trellis", ".runtime", "sessions");
+    fs.mkdirSync(sessionsDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(sessionsDir, `${contextId}.json`),
+      JSON.stringify({ last_seen_at: "2026-06-29T00:00:00Z" }) + "\n",
+    );
+  }
+
+  function parseDecision(result: { stdout: string }): {
+    permissionDecision?: string;
+    permissionDecisionReason?: string;
+    additionalContext?: string;
+  } {
+    const payload = JSON.parse(result.stdout) as {
+      hookSpecificOutput?: {
+        permissionDecision?: string;
+        permissionDecisionReason?: string;
+        additionalContext?: string;
+      };
+    };
+    return payload.hookSpecificOutput ?? {};
+  }
+
+  function expectMainAgentBashDenied(command: string): void {
+    const result = runHermesRuntimeGuard(repoRoot, {
+      cwd: repoRoot,
+      hook_event_name: "PreToolUse",
+      tool_name: "Bash",
+      tool_input: { command },
+      session_id: "test-session",
+    });
+
+    expect(result.status).toBe(0);
+    const decision = parseDecision(result);
+    expect(decision.permissionDecision).toBe("deny");
+    expect(decision.permissionDecisionReason).toContain("main agent firewall");
+  }
+
   it("blocks Stop when an active task has no Hermes worker records", () => {
     const result = runHermesRuntimeGuard(repoRoot, {
       cwd: repoRoot,
@@ -1123,6 +1309,9 @@ describe.skipIf(!hasPython())("hermes runtime guard hook", () => {
     };
     expect(payload.decision).toBe("block");
     expect(payload.reason).toContain("worker_records.jsonl");
+    expect(payload.reason).not.toContain(".trellis/tasks");
+    expect(payload.reason).not.toContain(taskName);
+    expect(payload.reason).not.toContain(repoRoot);
     expect(result.stderr).toBe("");
   });
 
@@ -1168,10 +1357,588 @@ describe.skipIf(!hasPython())("hermes runtime guard hook", () => {
     expect(payload.reason).toContain("missing task_card");
   });
 
+  it("blocks Stop when worker records have no completed coder result", () => {
+    writeHermesWorkerRecords([taskCard("job-coder", "coder"), heartbeat("job-coder")]);
+
+    const result = runHermesRuntimeGuard(repoRoot, {
+      cwd: repoRoot,
+      hook_event_name: "Stop",
+      session_id: "test-session",
+    });
+
+    expect(result.status).toBe(0);
+    const payload = JSON.parse(result.stdout) as {
+      decision?: string;
+      reason?: string;
+    };
+    expect(payload.decision).toBe("block");
+    expect(payload.reason).toContain("completed coder result");
+  });
+
+  it("blocks Stop when runner has no passing test record", () => {
+    writeHermesWorkerRecords([
+      taskCard("job-coder", "coder"),
+      checkpoint("job-coder", "implementation-done"),
+      taskCard("job-runner", "runner", { parent_job_id: "job-coder" }),
+      checkpoint("job-runner", "tests-started"),
+      resultRecord("job-runner", "tests ran"),
+      taskCard("job-reviewer", "reviewer", { parent_job_id: "job-coder" }),
+      checkpoint("job-reviewer", "diff-reviewed"),
+      resultRecord("job-reviewer", "review passed"),
+      resultRecord("job-coder", "changed files"),
+    ]);
+
+    const result = runHermesRuntimeGuard(repoRoot, {
+      cwd: repoRoot,
+      hook_event_name: "Stop",
+      session_id: "test-session",
+    });
+
+    expect(result.status).toBe(0);
+    const payload = JSON.parse(result.stdout) as {
+      decision?: string;
+      reason?: string;
+    };
+    expect(payload.decision).toBe("block");
+    expect(payload.reason).toContain("passing test");
+  });
+
+  it("blocks Stop when the recorded test run failed", () => {
+    fs.mkdirSync(path.join(repoRoot, "src"), { recursive: true });
+    fs.writeFileSync(path.join(repoRoot, "src", "app.ts"), "fixture\n");
+    writeRunManifest(1);
+    writeHermesWorkerRecords([
+      taskCard("job-coder", "coder"),
+      checkpoint("job-coder", "implementation-done"),
+      taskCard("job-runner", "runner", { parent_job_id: "job-coder" }),
+      checkpoint("job-runner", "tests-started"),
+      resultRecord("job-runner", "tests ran", { evidence_refs: ["run-tests"] }),
+      taskCard("job-reviewer", "reviewer", { parent_job_id: "job-coder" }),
+      checkpoint("job-reviewer", "diff-reviewed"),
+      resultRecord("job-reviewer", "review passed"),
+      resultRecord("job-coder", "changed files"),
+    ]);
+
+    const result = runHermesRuntimeGuard(repoRoot, {
+      cwd: repoRoot,
+      hook_event_name: "Stop",
+      session_id: "test-session",
+    });
+
+    expect(result.status).toBe(0);
+    const payload = JSON.parse(result.stdout) as {
+      decision?: string;
+      reason?: string;
+    };
+    expect(payload.decision).toBe("block");
+    expect(payload.reason).toContain("passing test");
+  });
+
+  it("blocks Stop without leaking sensitive changed file names in the reason", () => {
+    fs.mkdirSync(path.join(repoRoot, "config"), { recursive: true });
+    fs.writeFileSync(path.join(repoRoot, ".env.secret"), "TOKEN=x\n");
+    fs.writeFileSync(path.join(repoRoot, "config", "prod.env"), "TOKEN=x\n");
+    writeHermesWorkerRecords([
+      taskCard("job-coder", "coder"),
+      checkpoint("job-coder", "implementation-done"),
+      taskCard("job-runner", "runner", { parent_job_id: "job-coder" }),
+      checkpoint("job-runner", "tests-started"),
+      resultRecord("job-runner", "tests ran"),
+      taskCard("job-reviewer", "reviewer", { parent_job_id: "job-coder" }),
+      checkpoint("job-reviewer", "diff-reviewed"),
+      resultRecord("job-reviewer", "review passed"),
+      resultRecord("job-coder", "changed files"),
+    ]);
+
+    const result = runHermesRuntimeGuard(repoRoot, {
+      cwd: repoRoot,
+      hook_event_name: "Stop",
+      session_id: "test-session",
+    });
+
+    expect(result.status).toBe(0);
+    const payload = JSON.parse(result.stdout) as {
+      decision?: string;
+      reason?: string;
+    };
+    expect(payload.decision).toBe("block");
+    expect(payload.reason).toContain("2 changed file");
+    expect(payload.reason).not.toContain(".env.secret");
+    expect(payload.reason).not.toContain("config/prod.env");
+  });
+
+  it("allows Stop when records, passing tests, review, and git diff agree", () => {
+    fs.mkdirSync(path.join(repoRoot, "src"), { recursive: true });
+    fs.writeFileSync(path.join(repoRoot, "src", "app.ts"), "before\n");
+    commitRepoState(repoRoot, "baseline");
+    setSessionActiveTask(repoRoot, taskName);
+    fs.writeFileSync(path.join(repoRoot, "src", "app.ts"), "after\n");
+    writeRunManifest(0);
+    writeHermesWorkerRecords([
+      taskCard("job-coder", "coder"),
+      checkpoint("job-coder", "implementation-done"),
+      taskCard("job-runner", "runner", { parent_job_id: "job-coder" }),
+      checkpoint("job-runner", "tests-started"),
+      resultRecord("job-runner", "tests ran", { evidence_refs: ["run-tests"] }),
+      taskCard("job-reviewer", "reviewer", { parent_job_id: "job-coder" }),
+      checkpoint("job-reviewer", "diff-reviewed"),
+      resultRecord("job-reviewer", "review passed"),
+      resultRecord("job-coder", "changed files"),
+    ]);
+
+    const result = runHermesRuntimeGuard(repoRoot, {
+      cwd: repoRoot,
+      hook_event_name: "Stop",
+      session_id: "test-session",
+    });
+
+    expect(result.status).toBe(0);
+    expect(result.stdout).toBe("");
+    expect(result.stderr).toBe("");
+  });
+
+  it("denies main-agent Write before worker file-boundary checks", () => {
+    writeHermesWorkerRecords([
+      taskCard("job-coder", "coder"),
+      heartbeat("job-coder"),
+    ]);
+
+    const result = runHermesRuntimeGuard(repoRoot, {
+      cwd: repoRoot,
+      hook_event_name: "PreToolUse",
+      tool_name: "Write",
+      tool_input: {
+        file_path: "src/app.ts",
+      },
+      session_id: "test-session",
+    });
+
+    expect(result.status).toBe(0);
+    const payload = JSON.parse(result.stdout) as {
+      hookSpecificOutput?: {
+        permissionDecision?: string;
+        permissionDecisionReason?: string;
+      };
+    };
+    expect(payload.hookSpecificOutput?.permissionDecision).toBe("deny");
+    expect(payload.hookSpecificOutput?.permissionDecisionReason).toContain(
+      "main agent firewall",
+    );
+    expect(payload.hookSpecificOutput?.permissionDecisionReason).toContain(
+      "coder subagent",
+    );
+  });
+
+  it("denies main-agent Write even when tool_input claims a coder role", () => {
+    writeHermesWorkerRecords([
+      taskCard("job-coder", "coder"),
+      heartbeat("job-coder"),
+    ]);
+
+    const result = runHermesRuntimeGuard(repoRoot, {
+      cwd: repoRoot,
+      hook_event_name: "PreToolUse",
+      tool_name: "Write",
+      tool_input: {
+        agent_role: "coder",
+        file_path: "src/app.ts",
+      },
+      session_id: "test-session",
+    });
+
+    expect(result.status).toBe(0);
+    const decision = parseDecision(result);
+    expect(decision.permissionDecision).toBe("deny");
+    expect(decision.permissionDecisionReason).toContain("main agent firewall");
+  });
+
+  it("denies main-agent package/test Bash commands", () => {
+    writeHermesWorkerRecords([
+      taskCard("job-runner", "runner"),
+      heartbeat("job-runner"),
+    ]);
+
+    const result = runHermesRuntimeGuard(repoRoot, {
+      cwd: repoRoot,
+      hook_event_name: "PreToolUse",
+      tool_name: "Bash",
+      tool_input: {
+        command: "pnpm test",
+      },
+      session_id: "test-session",
+    });
+
+    expect(result.status).toBe(0);
+    const payload = JSON.parse(result.stdout) as {
+      hookSpecificOutput?: {
+        permissionDecision?: string;
+        permissionDecisionReason?: string;
+      };
+    };
+    expect(payload.hookSpecificOutput?.permissionDecision).toBe("deny");
+    expect(payload.hookSpecificOutput?.permissionDecisionReason).toContain(
+      "main agent firewall",
+    );
+    expect(payload.hookSpecificOutput?.permissionDecisionReason).toContain(
+      "runner subagent",
+    );
+  });
+
+  it("allows main-agent git status short paths as read-only Bash", () => {
+    const result = runHermesRuntimeGuard(repoRoot, {
+      cwd: repoRoot,
+      hook_event_name: "PreToolUse",
+      tool_name: "Bash",
+      tool_input: {
+        command: "git status --short -- src/app.ts",
+      },
+      session_id: "test-session",
+    });
+
+    expect(result.status).toBe(0);
+    expect(result.stdout).toBe("");
+    expect(result.stderr).toBe("");
+  });
+
+  it("allows main-agent git diff name-only paths as read-only Bash", () => {
+    const result = runHermesRuntimeGuard(repoRoot, {
+      cwd: repoRoot,
+      hook_event_name: "PreToolUse",
+      tool_name: "Bash",
+      tool_input: {
+        command: "git diff --name-only -- src/app.ts",
+      },
+      session_id: "test-session",
+    });
+
+    expect(result.status).toBe(0);
+    expect(result.stdout).toBe("");
+    expect(result.stderr).toBe("");
+  });
+
+  it("denies main-agent git pathspecs with shell expansion syntax", () => {
+    for (const command of [
+      "git diff --name-only -- $PWD",
+      "git diff --name-only -- ${PWD}",
+      "git diff --name-only -- $(pwd)",
+      "git diff --name-only -- `pwd`",
+      "git diff --name-only -- ~",
+    ]) {
+      expectMainAgentBashDenied(command);
+    }
+  });
+
+  it("allows main-agent git log oneline with an explicit safe pathspec", () => {
+    const result = runHermesRuntimeGuard(repoRoot, {
+      cwd: repoRoot,
+      hook_event_name: "PreToolUse",
+      tool_name: "Bash",
+      tool_input: {
+        command: "git log --oneline -- src/app.ts",
+      },
+      session_id: "test-session",
+    });
+
+    expect(result.status).toBe(0);
+    expect(result.stdout).toBe("");
+    expect(result.stderr).toBe("");
+  });
+
+  it("denies main-agent git pathspecs that target env-like paths", () => {
+    for (const command of [
+      "git status --short -- .",
+      "git diff --name-only -- .ENV",
+      "git diff --name-only -- ENV/config.ts",
+      "git diff --name-only -- config/prod.env",
+      "git diff --name-only -- env/config.ts",
+    ]) {
+      expectMainAgentBashDenied(command);
+    }
+  });
+
+  it("denies main-agent git summaries without explicit safe pathspecs", () => {
+    for (const command of [
+      "git status",
+      "git diff --name-only",
+      "git diff --stat",
+      "git log --oneline",
+      "git log --stat",
+      "git diff --name-only -- '*env*'",
+    ]) {
+      expectMainAgentBashDenied(command);
+    }
+  });
+
+  it("denies main-agent read-only-looking Bash with shell control or redirection", () => {
+    for (const command of [
+      "git status && cat .trellis/tasks/06-04-hermes-runtime/hermes/worker_records.jsonl",
+      "git status > out.txt",
+    ]) {
+      expectMainAgentBashDenied(command);
+    }
+  });
+
+  it("denies main-agent jq commands that can read non-RecordBus files", () => {
+    for (const command of [
+      `jq . .trellis/tasks/${taskName}/hermes/worker_records.jsonl .env`,
+      `jq . .trellis/tasks/${taskName}/hermes/worker_records.jsonl tmp/extra.jsonl`,
+      `jq . .trellis/tasks/${taskName}/hermes/../worker_records.jsonl`,
+      `jq -f filter.jq .trellis/tasks/${taskName}/hermes/worker_records.jsonl`,
+      `jq --rawfile secret .env . .trellis/tasks/${taskName}/hermes/worker_records.jsonl`,
+    ]) {
+      expectMainAgentBashDenied(command);
+    }
+  });
+
+  it("denies main-agent git commands with unsafe read-only options", () => {
+    for (const command of [
+      "git diff --output patch.txt",
+      "git diff --output=patch.txt",
+      "git diff --ext-diff",
+      "git diff --external-diff",
+      "git --exec-path=/tmp diff",
+      "git --config core.pager=cat diff",
+      "git -c core.pager=cat diff",
+      "git diff --no-index .env /dev/null",
+      "git log -p -- .env",
+    ]) {
+      expectMainAgentBashDenied(command);
+    }
+  });
+
+  it("denies main-agent execution and mutating git Bash commands", () => {
+    for (const command of [
+      "rm -rf dist",
+      "git add src/app.ts",
+      "git commit -m test",
+      "git push",
+      "pytest",
+      "go test ./...",
+      "cargo test",
+    ]) {
+      expectMainAgentBashDenied(command);
+    }
+  });
+
+  it.each([
+    "trellis-spec-review",
+    "trellis-code-review",
+    "trellis-code-architecture-review",
+    "trellis-merge-review",
+    "trellis-improve-codebase-architecture",
+  ])("treats %s as a non-main review gate subagent", (subagentType) => {
+    writeHermesWorkerRecords([
+      taskCard("job-review", "reviewer"),
+      heartbeat("job-review"),
+    ]);
+
+    const result = runHermesRuntimeGuard(repoRoot, {
+      cwd: repoRoot,
+      hook_event_name: "PreToolUse",
+      subagent_type: subagentType,
+      tool_name: "Write",
+      tool_input: {
+        file_path: "src/app.ts",
+      },
+      session_id: "test-session",
+    });
+
+    expect(result.status).toBe(0);
+    const decision = parseDecision(result);
+    expect(decision.permissionDecision).not.toBe("deny");
+    expect(decision.additionalContext).toContain("Hermes Runtime");
+  });
+
+  it("treats common subagent identity fields as non-main requests", () => {
+    for (const identity of [
+      { subagent_type: "coder" },
+      { subagentType: "builder" },
+      { subagent: "runner" },
+      { agent_role: "hermes-coder" },
+      { agent_role: "hermes-scientist" },
+      { subagent_type: "trellis-implement" },
+      { subagent_type: "trellis-spec-review" },
+      { subagent_type: "trellis-code-architecture-review" },
+    ]) {
+      writeHermesWorkerRecords([
+        taskCard("job-coder", "coder"),
+        heartbeat("job-coder"),
+      ]);
+
+      const result = runHermesRuntimeGuard(repoRoot, {
+        cwd: repoRoot,
+        hook_event_name: "PreToolUse",
+        ...identity,
+        tool_name: "Write",
+        tool_input: {
+          file_path: "src/app.ts",
+        },
+        session_id: "test-session",
+      });
+
+      expect(result.status).toBe(0);
+      const decision = parseDecision(result);
+      expect(decision.permissionDecision).not.toBe("deny");
+      expect(decision.additionalContext).toContain("Hermes Runtime");
+    }
+  });
+
+  it("denies main-agent writes without an active task while keeping read-only git allowed", () => {
+    writeIdleSession();
+
+    const writeResult = runHermesRuntimeGuard(repoRoot, {
+      cwd: repoRoot,
+      hook_event_name: "PreToolUse",
+      tool_name: "Write",
+      tool_input: {
+        file_path: "src/app.ts",
+      },
+      session_id: "idle-session",
+    });
+
+    expect(writeResult.status).toBe(0);
+    const decision = parseDecision(writeResult);
+    expect(decision.permissionDecision).toBe("deny");
+    expect(decision.permissionDecisionReason).toContain("main agent firewall");
+
+    const gitResult = runHermesRuntimeGuard(repoRoot, {
+      cwd: repoRoot,
+      hook_event_name: "PreToolUse",
+      tool_name: "Bash",
+      tool_input: {
+        command: "git diff --name-only -- src/app.ts",
+      },
+      session_id: "idle-session",
+    });
+
+    expect(gitResult.status).toBe(0);
+    expect(gitResult.stdout).toBe("");
+    expect(gitResult.stderr).toBe("");
+  });
+
+  it("denies subagent Write without an active task", () => {
+    writeIdleSession();
+
+    const result = runHermesRuntimeGuard(repoRoot, {
+      cwd: repoRoot,
+      hook_event_name: "PreToolUse",
+      agent_role: "coder",
+      tool_name: "Write",
+      tool_input: {
+        file_path: "src/app.ts",
+      },
+      session_id: "idle-session",
+    });
+
+    expect(result.status).toBe(0);
+    expect(result.stdout).not.toBe("");
+    const decision = parseDecision(result);
+    expect(decision.permissionDecision).toBe("deny");
+    expect(decision.permissionDecisionReason).toContain("active task");
+    expect(decision.permissionDecisionReason).not.toContain("main agent firewall");
+  });
+
+  it("denies subagent execution Bash without an active task", () => {
+    writeIdleSession();
+
+    const result = runHermesRuntimeGuard(repoRoot, {
+      cwd: repoRoot,
+      hook_event_name: "PreToolUse",
+      agent_role: "runner",
+      tool_name: "Bash",
+      tool_input: {
+        command: "pnpm test",
+      },
+      session_id: "idle-session",
+    });
+
+    expect(result.status).toBe(0);
+    expect(result.stdout).not.toBe("");
+    const decision = parseDecision(result);
+    expect(decision.permissionDecision).toBe("deny");
+    expect(decision.permissionDecisionReason).toContain("active task");
+    expect(decision.permissionDecisionReason).not.toContain("main agent firewall");
+  });
+
+  it("does not block Stop when there is no active task", () => {
+    writeIdleSession();
+
+    const result = runHermesRuntimeGuard(repoRoot, {
+      cwd: repoRoot,
+      hook_event_name: "Stop",
+      session_id: "idle-session",
+    });
+
+    expect(result.status).toBe(0);
+    expect(result.stdout).toBe("");
+    expect(result.stderr).toBe("");
+  });
+
+  it("keeps coder writes behind task_card allowed_files checks", () => {
+    writeHermesWorkerRecords([
+      taskCard("job-coder", "coder"),
+      heartbeat("job-coder"),
+    ]);
+
+    const result = runHermesRuntimeGuard(repoRoot, {
+      cwd: repoRoot,
+      hook_event_name: "PreToolUse",
+      agent_role: "coder",
+      tool_name: "Write",
+      tool_input: {
+        file_path: "docs/readme.md",
+      },
+      session_id: "test-session",
+    });
+
+    expect(result.status).toBe(0);
+    const payload = JSON.parse(result.stdout) as {
+      hookSpecificOutput?: {
+        permissionDecision?: string;
+        permissionDecisionReason?: string;
+      };
+    };
+    expect(payload.hookSpecificOutput?.permissionDecision).toBe("deny");
+    expect(payload.hookSpecificOutput?.permissionDecisionReason).toContain(
+      "outside allowed_files",
+    );
+  });
+
+  it("lets runner Bash execution pass through existing record policy", () => {
+    writeHermesWorkerRecords([
+      taskCard("job-runner", "runner"),
+      heartbeat("job-runner"),
+    ]);
+
+    const result = runHermesRuntimeGuard(repoRoot, {
+      cwd: repoRoot,
+      hook_event_name: "PreToolUse",
+      agent_role: "runner",
+      tool_name: "Bash",
+      tool_input: {
+        command: "pnpm test",
+      },
+      session_id: "test-session",
+    });
+
+    expect(result.status).toBe(0);
+    const payload = JSON.parse(result.stdout) as {
+      hookSpecificOutput?: {
+        additionalContext?: string;
+        permissionDecision?: string;
+      };
+    };
+    expect(payload.hookSpecificOutput?.permissionDecision).not.toBe("deny");
+    expect(payload.hookSpecificOutput?.additionalContext).toContain(
+      "Hermes Runtime",
+    );
+  });
+
   it("denies PreToolUse write tools when an active task has no Hermes worker records", () => {
     const result = runHermesRuntimeGuard(repoRoot, {
       cwd: repoRoot,
       hook_event_name: "PreToolUse",
+      agent_role: "coder",
       tool_name: "Write",
       tool_input: {
         file_path: "src/app.ts",
@@ -1230,6 +1997,7 @@ describe.skipIf(!hasPython())("hermes runtime guard hook", () => {
     const result = runHermesRuntimeGuard(repoRoot, {
       cwd: repoRoot,
       hook_event_name: "PreToolUse",
+      agent_role: "coder",
       tool_name: "Write",
       tool_input: {
         file_path: "src/app.ts",
@@ -1290,6 +2058,145 @@ describe.skipIf(!hasPython())("hermes runtime guard hook", () => {
     expect(payload.reason).toContain("missing task_card");
   });
 
+  it("sanitizes Stop validation errors before returning them to the model", () => {
+    const hermesDir = path.join(
+      repoRoot,
+      ".trellis",
+      "tasks",
+      taskName,
+      "hermes",
+    );
+    fs.mkdirSync(hermesDir, { recursive: true });
+    const recordsPath = path.join(hermesDir, "worker_records.jsonl");
+    fs.writeFileSync(recordsPath, "{not json}\n", "utf-8");
+
+    const result = runHermesRuntimeGuard(repoRoot, {
+      cwd: repoRoot,
+      hook_event_name: "Stop",
+      session_id: "test-session",
+    });
+
+    expect(result.status).toBe(0);
+    const payload = JSON.parse(result.stdout) as {
+      decision?: string;
+      reason?: string;
+    };
+    expect(payload.decision).toBe("block");
+    expect(payload.reason).toContain("Hermes worker records");
+    expect(payload.reason).toContain("invalid JSON");
+    expect(payload.reason).not.toContain(recordsPath);
+    expect(payload.reason).not.toContain(repoRoot);
+    expect(payload.reason).not.toContain(".trellis/tasks");
+    expect(payload.reason).not.toContain(taskName);
+  });
+
+  it("sanitizes Stop run manifest validation errors before returning them to the model", () => {
+    const hermesDir = path.join(
+      repoRoot,
+      ".trellis",
+      "tasks",
+      taskName,
+      "hermes",
+    );
+    fs.mkdirSync(hermesDir, { recursive: true });
+    const manifestPath = path.join(hermesDir, "run_manifest.jsonl");
+    fs.writeFileSync(manifestPath, "{not json}\n", "utf-8");
+    writeHermesWorkerRecords([
+      taskCard("job-coder", "coder"),
+      checkpoint("job-coder", "implementation-done"),
+      taskCard("job-runner", "runner", { parent_job_id: "job-coder" }),
+      checkpoint("job-runner", "tests-started"),
+      resultRecord("job-runner", "tests ran", { evidence_refs: ["run-tests"] }),
+      taskCard("job-reviewer", "reviewer", { parent_job_id: "job-coder" }),
+      checkpoint("job-reviewer", "diff-reviewed"),
+      resultRecord("job-reviewer", "review passed"),
+      resultRecord("job-coder", "changed files"),
+    ]);
+
+    const result = runHermesRuntimeGuard(repoRoot, {
+      cwd: repoRoot,
+      hook_event_name: "Stop",
+      session_id: "test-session",
+    });
+
+    expect(result.status).toBe(0);
+    const payload = JSON.parse(result.stdout) as {
+      decision?: string;
+      reason?: string;
+    };
+    expect(payload.decision).toBe("block");
+    expect(payload.reason?.toLowerCase()).toContain("run manifest");
+    expect(payload.reason?.toLowerCase()).toContain("invalid");
+    expect(payload.reason).not.toContain(manifestPath);
+    expect(payload.reason).not.toContain(repoRoot);
+    expect(payload.reason).not.toContain(".trellis/tasks");
+    expect(payload.reason).not.toContain(taskName);
+  });
+
+  it("sanitizes Stop run manifest path validation errors before returning them to the model", () => {
+    const hermesDir = path.join(
+      repoRoot,
+      ".trellis",
+      "tasks",
+      taskName,
+      "hermes",
+    );
+    fs.mkdirSync(hermesDir, { recursive: true });
+    const privateCwd = `.trellis/tasks/${taskName}/private-cwd`;
+    const privateInput = `.trellis/tasks/${taskName}/secret-input.txt`;
+    const privateOutput = path.join(hermesDir, "secret-output.txt");
+    fs.writeFileSync(
+      path.join(hermesDir, "run_manifest.jsonl"),
+      JSON.stringify({
+        id: "run-tests",
+        command: "pnpm test",
+        cwd: privateCwd,
+        env_summary: { node: "test" },
+        inputs: [privateInput],
+        outputs: [privateOutput],
+        exit_code: 0,
+        started_at: "2026-06-29T00:03:00Z",
+        finished_at: "2026-06-29T00:04:00Z",
+      }) + "\n",
+      "utf-8",
+    );
+    writeHermesWorkerRecords([
+      taskCard("job-coder", "coder"),
+      checkpoint("job-coder", "implementation-done"),
+      taskCard("job-runner", "runner", { parent_job_id: "job-coder" }),
+      checkpoint("job-runner", "tests-started"),
+      resultRecord("job-runner", "tests ran", { evidence_refs: ["run-tests"] }),
+      taskCard("job-reviewer", "reviewer", { parent_job_id: "job-coder" }),
+      checkpoint("job-reviewer", "diff-reviewed"),
+      resultRecord("job-reviewer", "review passed"),
+      resultRecord("job-coder", "changed files"),
+    ]);
+
+    const result = runHermesRuntimeGuard(repoRoot, {
+      cwd: repoRoot,
+      hook_event_name: "Stop",
+      session_id: "test-session",
+    });
+
+    expect(result.status).toBe(0);
+    const payload = JSON.parse(result.stdout) as {
+      decision?: string;
+      reason?: string;
+    };
+    expect(payload.decision).toBe("block");
+    expect(payload.reason?.toLowerCase()).toContain("run manifest");
+    expect(payload.reason?.toLowerCase()).toContain("invalid");
+    expect(payload.reason).not.toContain(privateCwd);
+    expect(payload.reason).not.toContain(privateInput);
+    expect(payload.reason).not.toContain(privateOutput);
+    expect(payload.reason).not.toContain(repoRoot);
+    expect(payload.reason).not.toContain(".trellis/tasks");
+    expect(payload.reason).not.toContain(taskName);
+    expect(payload.reason).not.toContain("secret-output.txt");
+    expect(payload.reason).not.toContain("secret-input.txt");
+    expect(payload.reason).not.toContain("private-cwd");
+  });
+
   it("blocks SubagentStop when Hermes worker records are invalid", () => {
     const hermesDir = path.join(
       repoRoot,
@@ -1330,7 +2237,7 @@ describe.skipIf(!hasPython())("hermes runtime guard hook", () => {
     expect(payload.reason).toContain("missing task_card");
   });
 
-  it("blocks Stop for timed-out Hermes jobs and records timeout rejection", () => {
+  it("blocks Stop for timed-out Hermes jobs without mutating RecordBus", () => {
     const hermesDir = path.join(
       repoRoot,
       ".trellis",
@@ -1374,11 +2281,10 @@ describe.skipIf(!hasPython())("hermes runtime guard hook", () => {
       reason?: string;
     };
     expect(payload.decision).toBe("block");
-    expect(payload.reason).toContain("stalled jobs: job-timeout");
+    expect(payload.reason).toContain("completed coder result");
     const records = fs.readFileSync(recordsPath, "utf-8");
-    expect(records).toContain('"type":"rejection"');
-    expect(records).toContain('"reason":"timeout"');
-    expect(records).toContain('"required_fix":"resume from task_card"');
+    expect(records).not.toContain('"type":"rejection"');
+    expect(records).not.toContain('"type":"stalled"');
   });
 
   it("adds PreToolUse guidance before write tools when Hermes worker records exist", () => {
@@ -1424,6 +2330,7 @@ describe.skipIf(!hasPython())("hermes runtime guard hook", () => {
     const result = runHermesRuntimeGuard(repoRoot, {
       cwd: repoRoot,
       hook_event_name: "PreToolUse",
+      agent_role: "coder",
       tool_name: "Edit",
       session_id: "test-session",
     });
@@ -1490,6 +2397,7 @@ describe.skipIf(!hasPython())("hermes runtime guard hook", () => {
     const result = runHermesRuntimeGuard(repoRoot, {
       cwd: repoRoot,
       hook_event_name: "PreToolUse",
+      agent_role: "coder",
       tool_name: "Write",
       tool_input: {
         file_path: "docs/readme.md",
@@ -1555,6 +2463,7 @@ describe.skipIf(!hasPython())("hermes runtime guard hook", () => {
     const result = runHermesRuntimeGuard(repoRoot, {
       cwd: repoRoot,
       hook_event_name: "PreToolUse",
+      agent_role: "coder",
       tool_name: "MultiEdit",
       tool_input: {
         job_id: "job-active",
@@ -1635,6 +2544,7 @@ describe.skipIf(!hasPython())("hermes runtime guard hook", () => {
     const result = runHermesRuntimeGuard(repoRoot, {
       cwd: repoRoot,
       hook_event_name: "PreToolUse",
+      agent_role: "coder",
       tool_name: "Bash",
       tool_input: {
         job_id: "job-active",
@@ -1659,6 +2569,67 @@ describe.skipIf(!hasPython())("hermes runtime guard hook", () => {
     expect(payload.hookSpecificOutput?.permissionDecisionReason).toContain(
       "secrets/out.txt",
     );
+  });
+
+  it("denies PreToolUse Bash tee commands when any target is unauthorized", () => {
+    writeHermesWorkerRecords([
+      taskCard("job-active", "coder"),
+      heartbeat("job-active"),
+    ]);
+
+    const result = runHermesRuntimeGuard(repoRoot, {
+      cwd: repoRoot,
+      hook_event_name: "PreToolUse",
+      agent_role: "coder",
+      tool_name: "Bash",
+      tool_input: {
+        job_id: "job-active",
+        command: "printf ok | tee src/ok.txt docs/bad.txt",
+      },
+      session_id: "test-session",
+    });
+
+    expect(result.status).toBe(0);
+    const payload = JSON.parse(result.stdout) as {
+      hookSpecificOutput?: {
+        hookEventName?: string;
+        permissionDecision?: string;
+        permissionDecisionReason?: string;
+      };
+    };
+    expect(payload.hookSpecificOutput?.hookEventName).toBe("PreToolUse");
+    expect(payload.hookSpecificOutput?.permissionDecision).toBe("deny");
+    expect(payload.hookSpecificOutput?.permissionDecisionReason).toContain(
+      "outside allowed_files",
+    );
+    expect(payload.hookSpecificOutput?.permissionDecisionReason).toContain(
+      "docs/bad.txt",
+    );
+  });
+
+  it("treats tee operands after -- as targets even when they start with a dash", () => {
+    writeHermesWorkerRecords([
+      taskCard("job-active", "coder"),
+      heartbeat("job-active"),
+    ]);
+
+    const result = runHermesRuntimeGuard(repoRoot, {
+      cwd: repoRoot,
+      hook_event_name: "PreToolUse",
+      agent_role: "coder",
+      tool_name: "Bash",
+      tool_input: {
+        job_id: "job-active",
+        command: "printf ok | tee -- -secret src/ok.txt",
+      },
+      session_id: "test-session",
+    });
+
+    expect(result.status).toBe(0);
+    const decision = parseDecision(result);
+    expect(decision.permissionDecision).toBe("deny");
+    expect(decision.permissionDecisionReason).toContain("outside allowed_files");
+    expect(decision.permissionDecisionReason).toContain("-secret");
   });
 
   it("denies PreToolUse Bash commands with write-like content when targets cannot be parsed", () => {
@@ -1704,6 +2675,7 @@ describe.skipIf(!hasPython())("hermes runtime guard hook", () => {
     const result = runHermesRuntimeGuard(repoRoot, {
       cwd: repoRoot,
       hook_event_name: "PreToolUse",
+      agent_role: "coder",
       tool_name: "Bash",
       tool_input: {
         job_id: "job-active",
@@ -1726,6 +2698,158 @@ describe.skipIf(!hasPython())("hermes runtime guard hook", () => {
     expect(payload.hookSpecificOutput?.permissionDecisionReason).toContain(
       "cannot safely parse Bash write targets",
     );
+  });
+
+  it("denies PreToolUse Bash scripts with unparsed destructive file APIs", () => {
+    writeHermesWorkerRecords([
+      taskCard("job-active", "coder"),
+      heartbeat("job-active"),
+    ]);
+
+    const result = runHermesRuntimeGuard(repoRoot, {
+      cwd: repoRoot,
+      hook_event_name: "PreToolUse",
+      agent_role: "coder",
+      tool_name: "Bash",
+      tool_input: {
+        job_id: "job-active",
+        command: "python3 -c \"import os; os.remove('docs/bad.txt')\"",
+      },
+      session_id: "test-session",
+    });
+
+    expect(result.status).toBe(0);
+    const payload = JSON.parse(result.stdout) as {
+      hookSpecificOutput?: {
+        hookEventName?: string;
+        permissionDecision?: string;
+        permissionDecisionReason?: string;
+      };
+    };
+    expect(payload.hookSpecificOutput?.hookEventName).toBe("PreToolUse");
+    expect(payload.hookSpecificOutput?.permissionDecision).toBe("deny");
+    expect(payload.hookSpecificOutput?.permissionDecisionReason).toContain(
+      "cannot safely parse Bash write targets",
+    );
+  });
+
+  it("denies PreToolUse Node inline async file APIs when targets cannot be parsed", () => {
+    writeHermesWorkerRecords([
+      taskCard("job-active", "coder"),
+      heartbeat("job-active"),
+    ]);
+
+    for (const command of [
+      "node -e \"require('fs').writeFile('docs/bad.txt','x',()=>{})\"",
+      "node -e \"require('fs').copyFileSync('src/app.ts','docs/bad.txt')\"",
+      "node -e \"const fs = require('fs'); fs.promises.writeFile('docs/bad.txt','x')\"",
+      "node -e \"require('fs').promises.copyFile('src/app.ts','docs/bad.txt')\"",
+      "node -e \"const fs = require('fs'); fs.promises.rm('docs/bad.txt')\"",
+      "node -pe \"const { writeFileSync: w } = require('node:fs'); w('docs/bad.txt','x')\"",
+    ]) {
+      const result = runHermesRuntimeGuard(repoRoot, {
+        cwd: repoRoot,
+        hook_event_name: "PreToolUse",
+        agent_role: "coder",
+        tool_name: "Bash",
+        tool_input: {
+          job_id: "job-active",
+          command,
+        },
+        session_id: "test-session",
+      });
+
+      expect(result.status).toBe(0);
+      const payload = JSON.parse(result.stdout) as {
+        hookSpecificOutput?: {
+          hookEventName?: string;
+          permissionDecision?: string;
+          permissionDecisionReason?: string;
+        };
+      };
+      expect(payload.hookSpecificOutput?.hookEventName).toBe("PreToolUse");
+      expect(payload.hookSpecificOutput?.permissionDecision).toBe("deny");
+      expect(payload.hookSpecificOutput?.permissionDecisionReason).toContain(
+        "cannot safely parse Bash write targets",
+      );
+    }
+  });
+
+  it("denies PreToolUse Python, Ruby, and Perl inline copy and move APIs when targets cannot be parsed", () => {
+    writeHermesWorkerRecords([
+      taskCard("job-active", "coder"),
+      heartbeat("job-active"),
+    ]);
+
+    for (const command of [
+      "python3 -c \"import shutil; shutil.copyfile('src/app.ts','docs/bad.txt')\"",
+      "python3 -c \"import shutil; shutil.move('src/app.ts','docs/bad.txt')\"",
+      "ruby -e \"require 'fileutils'; FileUtils.cp('src/app.ts','docs/bad.txt')\"",
+      "perl -e \"use File::Copy; move('src/app.ts','docs/bad.txt')\"",
+      "perl -e \"unlink 'docs/bad.txt'\"",
+      "perl -e \"rename 'src/app.ts','docs/bad.txt'\"",
+      "perl -we \"unlink 'docs/bad.txt'\"",
+      "perl -we \"rename 'src/app.ts','docs/bad.txt'\"",
+    ]) {
+      const result = runHermesRuntimeGuard(repoRoot, {
+        cwd: repoRoot,
+        hook_event_name: "PreToolUse",
+        agent_role: "coder",
+        tool_name: "Bash",
+        tool_input: {
+          job_id: "job-active",
+          command,
+        },
+        session_id: "test-session",
+      });
+
+      expect(result.status).toBe(0);
+      const payload = JSON.parse(result.stdout) as {
+        hookSpecificOutput?: {
+          hookEventName?: string;
+          permissionDecision?: string;
+          permissionDecisionReason?: string;
+        };
+      };
+      expect(payload.hookSpecificOutput?.hookEventName).toBe("PreToolUse");
+      expect(payload.hookSpecificOutput?.permissionDecision).toBe("deny");
+      expect(payload.hookSpecificOutput?.permissionDecisionReason).toContain(
+        "cannot safely parse Bash write targets",
+      );
+    }
+  });
+
+  it("denies inline file API aliases when exact targets cannot be parsed", () => {
+    writeHermesWorkerRecords([
+      taskCard("job-active", "coder"),
+      heartbeat("job-active"),
+    ]);
+
+    for (const command of [
+      "python3 -c \"from shutil import copyfile as c; c('src/app.ts','docs/bad.txt')\"",
+      "node -e \"const { writeFileSync: w } = require('fs'); w('docs/bad.txt','x')\"",
+      "node -e \"const { writeFileSync: w } = require('node:fs'); w('docs/bad.txt','x')\"",
+      "node -e \"import { writeFileSync as w } from 'node:fs'; w('docs/bad.txt','x')\"",
+    ]) {
+      const result = runHermesRuntimeGuard(repoRoot, {
+        cwd: repoRoot,
+        hook_event_name: "PreToolUse",
+        agent_role: "coder",
+        tool_name: "Bash",
+        tool_input: {
+          job_id: "job-active",
+          command,
+        },
+        session_id: "test-session",
+      });
+
+      expect(result.status).toBe(0);
+      const decision = parseDecision(result);
+      expect(decision.permissionDecision).toBe("deny");
+      expect(decision.permissionDecisionReason).toContain(
+        "cannot safely parse Bash write targets",
+      );
+    }
   });
 
   it("denies PreToolUse write tools when Hermes worker records are invalid", () => {
@@ -1756,6 +2880,7 @@ describe.skipIf(!hasPython())("hermes runtime guard hook", () => {
     const result = runHermesRuntimeGuard(repoRoot, {
       cwd: repoRoot,
       hook_event_name: "PreToolUse",
+      agent_role: "coder",
       tool_name: "Edit",
       session_id: "test-session",
     });

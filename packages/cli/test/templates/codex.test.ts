@@ -154,6 +154,12 @@ describe("codex session-start.py compact SessionStart context", () => {
     const content = fs.readFileSync(hookPath, "utf-8");
     expect(content).toContain("Trellis compact SessionStart context");
     expect(content).toContain("Task context order for implementation/check");
+    expect(content).toContain("_build_hermes_main_agent_boot_guard");
+    expect(content).toContain("<main-agent-boot-guard>");
+    expect(content).toContain(
+      ".trellis/hermes/HERMES_MAIN_AGENT_BOOT_GUARD.md",
+    );
+    expect(content).toContain("minimal_file_context");
     expect(content).toContain("design.md if present");
     expect(content).not.toContain("<sub-agent-notice>");
     expect(content).not.toContain("guides (inlined");

@@ -99,7 +99,7 @@ function main() {
 
   run("node scripts/check-manifest-continuity.js");
   docsGuard(type);
-  run("pnpm --filter trellis-hgl-core test");
+  run("pnpm --filter trellis-hermes-core test");
   run("pnpm test");
 
   stageReleaseChanges();

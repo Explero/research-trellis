@@ -3,7 +3,7 @@
 - **Query**: Survey the `<workflow-state>` breadcrumb subsystem. Identify all statuses, what triggers transitions, drift between the three text sources, dead branches, and gaps where a breadcrumb's "next step" hint is not produced by any code path.
 - **Scope**: internal (Trellis codebase: `packages/cli/src/templates/...`)
 - **Date**: 2026-04-30
-- **Repo root**: `/Users/taosu/workspace/company/mindfold/product/share-public/Trellis`
+- **Repo root**: `<REPO_ROOT>`
 
 ---
 
@@ -359,14 +359,14 @@ So: **custom statuses can be used by user-defined hooks freely; the bundled subs
 
 ## 9. Files referenced
 
-- `/Users/taosu/workspace/company/mindfold/product/share-public/Trellis/packages/cli/src/templates/shared-hooks/inject-workflow-state.py` — Python hook (lines 134, 144, 204, 230 are the load-bearing ones).
-- `/Users/taosu/workspace/company/mindfold/product/share-public/Trellis/packages/cli/src/templates/opencode/plugins/inject-workflow-state.js` — JS plugin (lines 30, 37, 96, 144).
-- `/Users/taosu/workspace/company/mindfold/product/share-public/Trellis/packages/cli/src/templates/trellis/workflow.md` — single source of truth for breadcrumb text (lines 504-540 are the tag block; lines 99-498 are the prose walkthrough).
-- `/Users/taosu/workspace/company/mindfold/product/share-public/Trellis/packages/cli/src/templates/trellis/scripts/task.py` — CLI dispatcher; `cmd_start` at line 70, `cmd_finish` at line 124, `cmd_current` at line 145.
-- `/Users/taosu/workspace/company/mindfold/product/share-public/Trellis/packages/cli/src/templates/trellis/scripts/common/task_store.py` — `cmd_create` at line 147+, `cmd_archive` at line 290+. Lines 206 and 321 are the only other status writers.
-- `/Users/taosu/workspace/company/mindfold/product/share-public/Trellis/packages/cli/src/templates/trellis/scripts/common/task_utils.py:218-261` — `run_task_hooks` implementation.
-- `/Users/taosu/workspace/company/mindfold/product/share-public/Trellis/packages/cli/src/templates/common/commands/finish-work.md` — `/finish-work` definition; dirty-tree refusal at lines 19-31.
-- `/Users/taosu/workspace/company/mindfold/product/share-public/Trellis/.trellis/scripts/task.py` — runtime copy; verified byte-identical to the template via `diff`.
+- `<REPO_ROOT>/packages/cli/src/templates/shared-hooks/inject-workflow-state.py` — Python hook (lines 134, 144, 204, 230 are the load-bearing ones).
+- `<REPO_ROOT>/packages/cli/src/templates/opencode/plugins/inject-workflow-state.js` — JS plugin (lines 30, 37, 96, 144).
+- `<REPO_ROOT>/packages/cli/src/templates/trellis/workflow.md` — single source of truth for breadcrumb text (lines 504-540 are the tag block; lines 99-498 are the prose walkthrough).
+- `<REPO_ROOT>/packages/cli/src/templates/trellis/scripts/task.py` — CLI dispatcher; `cmd_start` at line 70, `cmd_finish` at line 124, `cmd_current` at line 145.
+- `<REPO_ROOT>/packages/cli/src/templates/trellis/scripts/common/task_store.py` — `cmd_create` at line 147+, `cmd_archive` at line 290+. Lines 206 and 321 are the only other status writers.
+- `<REPO_ROOT>/packages/cli/src/templates/trellis/scripts/common/task_utils.py:218-261` — `run_task_hooks` implementation.
+- `<REPO_ROOT>/packages/cli/src/templates/common/commands/finish-work.md` — `/finish-work` definition; dirty-tree refusal at lines 19-31.
+- `<REPO_ROOT>/.trellis/scripts/task.py` — runtime copy; verified byte-identical to the template via `diff`.
 
 ## 10. Caveats / Not found
 

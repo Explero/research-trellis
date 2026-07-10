@@ -66,6 +66,15 @@ If you have not already loaded Trellis context this session, read the `trellis-s
 </trellis-bootstrap>"""
 
 
+def _build_codex_hermes_boot_guard_notice(root: Path) -> str:
+    guard_path = root / ".trellis" / "hermes" / "HERMES_MAIN_AGENT_BOOT_GUARD.md"
+    if not guard_path.is_file():
+        return ""
+    return """<main-agent-boot-guard>
+Hermes main-agent mode: coordinate state, route bounded work to subagents, require structured records, and stop at human/PI gates. Full rules: .trellis/hermes/HERMES_MAIN_AGENT_BOOT_GUARD.md. Context policy: minimal_file_context.
+</main-agent-boot-guard>"""
+
+
 # ---------------------------------------------------------------------------
 # CWD-robust Trellis root discovery (fixes hook-path-robustness for this hook)
 # ---------------------------------------------------------------------------
@@ -361,6 +370,9 @@ def main() -> int:
         )
     if platform == "codex":
         parts: list[str] = []
+        boot_guard_notice = _build_codex_hermes_boot_guard_notice(root)
+        if boot_guard_notice:
+            parts.append(boot_guard_notice)
         if task is None:
             parts.append(CODEX_NO_TASK_BOOTSTRAP_NOTICE)
         parts.append(_codex_mode_banner(config))

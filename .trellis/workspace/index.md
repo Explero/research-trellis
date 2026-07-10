@@ -27,7 +27,7 @@ workspace/
 
 | Developer | Last Active | Sessions | Active File |
 |-----------|-------------|----------|-------------|
-| kleinhe | 2026-01-26 | 12 | journal-1.md |
+| example-collaborator | 2026-01-26 | 12 | journal-1.md |
 
 ---
 

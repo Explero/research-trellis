@@ -7,13 +7,13 @@
   "dev_type": null,
   "scope": "src/cli/",
   "priority": "P2",
-  "creator": "taosu",
-  "assignee": "taosu",
+  "creator": "example-user",
+  "assignee": "example-user",
   "createdAt": "2026-02-03",
   "completedAt": null,
   "branch": "test/template-init",
   "base_branch": "feat/opencode",
-  "worktree_path": "/Users/taosu/workspace/company/mindfold/product/share-public/trellis-worktrees/test/template-init",
+  "worktree_path": "<WORKTREE_ROOT>/test/template-init",
   "current_phase": 0,
   "next_action": [
     {

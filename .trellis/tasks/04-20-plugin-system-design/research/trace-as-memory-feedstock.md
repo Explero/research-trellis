@@ -52,7 +52,7 @@ Trace 不应该先按 observability 或 code attribution 设计。
 这个文件已经存在，是 ini 格式，而且本来就是 per-project、per-machine 的个人配置：
 
 ```ini
-name=taosu
+name=example-user
 initialized_at=2026-01-17T16:09:39+08:00
 ```
 
@@ -64,7 +64,7 @@ initialized_at=2026-01-17T16:09:39+08:00
 所以第一版不需要新建配置系统。直接加几个 key 就够：
 
 ```ini
-name=taosu
+name=example-user
 initialized_at=2026-01-17T16:09:39+08:00
 
 trace.enabled=true

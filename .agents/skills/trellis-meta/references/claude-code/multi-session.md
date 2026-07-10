@@ -175,7 +175,7 @@ python3 .trellis/scripts/multi_agent/start.py <task-dir>
 
 **Example**:
 ```bash
-python3 .trellis/scripts/multi_agent/start.py .trellis/tasks/01-31-add-login-taosu
+python3 .trellis/scripts/multi_agent/start.py .trellis/tasks/01-31-add-login-example-user
 # Output: Started agent in ../trellis-worktrees/feature/add-login
 ```
 
@@ -293,7 +293,7 @@ Tracks all running sessions.
       "worktree_path": "/abs/path/to/trellis-worktrees/feature/add-login",
       "pid": 12345,
       "started_at": "2026-01-31T10:30:00",
-      "task_dir": ".trellis/tasks/01-31-add-login-taosu"
+      "task_dir": ".trellis/tasks/01-31-add-login-example-user"
     }
   ]
 }

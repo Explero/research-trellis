@@ -84,7 +84,7 @@
 
 - Spec 文件位置：`.trellis/spec/cli/backend/*.md`、`.trellis/spec/cli/unit-test/*.md`
 - docs-site：`docs-site/advanced/architecture.mdx` + `docs-site/zh/advanced/architecture.mdx`（提交后 docs-site submodule pointer 不需要立刻 bump，accumulate 到下次发版前再一起 bump）
-- Memory：`/Users/taosu/.claude/projects/-Users-taosu-workspace-company-mindfold-product-share-public-Trellis/memory/MEMORY.md` —— 删掉指向 iflow.test.ts 的那行 + （如果存在）对应 .md 文件
+- Memory：`<CLAUDE_HOME>/projects/<PROJECT_KEY>/memory/MEMORY.md` —— 删掉指向 iflow.test.ts 的那行 + （如果存在）对应 .md 文件
 
 ## Research References
 

@@ -369,19 +369,19 @@ Context 注入有 **10,000 字符上限**。超过会保存为文件并替换为
 - 子 agent：`~/.claude/projects/<normalized-project-path>/<session_id>/subagents/agent-<shortId>.jsonl`（老文档写 `agent-<shortId>.jsonl` 在项目根下，**新版已观察到是嵌套 `<sessionId>/subagents/` 下**；以 SubagentStop hook 提供的 `agent_transcript_path` 为准）
 - 全局命令历史：`~/.claude/history.jsonl`
 
-**路径归一化规则**：绝对路径的 `/` 全替换为 `-`。例：`/Users/taosu/workspace/foo` → `-Users-taosu-workspace-foo`。
+**路径归一化规则**：绝对路径的 `/` 全替换为 `-`。例：`<LOCAL_WORKSPACE>` → `<PROJECT_KEY>`。
 
-实测样本（本机 `find ~/.claude/projects`）：
+路径样例（已脱敏）：
 ```
-/Users/taosu/.claude/projects/-Users-taosu-workspace-nb-project-reddit/384b70f8-1e2b-448e-a009-3d263693d4aa.jsonl
-/Users/taosu/.claude/projects/-Users-taosu-services-SillyTavern/35772820-a562-4dd6-850c-5f4d0dd14b3f/subagents/agent-a5515764093d5a572.jsonl
+<CLAUDE_HOME>/projects/<PROJECT_KEY>/<SESSION_ID>.jsonl
+<CLAUDE_HOME>/projects/<PROJECT_KEY>/<SESSION_ID>/subagents/agent-<AGENT_ID>.jsonl
 ```
 
-**特殊情况（未完全确定）**：若 cwd 以多个 `/` 开头（如 macOS `/private/var/...`），归一化后会出现形如 `-Users-taosu` / `-Users-taosu--claude-skills-syla-project`（双 `-`，对应原路径的 `.` 开头目录如 `.claude`）。具体规则未在官方文档声明，需**以 hook 传入的 `transcript_path` 为准**，不要自己重新拼接。
+**特殊情况（未完全确定）**：若 cwd 以多个 `/` 开头（如 macOS `/private/var/...`），归一化后会出现形如 `<PROJECT_KEY>` / `<PROJECT_KEY>`（双 `-`，对应原路径的 `.` 开头目录如 `.claude`）。具体规则未在官方文档声明，需**以 hook 传入的 `transcript_path` 为准**，不要自己重新拼接。
 
-### 6.2 JSONL 行级 Schema（来源：ccrider schema 研究 + 本地实测第一手数据）
+### 6.2 JSONL 行级 Schema（来源：ccrider schema 研究 + 本地验证）
 
-**第一行通常是 summary**（可能有多种 meta 行混在前面；本机实测观察到 `permission-mode` 和 `file-history-snapshot` 行出现在 summary 之前）。
+**第一行通常是 summary**（可能有多种 meta 行混在前面；验证中观察到 `permission-mode` 和 `file-history-snapshot` 行出现在 summary 之前）。
 
 #### (a) Summary
 ```json
@@ -401,7 +401,7 @@ Context 注入有 **10,000 字符上限**。超过会保存为文件并替换为
   "permissionMode": "bypassPermissions",
   "userType": "external",
   "entrypoint": "cli",
-  "cwd": "/Users/taosu/workspace/...",
+  "cwd": "<LOCAL_WORKSPACE>",
   "sessionId": "384b70f8-...",
   "version": "2.1.97",
   "gitBranch": "HEAD"
@@ -479,7 +479,7 @@ Context 注入有 **10,000 字符上限**。超过会保存为文件并替换为
 
 ### 6.4 global command history `~/.claude/history.jsonl`
 ```json
-{ "display": "用户输入的命令文本", "pastedContents": {}, "timestamp": 1759022024295, "project": "/Users/neil/personal/mommail" }
+{ "display": "用户输入的命令文本", "pastedContents": {}, "timestamp": 1759022024295, "project": "<USER_PROJECT>" }
 ```
 
 ---
@@ -545,7 +545,7 @@ Context 注入有 **10,000 字符上限**。超过会保存为文件并替换为
 - **`tool_response` 的完整字段表**：官方文档只在 `Write` 的示例里给了 `{filePath, success}`。其他工具（Bash / Edit / Read / Grep / WebFetch / MCP）的 response schema 没有在 Hooks reference 里全部枚举。建议：trace plugin 整体透传 `tool_response`，不做强类型校验。
 - **PreToolUse 的 `tool_use_id`**：官方文档在 PreToolUse 部分未显式列出此字段，但 PostToolUse / PermissionDenied 都列出了。实际是否传入 PreToolUse 未验证；若 trace 需要在 pre 阶段记录一个占位，应实际起一次 hook 采样 stdin。
 - **Transcript 文件 rotation**：Claude Code 对 JSONL 是**追加**模式。没有文档说明的 rotation / cleanup 行为；issue #20612（anthropics/claude-code）曾报告过 transcript 未写入的 bug。Trellis trace plugin 如果依赖 transcript，应对"文件可能暂时缺失"容错。
-- **`subagents/` 目录路径**：ccrider 的 schema 文档写的是 `agent-<shortId>.jsonl` 在项目根下，但本机实测是 `<sessionId>/subagents/agent-....jsonl` 嵌套。**以 SubagentStop hook 传入的 `agent_transcript_path` 为准**，不要手动拼接。
+- **`subagents/` 目录路径**：ccrider 的 schema 文档写的是 `agent-<shortId>.jsonl` 在项目根下，但验证中观察到 `<sessionId>/subagents/agent-....jsonl` 嵌套。**以 SubagentStop hook 传入的 `agent_transcript_path` 为准**，不要手动拼接。
 - **`permission-mode` 行**：ccrider schema 文档没有列，但实测日志里存在（`{type: "permission-mode", permissionMode, sessionId}`）。trace plugin 解析 transcript 时要对未知 `type` 值**宽松处理**（跳过而非报错）。
 - **项目路径归一化的边界情况**：`.claude` / `.cache` 这类 dot 开头的路径段看起来会产生连续 `-`。官方文档没有声明归一化算法，以 hook 传入的 `transcript_path` 为准，不要自己算。
 - **版本演进**：hook 事件表本身正在扩张（agent-team 相关如 `TaskCreated` / `TeammateIdle` 是较新加入）。`defer` 需 v2.1.89+。trace plugin 应对未知 hook event **忽略而非 fail**。

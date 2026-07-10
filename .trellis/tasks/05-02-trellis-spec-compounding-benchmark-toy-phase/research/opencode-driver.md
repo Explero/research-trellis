@@ -74,7 +74,7 @@ Schema reference: `provider.<id>` from `https://opencode.ai/config.json` (lines 
       "npm": "@ai-sdk/openai-compatible",
       "name": "MiMo (XiaoMi)",
       "options": {
-        "baseURL": "https://api.xiaomimimo.com/v1",
+        "baseURL": "https://example-llm-endpoint.invalid/v1",
         "timeout": 600000,           // 10 min per request — SWE-bench tasks can be slow
         "chunkTimeout": 120000        // 2 min between SSE chunks before abort
       },
@@ -99,7 +99,7 @@ Schema reference: `provider.<id>` from `https://opencode.ai/config.json` (lines 
 { "mimo": "sk-xxx..." }
 ```
 
-Set it once via `opencode auth login` (interactive) OR seed the file directly per attempt — auth.json is plain JSON and the user already has `deepseek` and `openai` keys living there. Driver script can `printf '{"mimo":"%s"}' "$MIMO_KEY" > $XDG_DATA_HOME/opencode/auth.json` before launching.
+Set it once via `opencode auth login` (interactive) OR seed an isolated per-attempt auth file. `auth.json` is plain JSON, so benchmark runs should use a throwaway `$XDG_DATA_HOME` rather than reusing a developer's existing credentials. Driver script can `printf '{"mimo":"%s"}' "$MIMO_KEY" > $XDG_DATA_HOME/opencode/auth.json` before launching.
 
 **Model id format.** The CLI flag is `-m mimo/mimo-v2.5-pro` (provider/model joined by `/`). `opencode models` lists exact ids; verify it appears after configuring.
 
@@ -203,7 +203,7 @@ So per-attempt isolation = `mktemp -d` an attempt root and set the four XDG vars
 
 The `.opencode/` directory inside the workspace is where per-workspace `agents/`, `plugins/`, and `skills/` are picked up. To dogfood Trellis you can place your custom benchmark agent there OR in the global config at `$XDG_CONFIG_HOME/opencode/agents/`.
 
-**One time-consuming gotcha:** first invocation under a fresh XDG_DATA_HOME triggers `Performing one time database migration, may take a few minutes...` (verified on the probe run — took <2 s on this machine, but worth pre-warming). To pre-warm: run `opencode debug paths` once per attempt root before the real `opencode run`, or copy a pre-migrated empty `opencode.db` template.
+**One time-consuming gotcha:** first invocation under a fresh XDG_DATA_HOME triggers `Performing one time database migration, may take a few minutes...`. Treat the runtime as variable and pre-warm with `opencode debug paths` once per attempt root before the real `opencode run`, or copy a pre-migrated empty `opencode.db` template.
 
 ### 6. Auto-approve — no human in the loop
 
@@ -402,7 +402,7 @@ if __name__ == "__main__":
       "npm": "@ai-sdk/openai-compatible",
       "name": "MiMo (XiaoMi)",
       "options": {
-        "baseURL": "https://api.xiaomimimo.com/v1",
+        "baseURL": "https://example-llm-endpoint.invalid/v1",
         "timeout": 600000,
         "chunkTimeout": 120000
       },
@@ -448,7 +448,7 @@ if __name__ == "__main__":
 4. **Cost field is provider-reported.** When you self-host or use a custom provider with `cost.input/output: 0` in config, `step_finish.part.cost` will be `0`. Not a bug — track tokens and apply a cost model post-hoc.
 5. **`@ai-sdk/openai-compatible` sub-session quirk** (github.com/anomalyco/opencode#20725). Sub-sessions (Task tool) may try to fall back to the openai SDK. Since we set `task: deny` this is moot, but still: never enable `task` for the benchmark.
 6. **Concurrency limits.** Each `opencode run` spins up a Bun runtime + an embedded server. RSS ≈ 200–400 MB per process. On a typical 16 GB dev machine you can run ~8–16 attempts in parallel; on cloud throwaway boxes pick a worker count × per-process RSS that fits.
-7. **Auth.json schema is a flat string-keyed map.** For api-key providers (like our MiMo) the value is just the bare key string (`{"mimo":"sk-..."}`). For OAuth providers it's an object. Match the existing format on the user's `~/.local/share/opencode/auth.json` — confirmed flat for `deepseek` and OAuth-object for `openai` on this machine.
+7. **Auth.json schema is a flat string-keyed map.** For api-key providers (like our MiMo) the value is just the bare key string (`{"mimo":"sk-..."}`). For OAuth providers it's an object. Do not copy a developer's real `~/.local/share/opencode/auth.json`; create an isolated benchmark auth file instead.
 8. **`steps` cap is essential.** Without `steps: 200` (or similar) on the agent config, a confused model can loop indefinitely. The benchmark MUST cap iterations to bound runtime per attempt.
 
 ---
@@ -469,8 +469,8 @@ if __name__ == "__main__":
 
 - `Trellis/.opencode/agents/trellis-research.md` — example of YAML-frontmatter agent with `permission` block + MCP `allow` rules. Mirror this pattern for `swe-bench-runner.md`.
 - `Trellis/.opencode/plugins/inject-subagent-context.js`, `inject-workflow-state.js`, `session-start.js` — plugin examples showing how OpenCode plugins hook session lifecycle. Not needed for the benchmark (we want a clean room) but useful if we ever want to inject the four-arm context via a plugin instead of prompt-templating.
-- `~/.config/opencode/opencode.json` — current user config (just registers a Playwright MCP server). Reference for opencode.json shape.
-- `~/.local/share/opencode/auth.json` — credentials store. Schema is `{ "<providerId>": "<apiKey>" | { oauth-object } }`.
+- `~/.config/opencode/opencode.json` — user config location. Reference only for opencode.json shape; do not commit local config.
+- `~/.local/share/opencode/auth.json` — credentials store. Schema is `{ "<providerId>": "<apiKey>" | { oauth-object } }`; do not commit local credentials.
 
 ## Not Found / Open Questions
 

@@ -7,7 +7,7 @@ import {
   listChannelContext,
   listThreadContext,
   type ChannelScope,
-} from "trellis-hgl-core/channel";
+} from "trellis-hermes-core/channel";
 
 import { parseChannelScope } from "./store/schema.js";
 

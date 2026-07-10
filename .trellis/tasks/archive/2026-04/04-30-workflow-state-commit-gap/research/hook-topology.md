@@ -3,7 +3,7 @@
 - **Query**: enumerate every hook script across every supported platform and its event wiring
 - **Scope**: internal
 - **Date**: 2026-04-30
-- **Repo**: `/Users/taosu/workspace/company/mindfold/product/share-public/Trellis`
+- **Repo**: `<REPO_ROOT>`
 
 Read this if you are about to edit any hook file. Tells you which platforms ship a given hook, what event fires it, and what the LLM actually sees on stdout.
 

@@ -2,7 +2,7 @@
 
 - **审计时间**：2026-04-20
 - **审计者**：research sub-agent
-- **docs-site 根**：`/Users/taosu/workspace/company/mindfold/product/share-public/Trellis/docs-site/`
+- **docs-site 根**：`<REPO_ROOT>/docs-site/`
 - **问题定位**：`release/` 目录是今天从 beta track (0.5.0-beta.8 在用的内容) 全量 `cp -r` 得到的。docs.json 把 Release version 标为 "Stable" tag，默认给 0.4.0 用户看，但实际内容不是纯 0.4.0 文档。
 - **审计文件数**：184 个 mdx（en + zh），其中 guide/ 21 个 × 2 = 42，changelog 52 × 2 = 104，其余 showcase/contribute/blog/skills-market/templates/use-cases/index ≈ 38
 

@@ -19,7 +19,7 @@ The PRD went through several pivots. Locked positions, with reasoning:
 ## Requirements
 
 - **Substrate**: 20 tasks from SWE-bench Verified, drawn from 4 repos × 5 tasks (sympy, astropy, django, requests).
-- **Model under test**: MiMo v2.5 Pro at `https://api.xiaomimimo.com/v1`, model id `mimo-v2.5-pro`.
+- **Model under test**: MiMo v2.5 Pro at `https://example-llm-endpoint.invalid/v1`, model id `mimo-v2.5-pro`.
 - **Driver**: OpenCode in headless mode (`opencode run --format json --dangerously-skip-permissions`), per-attempt sandboxed via `XDG_*` env vars + `mktemp -d`.
 - **Tool whitelist**: only `Read/Edit/Write/Glob/Grep/Bash` + `mcp__abcoder__*` + `mcp__gitnexus__*`. Default-deny all other tools (no Web*, no playwright, no codex-cli, etc.). Sub-agent (`task`) and skill auto-loading **disabled** to control token bloat.
 - **Per-attempt sandboxing**: `XDG_DATA_HOME` / `XDG_CONFIG_HOME` / `XDG_CACHE_HOME` / `XDG_STATE_HOME` all relocated under `mktemp -d`; `--dir <repo-snapshot>` controls cwd. Pre-warmed sqlite to silence first-run migration message.
@@ -111,7 +111,7 @@ OpenCode provider config (drop-in, see research file for full):
   "provider": {
     "mimo": {
       "npm": "@ai-sdk/openai-compatible",
-      "options": {"baseURL": "https://api.xiaomimimo.com/v1"},
+      "options": {"baseURL": "https://example-llm-endpoint.invalid/v1"},
       "models": {"mimo-v2.5-pro": {"name": "MiMo v2.5 Pro"}}
     }
   },

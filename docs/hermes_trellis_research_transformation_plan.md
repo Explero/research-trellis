@@ -327,11 +327,11 @@ P6 部署前安全 gate：
 
 最终验证记录：
 
-- [x] `pnpm --filter trellis-hgl exec vitest run test/templates/hermes-runtime.test.ts test/templates/trellis.test.ts test/templates/claude.test.ts test/templates/codex.test.ts test/templates/shared-hooks.test.ts`：5 个文件、135 个测试通过。
+- [x] `pnpm --filter trellis-hermes exec vitest run test/templates/hermes-runtime.test.ts test/templates/trellis.test.ts test/templates/claude.test.ts test/templates/codex.test.ts test/templates/shared-hooks.test.ts`：5 个文件、135 个测试通过。
 - [x] `PYTHONPYCACHEPREFIX=/tmp/trellis-hermes-final-pycache python3 -m py_compile packages/cli/src/templates/trellis/scripts/hermes/*.py packages/cli/src/templates/shared-hooks/hermes-runtime-guard.py`：通过。
-- [x] `pnpm --filter trellis-hgl test`：44 个文件、1259 个测试通过。
-- [x] `pnpm --filter trellis-hgl typecheck`：通过。
-- [x] `pnpm --filter trellis-hgl build`：通过。
+- [x] `pnpm --filter trellis-hermes test`：44 个文件、1259 个测试通过。
+- [x] `pnpm --filter trellis-hermes typecheck`：通过。
+- [x] `pnpm --filter trellis-hermes build`：通过。
 - [x] 模板目录无 `__pycache__` / `.pyc` 缓存污染。
 
 ## 6. 完成定义

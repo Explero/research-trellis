@@ -2,14 +2,14 @@
 
 ## Goal
 
-`tl mem` 当前对所有装了 OpenCode 1.2+ 的用户**完全失明**。OpenCode 1.2 把 session 存储从 `~/.local/share/opencode/storage/` 的 JSON tree 迁到了 `~/.local/share/opencode/opencode.db` SQLite。`mem.ts:1459` 的 `OC_ROOT` 还指着老路径，结果 `mem list --platform opencode` 永远返回 0 session（实际本机有 138 个 session / 678 个 message）。
+`tl mem` 当前对所有装了 OpenCode 1.2+ 的用户**完全失明**。OpenCode 1.2 把 session 存储从 `~/.local/share/opencode/storage/` 的 JSON tree 迁到了 `~/.local/share/opencode/opencode.db` SQLite。`mem.ts:1459` 的 `OC_ROOT` 还指着老路径，结果 `mem list --platform opencode` 永远返回 0 session（本地验证中实际存在 session/message 数据）。
 
 修这个真 bug 让 OpenCode 路径恢复可用，同时双轨兼容老 JSON path（1.1.x 用户和老归档）。
 
 ## What I already know
 
 - OpenCode 1.2+ 用 `better-sqlite3` 风格的 SQLite + drizzle ORM
-- 本机实测：`opencode --version` = 1.14.30，DB 路径 `~/.local/share/opencode/opencode.db`（7.1MB），含 `__drizzle_migrations / session / message / part / todo / event / event_sequence / account / project / workspace / permission` 等表
+- 本地验证：OpenCode 1.2+ 使用 `~/.local/share/opencode/opencode.db`，包含 `__drizzle_migrations / session / message / part / todo / event / event_sequence / account / project / workspace / permission` 等表
 - 当前 mem.ts:
   - `OC_ROOT = path.join(HOME, ".local", "share", "opencode", "storage")` — 错位
   - `opencodeListSessions(f)` / `opencodeExtractDialogue(s)` / `opencodeSearch(s, kw)` 三个函数读老 JSON 结构
@@ -47,9 +47,9 @@
 
 ## Acceptance Criteria (evolving)
 
-- [ ] 本机 dogfood：`tl mem list --platform opencode --global` 返回 138 个 session（非 0）
+- [ ] 本地 dogfood：`tl mem list --platform opencode --global` 返回非 0 session
 - [ ] `tl mem extract <opencode-id>` 输出 cleaned dialogue
-- [ ] `tl mem search "kw" --platform opencode --global` 在 SQLite 上跑通且 < 1s on 678 messages
+- [ ] `tl mem search "kw" --platform opencode --global` 在 SQLite 上跑通且满足交互式查询性能要求
 - [ ] `--include-children` 把 sub-agent session 合并进 parent
 - [ ] 缺 `better-sqlite3` 时不崩，stderr 提示 + 该平台 skip
 - [ ] 老 storage/ JSON path 仍能读（双轨）

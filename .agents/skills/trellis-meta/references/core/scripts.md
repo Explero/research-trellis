@@ -50,7 +50,7 @@ Get current developer name.
 
 ```bash
 python3 .trellis/scripts/get_developer.py
-# Output: taosu
+# Output: example-user
 ```
 
 **Exit codes:**
@@ -118,7 +118,7 @@ python3 .trellis/scripts/task.py list
 **Output:**
 ```
 Active Tasks:
-  01-31-add-login-taosu (active)
+  01-31-add-login-example-user (active)
   01-30-fix-api-cursor-agent (paused)
 ```
 

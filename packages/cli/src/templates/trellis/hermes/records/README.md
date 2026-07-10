@@ -10,6 +10,7 @@ Recommended per-task files:
 - `claim_ledger.jsonl`
 - `provenance_ledger.jsonl`
 - `audit_ledger.jsonl`
+- `plan_change_log.jsonl`
 - `approval_records.jsonl`
 - `state_transition_log.jsonl`
 - `worker_records.jsonl`
@@ -32,6 +33,11 @@ and finished_at.
 directions, evidence refs, and claim refs. `report.md` summarizes the task as a
 reviewable research report and must keep conclusions at `claim_ready` until
 human/root approval is recorded.
+
+`plan_change_log.jsonl` records append-only changes to research plans, PRDs,
+contracts, and experiment configs. Each record should name the changed plan ref,
+summarize the change, explain the reason, record who requested it, and keep a
+decision state of `proposed`, `accepted`, `rejected`, or `superseded`.
 
 `provenance_ledger.jsonl` records dataset, model, code, environment, and
 artifact refs with hash, version, or source metadata. `audit_ledger.jsonl`

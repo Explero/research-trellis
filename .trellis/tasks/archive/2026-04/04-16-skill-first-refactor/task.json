@@ -2,7 +2,7 @@
   "title": "Skill-First 重构：模板系统 + 工作流 + continue 机制",
   "status": "completed",
   "priority": "P1",
-  "assignee": "taosu",
+  "assignee": "example-user",
   "created": "2026-04-16",
   "completedAt": "2026-04-22",
   "branch": "feat/v0.5.0-beta",

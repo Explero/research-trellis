@@ -57,7 +57,7 @@
 
 ## Technical Notes
 
-- Marketplace 路径：`/Users/taosu/workspace/company/mindfold/product/share-public/Trellis/marketplace/skills/mem-recall/`
+- Marketplace 路径：`<REPO_ROOT>/marketplace/skills/mem-recall/`
 - 用户本地路径：`~/.claude/skills/`
 - 0.6.0-beta.3 changelog 已写 `--phase` 用法 — 可以参考 `docs-site/changelog/v0.6.0-beta.3.mdx` 的措辞
 - `commands-mem.md` 里有完整 `## Phase slicing (--phase)` 节 — 可参考但不照抄（spec vs skill 受众不同）

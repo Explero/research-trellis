@@ -37,7 +37,7 @@ Complete reference of all files in the `.trellis/` directory.
 **Format**: Plain text, single line with developer name.
 
 ```
-taosu
+example-user
 ```
 
 **Gitignored**: Yes - each machine has its own identity.
@@ -54,7 +54,7 @@ taosu
 
 ```json
 {
-  "current_task": ".trellis/tasks/01-31-add-login-taosu",
+  "current_task": ".trellis/tasks/01-31-add-login-example-user",
   "current_run": null,
   "platform": "claude",
   "last_seen_at": "2026-04-27T00:00:00Z"

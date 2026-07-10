@@ -983,13 +983,13 @@ copy:
 
 ### Provider 配置
 
-**当前本地配置**：使用 Claude Max 反代（localhost:3456）
+**当前本地配置**：使用 Claude Max 反代（localhost:<redacted-port>）
 ```json
 {
   "provider": {
     "claude-max": {
       "npm": "@ai-sdk/openai-compatible",
-      "options": { "baseURL": "http://localhost:3456/v1" }
+      "options": { "baseURL": "http://localhost:<redacted-port>/v1" }
     }
   }
 }

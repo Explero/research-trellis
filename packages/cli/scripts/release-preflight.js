@@ -63,6 +63,7 @@ const HERMES_PYTHON_TEMPLATE_FILES = [
 ];
 const PACKED_CLI_REQUIRED_FILES = [
   "package/dist/templates/trellis/hermes/config.yaml",
+  "package/dist/templates/trellis/hermes/HERMES_MAIN_AGENT_BOOT_GUARD.md",
   "package/dist/templates/trellis/hermes/state_machine.yaml",
   "package/dist/templates/trellis/scripts/hermes/experiment.py",
   "package/dist/templates/trellis/scripts/hermes/runner.py",

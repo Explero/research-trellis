@@ -120,7 +120,7 @@
 #### contribute/trellis.mdx / zh/contribute/trellis.mdx
 - **最短文件**。EN 仅引用 `CONTRIBUTING.md`，ZH 仅引用 `CONTRIBUTING_CN.md`。
 - 需验证仓库根目录：
-  - `/Users/taosu/workspace/company/mindfold/product/share-public/Trellis/CONTRIBUTING.md` — 存在性未验证（略微疑点，但此次审计不展开）。
+  - `<REPO_ROOT>/CONTRIBUTING.md` — 存在性未验证（略微疑点，但此次审计不展开）。
   - `CONTRIBUTING_CN.md` — 存在性未验证。
 - 若缺失，则为 broken link。**待后续脚本化检查**。
 

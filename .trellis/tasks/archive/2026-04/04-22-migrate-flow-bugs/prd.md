@@ -185,7 +185,7 @@ if (project_root / ".codex").is_dir() and not _has_other_platform_dir(...):
 
 ## 关联
 
-- 用户反馈出处：2026-04-22 群聊截图（taosu image-cache 目录）
+- 用户反馈出处：2026-04-22 群聊截图（example-user image-cache 目录）
 - 代码文件：
   - `packages/cli/src/templates/trellis/scripts/common/cli_adapter.py`（Bug A + B）
   - `packages/cli/src/commands/update.ts:1971-2050`（Bug C）

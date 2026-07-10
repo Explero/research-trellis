@@ -1,17 +1,17 @@
 /**
  * Canonical task.json shape — single source of truth shared by all TS
  * writers. The canonical types and factory now live in the
- * `@mindfoldhq/trellis-core` task API; this module re-exports them under
+ * `trellis-hermes-core` task API; this module re-exports them under
  * the legacy `TaskJson` / `emptyTaskJson` names for CLI call sites.
  *
  * New code should prefer `TrellisTaskRecord` / `emptyTaskRecord` from
- * `@mindfoldhq/trellis-core/task` directly.
+ * `trellis-hermes-core/task` directly.
  */
 
 import {
   emptyTaskRecord,
   type TrellisTaskRecord,
-} from "trellis-hgl-core/task";
+} from "trellis-hermes-core/task";
 
 export type TaskJson = TrellisTaskRecord;
 

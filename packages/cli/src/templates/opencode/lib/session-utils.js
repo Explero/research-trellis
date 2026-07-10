@@ -12,6 +12,22 @@ First visible reply: say once in Chinese that Trellis SessionStart context is lo
 This notice is one-shot: do not repeat it after the first assistant reply in the same session.
 </first-reply-notice>`
 
+function buildHermesMainAgentBootGuard(ctx) {
+  const sourcePath = ".trellis/hermes/HERMES_MAIN_AGENT_BOOT_GUARD.md"
+  const guard = ctx.readProjectFile(sourcePath)
+  if (!guard) {
+    return ""
+  }
+  return `<main-agent-boot-guard>
+Source: ${sourcePath}. Read it before governance-sensitive work; keep this SessionStart payload compact.
+Role: Main Agent / Main Pilot coordinates Hermes state, bounded subagent routing, record validation, handoff, and human/PI stop points.
+Hard limits: do not directly modify source, metrics, dataset splits, baselines, official evaluation, claim_allowed=true, or main merge unless Hermes state and human/root authority allow it.
+Subagent context policy: minimal_file_context. Give role, task ID, allowed files, forbidden files, required output, stop condition, record schema, and claim boundary. Do not fork full chat by default.
+Record policy: chat is not completion; completed, failed, blocked, stale, interrupted, or capacity-blocked work needs structured records.
+Claim boundary: keep engineering success, runner success, evaluator approval, proxy evidence, scientific evidence, claim approval, and merge approval separate.
+</main-agent-boot-guard>`
+}
+
 function hasCuratedJsonlEntry(jsonlPath) {
   try {
     const content = readFileSync(jsonlPath, "utf-8")
@@ -373,6 +389,11 @@ export function buildSessionContext(ctx, platformInput = null) {
 Trellis compact SessionStart context. Use it to orient the session; load details on demand.
 </session-context>`)
   parts.push(FIRST_REPLY_NOTICE)
+
+  const hermesBootGuard = buildHermesMainAgentBootGuard(ctx)
+  if (hermesBootGuard) {
+    parts.push(hermesBootGuard)
+  }
 
   const legacyWarning = checkLegacySpec(directory, config)
   if (legacyWarning) {

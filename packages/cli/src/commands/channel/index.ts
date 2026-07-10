@@ -26,7 +26,7 @@ import { channelTitleClear, channelTitleSet } from "./title.js";
 import { runSupervisor } from "./supervisor.js";
 import { channelWait, parseDuration } from "./wait.js";
 import { parseCsv } from "./store/schema.js";
-import { parseInboxPolicy } from "trellis-hgl-core/channel";
+import { parseInboxPolicy } from "trellis-hermes-core/channel";
 
 export function registerChannelCommand(program: Command): void {
   const channel = program

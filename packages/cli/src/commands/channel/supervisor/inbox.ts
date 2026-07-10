@@ -17,7 +17,7 @@ import {
   DEFAULT_INBOX_POLICY,
   matchesInboxPolicy,
   type InboxPolicy,
-} from "trellis-hgl-core/channel";
+} from "trellis-hermes-core/channel";
 
 import type { WorkerAdapter } from "../adapters/index.js";
 import { appendEvent } from "../store/events.js";

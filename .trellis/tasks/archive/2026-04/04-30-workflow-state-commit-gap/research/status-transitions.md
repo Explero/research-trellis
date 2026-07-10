@@ -3,7 +3,7 @@
 - **Query**: Survey every code path that mutates `task.json.status` across the Trellis runtime + CLI; build a definitive transition map.
 - **Scope**: internal
 - **Date**: 2026-04-30
-- **Repo root**: `/Users/taosu/workspace/company/mindfold/product/share-public/Trellis`
+- **Repo root**: `<REPO_ROOT>`
 
 > Runtime sources at `.trellis/scripts/**` are byte-identical to the CLI templates at `packages/cli/src/templates/trellis/scripts/**` (verified `diff -q`). Line numbers below cite the CLI template tree (the source of truth shipped via `trellis init`).
 

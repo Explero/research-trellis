@@ -2,14 +2,14 @@ export {
   reduceThreads,
   buildThreadAliasResolver,
   collectThreadTimeline,
-} from "trellis-hgl-core/channel";
+} from "trellis-hermes-core/channel";
 
 export type {
   ThreadState,
   ThreadAliasResolver,
-} from "trellis-hgl-core/channel";
+} from "trellis-hermes-core/channel";
 
-import type { ThreadState } from "trellis-hgl-core/channel";
+import type { ThreadState } from "trellis-hermes-core/channel";
 
 export function formatThreadBoard(states: ThreadState[]): string[] {
   if (states.length === 0) return ["(no threads)"];

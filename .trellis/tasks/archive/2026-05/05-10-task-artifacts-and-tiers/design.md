@@ -258,11 +258,11 @@ First visible reply: say once in Chinese that Trellis SessionStart context is lo
 </first-reply-notice>
 
 <current-state>
-Developer: taosu
+Developer: example-user
 Git: branch feat/v0.6.0-beta; dirty 2 paths.
 Current task: .trellis/tasks/05-10-task-artifacts-and-tiers; status=planning.
 Active tasks: 23 total. Use `python3 ./.trellis/scripts/task.py list --mine` only if needed.
-Journal: .trellis/workspace/taosu/journal-5.md, 684 / 2000 lines.
+Journal: .trellis/workspace/example-user/journal-5.md, 684 / 2000 lines.
 Spec layers: cli, docs-site.
 </current-state>
 

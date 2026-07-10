@@ -25,7 +25,7 @@ Track development progress across sessions with per-developer isolation.
 Stores current developer name. Created by `init_developer.py`.
 
 ```
-taosu
+example-user
 ```
 
 ### Initialize Developer
@@ -85,10 +85,10 @@ When journal exceeds 2000 lines:
 Tracks all sessions and provides quick reference.
 
 ```markdown
-# Developer Workspace - taosu
+# Developer Workspace - example-user
 
 ## Active Work
-- Current task: `.trellis/tasks/01-31-add-login-taosu`
+- Current task: `.trellis/tasks/01-31-add-login-example-user`
 - Branch: feature/add-login
 
 ## Recent Sessions
@@ -120,7 +120,7 @@ Overview of all developers and project status.
 # Project Workspace
 
 ## Developers
-- taosu - Last active: 2026-01-31
+- example-user - Last active: 2026-01-31
 - cursor-agent - Last active: 2026-01-30
 
 ## Recent Activity

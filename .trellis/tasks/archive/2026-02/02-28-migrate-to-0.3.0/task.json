@@ -6,7 +6,7 @@
   "scope": "migration",
   "priority": "P1",
   "creator": "trellis-update",
-  "assignee": "name=taosu\ninitialized_at=2026-01-17T16:09:39+08:00",
+  "assignee": "name=example-user\ninitialized_at=2026-01-17T16:09:39+08:00",
   "createdAt": "2026-02-28",
   "completedAt": "2026-03-04",
   "branch": null,

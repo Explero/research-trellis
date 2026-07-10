@@ -3,7 +3,7 @@
 **Created**: 2026-02-28
 **From Version**: 0.3.0-rc.6
 **To Version**: 0.3.0
-**Assignee**: name=taosu
+**Assignee**: name=example-user
 initialized_at=2026-01-17T16:09:39+08:00
 
 ## Status

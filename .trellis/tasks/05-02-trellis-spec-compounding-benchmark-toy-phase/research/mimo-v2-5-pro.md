@@ -14,10 +14,10 @@ MiMo-V2.5-Pro is Xiaomi's flagship LLM, announced **April 22, 2026**, fully roll
 |---|---|
 | Vendor official model page | <https://mimo.xiaomi.com/mimo-v2-5-pro/> |
 | Hugging Face weights | <https://huggingface.co/XiaomiMiMo/MiMo-V2.5-Pro> (open-sourced, permissive license) |
-| Developer console | **<https://platform.xiaomimimo.com>** (canonical entry; localized welcome at `/#/docs/welcome`) |
-| Studio (web playground) | <https://aistudio.xiaomimimo.com> |
-| API base URL | **`https://api.xiaomimimo.com/v1`** (OpenAI-compatible) |
-| Anthropic-compat base URL | `https://api.xiaomimimo.com/anthropic/v1` |
+| Developer console | **<https://platform.example-llm-provider.invalid>** (canonical entry; localized welcome at `/#/docs/welcome`) |
+| Studio (web playground) | <https://studio.example-llm-provider.invalid> |
+| API base URL | **`https://example-llm-endpoint.invalid/v1`** (OpenAI-compatible) |
+| Anthropic-compat base URL | `https://example-llm-endpoint.invalid/anthropic/v1` |
 | Auth | `api-key: $MIMO_API_KEY` header **OR** standard `Authorization: Bearer $MIMO_API_KEY` |
 | Registration | Xiaomi account (Mi ID). If user has no Mi account, register at `id.mi.com` first. Account creation is open globally; does not require a Mainland China phone number. |
 | Model ID (exact API string) | **`mimo-v2.5-pro`** (with the dot and hyphens, lowercase). The older Pro is `mimo-v2-pro`; the multimodal sibling is `mimo-v2.5` (text+image+audio+video). |
@@ -30,12 +30,12 @@ The 1.6B-token quota is the user's account-specific Token Plan / promotional cre
 
 ## 2. API protocol — OpenAI-compatible
 
-The endpoint is **fully OpenAI-Chat-Completions-compatible** at `https://api.xiaomimimo.com/v1/chat/completions`. An Anthropic-Messages-compatible mirror also exists at `https://api.xiaomimimo.com/anthropic/v1/messages`.
+The endpoint is **fully OpenAI-Chat-Completions-compatible** at `https://example-llm-endpoint.invalid/v1/chat/completions`. An Anthropic-Messages-compatible mirror also exists at `https://example-llm-endpoint.invalid/anthropic/v1/messages`.
 
 ### Minimal cURL (OpenAI shape)
 
 ```bash
-curl -X POST 'https://api.xiaomimimo.com/v1/chat/completions' \
+curl -X POST 'https://example-llm-endpoint.invalid/v1/chat/completions' \
   -H "api-key: $MIMO_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
@@ -90,7 +90,7 @@ import os, json
 
 client = OpenAI(
     api_key=os.environ["MIMO_API_KEY"],
-    base_url="https://api.xiaomimimo.com/v1",
+    base_url="https://example-llm-endpoint.invalid/v1",
 )
 
 tools = [{
@@ -162,7 +162,7 @@ Recommended sampling for tool-use: **`temperature=0.3`, `top_p=0.95`** (per the 
 | Aspect | Value |
 |---|---|
 | Quota basis | Token Plan = prepaid credit pool, decremented per (input + cache-read + output) tokens. Input and output billed separately at different rates. |
-| Lifetime vs. periodic | Token Plans **auto-renew** monthly by default (can disable). Promotional grants (e.g. launch-week free trials) typically have an explicit expiry date. The user should verify the 1.6B-token grant's expiry on `platform.xiaomimimo.com` → Billing. |
+| Lifetime vs. periodic | Token Plans **auto-renew** monthly by default (can disable). Promotional grants (e.g. launch-week free trials) typically have an explicit expiry date. The user should verify the 1.6B-token grant's expiry on `platform.example-llm-provider.invalid` → Billing. |
 | Rate limits (per account) | **RPM = 100, TPM = 10,000,000** for `mimo-v2-pro` / `mimo-v2.5-pro` / `mimo-v2-omni` / `mimo-v2-flash`. Source: <https://www.mimo-v2.com/docs/pricing>. |
 | Concurrent connections | No published hard cap. Under load you get **HTTP 429** with `rate_limit_exceeded` and may receive a `Retry-After` header — implement exponential backoff. |
 | Per-key rate share | Multiple API keys under one account share the same RPM/TPM ceiling. |
@@ -179,7 +179,7 @@ MiMo-V2.5-Pro was **explicitly co-designed with Claude Code, OpenCode, Cline, Ki
 - **Claude Code**:
   ```bash
   claude config set model mimo-v2.5-pro
-  claude config set apiBaseUrl https://api.xiaomimimo.com/v1
+  claude config set apiBaseUrl https://example-llm-endpoint.invalid/v1
   claude config set apiKey $MIMO_API_KEY
   ```
 - **OpenCode**: `opencode --provider mimo --model mimo-v2.5-pro`
@@ -209,7 +209,7 @@ GitHub references for community drivers:
 
 ## 8. Geographic / network constraints
 
-- API is hosted at `api.xiaomimimo.com`. No public statement that it is mainland-China-only; OpenRouter, OpenClaw, and aimadetools.com confirm international reachability without VPN as of April 2026.
+- API is hosted at `example-llm-endpoint.invalid`. No public statement that it is mainland-China-only; OpenRouter, OpenClaw, and aimadetools.com confirm international reachability without VPN as of April 2026.
 - Account registration accepts non-Chinese phone numbers and email; Mi ID supports global signup.
 - Pricing is published in **USD**, signaling international targeting.
 - IPv4 only (no documented IPv6 endpoint).
@@ -227,7 +227,7 @@ GitHub references for community drivers:
 
 1. Claude Agent SDK already knows how to spawn stdio MCP servers (ABCoder, GitNexus) and feed their tool schemas into a chat-completions loop. We do not want to rewrite that.
 2. Claude Agent SDK speaks Anthropic Messages format. Two routes work:
-   - **Route A (recommended)**: Point Claude Agent SDK at MiMo's **native Anthropic-compatible endpoint** `https://api.xiaomimimo.com/anthropic/v1`. Zero proxy needed, zero translation overhead. Confirmed working per Xiaomi's `iChochy.com` reference and OpenClaw integration.
+   - **Route A (recommended)**: Point Claude Agent SDK at MiMo's **native Anthropic-compatible endpoint** `https://example-llm-endpoint.invalid/anthropic/v1`. Zero proxy needed, zero translation overhead. Confirmed working per Xiaomi's `iChochy.com` reference and OpenClaw integration.
    - **Route B**: Run **LiteLLM Proxy** locally as a translation layer (`Anthropic in → OpenAI/Xiaomi out`). Gives uniform observability + cost tracking but adds a hop.
 3. For the **spec-writer (oracle) role** where we want maximum determinism and structured output, prefer the OpenAI-compatible endpoint with `response_format: json_object`. The Anthropic-shape endpoint is better for the task-solver (tester) role where we want native `reasoning_content` flow.
 
@@ -246,7 +246,7 @@ GitHub references for community drivers:
 │  └───────┬────────┘     └───────┬────────┘                  │
 │          │                      │                           │
 │          ▼                      ▼                           │
-│  https://api.xiaomimimo  https://api.xiaomimimo             │
+│  https://api.example-llm-provider  https://api.example-llm-provider             │
 │      .com/v1                 .com/anthropic/v1              │
 │  (mimo-v2.5-pro,         (mimo-v2.5-pro,                    │
 │   T=0.3, top_p=0.95)      thinking=enabled)                 │
@@ -273,7 +273,7 @@ from mcp.client.stdio import stdio_client
 MODEL = "mimo-v2.5-pro"
 client = AsyncOpenAI(
     api_key=os.environ["MIMO_API_KEY"],
-    base_url="https://api.xiaomimimo.com/v1",
+    base_url="https://example-llm-endpoint.invalid/v1",
 )
 
 MCP_SERVERS = [
@@ -358,7 +358,7 @@ async def run_task(task_prompt: str, max_rounds: int = 50) -> str:
 - [ ] Persist full `messages` history (including `reasoning_content`) between turns when `thinking.type=enabled`.
 - [ ] Implement exponential backoff on HTTP 429 (RPM=100, TPM=10M).
 - [ ] Schedule batch runs ~22:00–08:00 local for night-time discount.
-- [ ] Verify the 1.6B-token grant's expiry date on `platform.xiaomimimo.com` before relying on it.
+- [ ] Verify the 1.6B-token grant's expiry date on `platform.example-llm-provider.invalid` before relying on it.
 
 ---
 
@@ -369,4 +369,4 @@ async def run_task(task_prompt: str, max_rounds: int = 50) -> str:
 - **SWE-bench Verified score for V2.5-Pro specifically**: vendor uses SWE-bench *Pro* (57.2) as the headline. V2-Pro scored 78.0% on Verified; V2.5-Pro is described as "improved" but no exact published Verified number was found. For our benchmark we should re-measure on our own subset rather than cite a vendor number.
 - **MCP-native bridge**: no purpose-built `mcp-mimo` adapter exists in open source. We bridge via OpenAI tools shape — works fine but means we own the glue code.
 - **Latency from non-CN regions**: not measured in any source we found. Worth a one-shot empirical check from the benchmark runner host before committing the architecture.
-- **Privacy**: Xiaomi's TOS for API inputs/outputs was not surveyed. If benchmark tasks include any proprietary code, review the data-retention clause on `platform.xiaomimimo.com` first.
+- **Privacy**: Xiaomi's TOS for API inputs/outputs was not surveyed. If benchmark tasks include any proprietary code, review the data-retention clause on `platform.example-llm-provider.invalid` first.

@@ -61,7 +61,7 @@ CLAUDE_PROJECT_DIR=c:\Users\Luke\Documents\Claude Code\hq
 CLAUDECODE=1
 ```
 
-确认 **没有**：`CLAUDE_SESSION_ID`、`CLAUDE_CODE_SESSION_ID`、`CLAUDE_TRANSCRIPT_PATH` —— 这与 taosu 在 Mac 上的观察一致。Anthropic 官方现在的设计是「session_id 通过 stdin JSON 给 hook，hook 自己决定要不要持久化它」，不导出语义化 session env。
+确认 **没有**：`CLAUDE_SESSION_ID`、`CLAUDE_CODE_SESSION_ID`、`CLAUDE_TRANSCRIPT_PATH` —— 这与 example-user 在 Mac 上的观察一致。Anthropic 官方现在的设计是「session_id 通过 stdin JSON 给 hook，hook 自己决定要不要持久化它」，不导出语义化 session env。
 
 `CLAUDE_PROJECT_DIR` 是 Trellis 现在已经在 fall-back chain 里读的，OK。
 

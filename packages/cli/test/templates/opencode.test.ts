@@ -93,6 +93,32 @@ describe("opencode session-start history detection", () => {
     );
   });
 
+  it("includes compact Hermes main-agent boot guard when the guard document exists", () => {
+    const context = buildSessionContext({
+      directory: "/tmp/trellis-opencode-test",
+      getActiveTask: () => ({ taskPath: null, source: "none", stale: false }),
+      getContextKey: () => null,
+      getCurrentTask: () => null,
+      readFile: () => "",
+      readProjectFile: (file: string) =>
+        file === ".trellis/hermes/HERMES_MAIN_AGENT_BOOT_GUARD.md"
+          ? "# Hermes Main Agent Boot Guard Prompt\n"
+          : "",
+      resolveTaskDir: () => null,
+      runScript: () => "",
+    });
+
+    expect(context).toContain("<main-agent-boot-guard>");
+    expect(context).toContain(
+      ".trellis/hermes/HERMES_MAIN_AGENT_BOOT_GUARD.md",
+    );
+    expect(context).toContain("minimal_file_context");
+    expect(context).not.toContain("You are running inside a Hermes-governed");
+    expect(context.indexOf("<main-agent-boot-guard>")).toBeLessThan(
+      context.indexOf("<guidelines>"),
+    );
+  });
+
   it("detects persisted Trellis context from metadata", () => {
     const messages = [
       {

@@ -197,7 +197,7 @@ from common.registry import (
       "worktree_path": "/abs/path/to/worktrees/feature/add-login",
       "pid": 12345,
       "started_at": "2026-01-31T10:30:00",
-      "task_dir": ".trellis/tasks/01-31-add-login-taosu"
+      "task_dir": ".trellis/tasks/01-31-add-login-example-user"
     }
   ]
 }

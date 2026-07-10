@@ -29,6 +29,7 @@ METRICS_SCHEMA_FILE = "metrics_schema.yaml"
 PROVENANCE_FILE = "provenance_ledger.jsonl"
 AUDIT_FILE = "audit_ledger.jsonl"
 SERVICE_QUEUE_FILE = "service_queue.jsonl"
+PLAN_CHANGE_FILE = "plan_change_log.jsonl"
 RUN_MANIFEST_REQUIRED_FIELDS = [
     "command",
     "cwd",
@@ -65,6 +66,7 @@ RECORD_FILES = {
     "provenance": PROVENANCE_FILE,
     "audit": AUDIT_FILE,
     "service_queue": SERVICE_QUEUE_FILE,
+    "plan_change": PLAN_CHANGE_FILE,
     "approval": APPROVAL_FILE,
     "state": STATE_FILE,
     "run_manifest": RUN_MANIFEST_FILE,
@@ -274,7 +276,21 @@ REQUIRED_FIELDS = {
         "claim_refs",
         "conclusion_state",
     ],
+    "plan_change": [
+        "type",
+        "id",
+        "timestamp",
+        "plan_ref",
+        "change_summary",
+        "reason",
+        "requested_by",
+        "decision_state",
+        "evidence_refs",
+        "supersedes",
+    ],
 }
+
+PLAN_CHANGE_DECISION_STATES = {"proposed", "accepted", "rejected", "superseded"}
 
 
 @dataclass
@@ -919,6 +935,53 @@ def validate_compare_records(records: list[JsonlRecord]) -> list[str]:
     return errors
 
 
+def validate_plan_change_records(records: list[JsonlRecord]) -> list[str]:
+    errors: list[str] = []
+    plan_change_ids: dict[str, list[int]] = {}
+
+    for entry in records:
+        errors.extend(validate_required_fields(entry.value, entry.line_number))
+        record = entry.value
+        if record.get("type") != "plan_change":
+            errors.append(f"line {entry.line_number}: expected plan_change record")
+            continue
+
+        plan_change_id = record.get("id")
+        if isinstance(plan_change_id, str) and plan_change_id.strip():
+            plan_change_ids.setdefault(plan_change_id, []).append(entry.line_number)
+        elif "id" in record:
+            errors.append(f"line {entry.line_number}: plan_change id must be a non-empty string")
+
+        if parse_timestamp(record.get("timestamp")) is None:
+            errors.append(f"line {entry.line_number}: invalid plan_change timestamp")
+
+        for field in ["plan_ref", "change_summary", "reason", "requested_by"]:
+            if not is_nonempty_string(record.get(field)):
+                errors.append(
+                    f"line {entry.line_number}: plan_change {field} must be a non-empty string"
+                )
+
+        if record.get("decision_state") not in PLAN_CHANGE_DECISION_STATES:
+            errors.append(
+                f"line {entry.line_number}: decision_state must be one of {', '.join(sorted(PLAN_CHANGE_DECISION_STATES))}"
+            )
+
+        errors.extend(
+            validate_optional_string_list(record, "evidence_refs", entry.line_number)
+        )
+        errors.extend(
+            validate_optional_string_list(record, "supersedes", entry.line_number)
+        )
+
+    for plan_change_id, lines in plan_change_ids.items():
+        if len(lines) > 1:
+            errors.append(
+                f"duplicate plan_change id {plan_change_id}: lines {', '.join(str(line) for line in lines)}"
+            )
+
+    return errors
+
+
 def validate_metrics_schema(path: Path) -> list[str]:
     if not path.exists():
         return [f"{path}: missing metrics_schema.yaml"]
@@ -1241,6 +1304,8 @@ def validate_records(path: Path, kind: str) -> list[str]:
         errors.extend(validate_run_manifest_records(path, records))
     elif kind == "compare":
         errors.extend(validate_compare_records(records))
+    elif kind == "plan_change":
+        errors.extend(validate_plan_change_records(records))
     else:
         for entry in records:
             errors.extend(validate_required_fields(entry.value, entry.line_number))
