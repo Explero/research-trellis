@@ -1,6 +1,6 @@
 {
   "name": "trellis-hermes-core",
-  "version": "0.6.0-beta.29",
+  "version": "0.6.0-beta.30",
   "description": "Trellis core SDK — channel and task domain primitives consumed by the Trellis CLI and downstream Node services",
   "type": "module",
   "main": "./dist/index.js",
@@ -34,7 +34,9 @@
     }
   },
   "files": [
-    "dist"
+    "dist",
+    "README.md",
+    "LICENSE"
   ],
   "sideEffects": false,
   "publishConfig": {
@@ -49,7 +51,9 @@
     "test:watch": "vitest",
     "lint": "eslint src/ test/",
     "lint:fix": "eslint src/ test/ --fix",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "sync-package-docs": "node -e \"const fs=require('node:fs'); fs.copyFileSync('../../README.md','README.md'); fs.copyFileSync('../../LICENSE','LICENSE');\"",
+    "prepublishOnly": "pnpm run build && pnpm run sync-package-docs"
   },
   "keywords": [
     "trellis",

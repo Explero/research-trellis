@@ -22,6 +22,8 @@
  *                                    version already exists on npm it is
  *                                    skipped (but version mismatches still
  *                                    fail loudly).
+ *   verify-packed-core              Verify the core tarball includes package
+ *                                    docs, its manifest, and every dist entry.
  *   verify-published-cli-manifest   Verify the published CLI registry metadata
  *                                    pins the core dependency to the exact
  *                                    shared version, matching the packed
@@ -325,6 +327,70 @@ function packWorkspacePackage(packageDir, destinationDir) {
   });
 }
 
+function collectDistEntries(value, entries) {
+  if (typeof value === "string") {
+    if (value.startsWith("./dist/")) {
+      entries.add(`package/${value.slice(2)}`);
+    }
+    return;
+  }
+  if (Array.isArray(value)) {
+    for (const item of value) collectDistEntries(item, entries);
+    return;
+  }
+  if (value && typeof value === "object") {
+    for (const item of Object.values(value)) collectDistEntries(item, entries);
+  }
+}
+
+function requiredPackedCoreFiles() {
+  const pkg = readJSON(CORE_PKG);
+  const distEntries = new Set();
+  for (const field of [pkg.main, pkg.module, pkg.types, pkg.exports, pkg.bin]) {
+    collectDistEntries(field, distEntries);
+  }
+  return [
+    "package/README.md",
+    "package/LICENSE",
+    "package/package.json",
+    ...distEntries,
+  ];
+}
+
+function verifyPackedCoreTarball(packed) {
+  const manifest = new Set(
+    execSync(`tar -tzf ${path.basename(packed)}`, {
+      cwd: path.dirname(packed),
+      encoding: "utf-8",
+      stdio: ["pipe", "pipe", "pipe"],
+    })
+      .split("\n")
+      .map((line) => line.trim())
+      .filter(Boolean),
+  );
+  const missingFiles = requiredPackedCoreFiles().filter(
+    (file) => !manifest.has(file),
+  );
+  if (missingFiles.length > 0) {
+    fail(
+      `packed core is missing required files:\n` +
+        missingFiles.map((file) => `  - ${file}`).join("\n"),
+    );
+  }
+}
+
+function verifyPackedCore() {
+  checkVersions({ requireTag: false, quiet: true });
+  const tmp = fs.mkdtempSync(path.join(REPO_ROOT, ".pack-verify-core-"));
+  try {
+    const packed = packWorkspacePackage(path.join(REPO_ROOT, "packages/core"), tmp);
+    verifyPackedCoreTarball(packed);
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+  console.log(`${GREEN}ok${RESET} packed core includes package docs and dist entries.`);
+}
+
 function packedCliCoreDependency() {
   const v = checkVersions({ requireTag: false, quiet: true });
   const tmp = fs.mkdtempSync(path.join(REPO_ROOT, ".pack-verify-"));
@@ -388,6 +454,7 @@ function packPublishArtifacts() {
   const coreDir = path.join(REPO_ROOT, "packages/core");
   const cliDir = path.join(REPO_ROOT, "packages/cli");
   const coreTarball = packWorkspacePackage(coreDir, tmp);
+  verifyPackedCoreTarball(coreTarball);
   const cliTarball = packWorkspacePackage(cliDir, tmp);
   process.stdout.write(
     JSON.stringify(
@@ -475,6 +542,7 @@ async function main() {
         `  npm-tag\n` +
         `  publish-plan [--json|--github]\n` +
         `  pack-publish-artifacts\n` +
+        `  verify-packed-core\n` +
         `  verify-packed-cli\n` +
         `  verify-published-cli-manifest\n` +
         `  verify-npm [--package all|core|cli]\n`,
@@ -501,6 +569,10 @@ async function main() {
   }
   if (cmd === "pack-publish-artifacts") {
     packPublishArtifacts();
+    return;
+  }
+  if (cmd === "verify-packed-core") {
+    verifyPackedCore();
     return;
   }
   if (cmd === "verify-packed-cli") {

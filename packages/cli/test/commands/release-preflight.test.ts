@@ -23,6 +23,22 @@ const packedCliRequiredFiles = [
   "package/dist/templates/shared-hooks/hermes-runtime-guard.py",
 ];
 
+const packedCoreRequiredFiles = [
+  "package/README.md",
+  "package/LICENSE",
+  "package/package.json",
+  "package/dist/index.js",
+  "package/dist/index.d.ts",
+  "package/dist/channel/index.js",
+  "package/dist/channel/index.d.ts",
+  "package/dist/mem/index.js",
+  "package/dist/mem/index.d.ts",
+  "package/dist/task/index.js",
+  "package/dist/task/index.d.ts",
+  "package/dist/testing/index.js",
+  "package/dist/testing/index.d.ts",
+];
+
 function shListLines(lines: string[]): string {
   return lines.map((line) => `${line}\\n`).join("");
 }
@@ -62,6 +78,62 @@ function withTempBinScripts<T>(
     fs.rmSync(tmpDir, { recursive: true, force: true });
   }
 }
+
+function runVerifyPackedCore(manifestFiles: string[]): string {
+  const corePkg = JSON.parse(fs.readFileSync(corePkgPath, "utf-8")) as {
+    name: string;
+    version: string;
+  };
+  const tarball = `${corePkg.name}-${corePkg.version}.tgz`;
+  const pnpmBody = `#!/bin/sh
+if [ "$1" = "pack" ] && [ "$2" = "--pack-destination" ]; then
+  : > "$3/${tarball}"
+  printf '${tarball}\\n'
+  exit 0
+fi
+printf 'unexpected args: %s\\n' "$*" >&2
+exit 1
+`;
+  const tarBody = `#!/bin/sh
+if [ "$1" = "-tzf" ] && [ "$2" = "${tarball}" ]; then
+  printf '${shListLines(manifestFiles)}'
+  exit 0
+fi
+printf 'unexpected args: %s\\n' "$*" >&2
+exit 1
+`;
+
+  return withTempBinScripts(
+    [
+      { name: "pnpm", body: pnpmBody },
+      { name: "tar", body: tarBody },
+    ],
+    (binDir) =>
+      execFileSync(process.execPath, [scriptPath, "verify-packed-core"], {
+        cwd: repoRoot,
+        encoding: "utf-8",
+        env: {
+          ...process.env,
+          PATH: `${binDir}${path.delimiter}${process.env.PATH ?? ""}`,
+        },
+        stdio: ["pipe", "pipe", "pipe"],
+      }),
+  );
+}
+
+describe("release-preflight verify-packed-core", () => {
+  it("requires package docs, manifest, and every dist entry", () => {
+    const out = runVerifyPackedCore(packedCoreRequiredFiles);
+    expect(out).toContain("packed core includes package docs and dist entries");
+  });
+
+  it("fails when the packed core is missing a required file", () => {
+    const incompleteFiles = packedCoreRequiredFiles.filter(
+      (file) => file !== "package/README.md",
+    );
+    expect(() => runVerifyPackedCore(incompleteFiles)).toThrowError(/README\.md/s);
+  });
+});
 
 describe("release-preflight verify-packed-cli", () => {
   it("extracts the packed manifest via relative tar paths", () => {
