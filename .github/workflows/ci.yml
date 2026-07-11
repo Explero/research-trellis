@@ -37,3 +37,98 @@ jobs:
 
       - name: Hermes preflight
         run: pnpm --filter trellis-hermes hermes:preflight
+
+      - name: Pack publish artifacts
+        run: node packages/cli/scripts/release-preflight.js pack-publish-artifacts
+
+      - name: Upload package artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: npm-package-tarballs
+          path: .publish-pack-*/*.tgz
+          if-no-files-found: error
+          include-hidden-files: true
+
+  package-smoke:
+    needs: verify
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version: [18, 20, 22, 24]
+    name: Package smoke (Node.js ${{ matrix.node-version }})
+    steps:
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: ${{ matrix.node-version }}
+
+      - name: Download package artifacts
+        uses: actions/download-artifact@v8
+        with:
+          name: npm-package-tarballs
+          path: ${{ runner.temp }}/package-artifacts
+
+      - name: Install and smoke test packages
+        shell: bash
+        run: |
+          smoke_dir="${RUNNER_TEMP}/package-smoke"
+          mkdir "${smoke_dir}"
+          mapfile -t tarballs < <(find "${RUNNER_TEMP}/package-artifacts" -type f -name '*.tgz' -print)
+          if [ "${#tarballs[@]}" -ne 2 ]; then
+            echo "Expected exactly two package tarballs, found ${#tarballs[@]}" >&2
+            exit 1
+          fi
+
+          cd "${smoke_dir}"
+          npm install --ignore-scripts "${tarballs[@]}"
+
+          expected_version="$(node -p "require('./node_modules/trellis-hermes/package.json').version")"
+          core_version="$(node -p "require('./node_modules/trellis-hermes-core/package.json').version")"
+          test "${core_version}" = "${expected_version}"
+          test "$(./node_modules/.bin/trellis --version)" = "${expected_version}"
+          test "$(./node_modules/.bin/tl --version)" = "${expected_version}"
+          ./node_modules/.bin/trellis --help >/dev/null
+          ./node_modules/.bin/tl --help >/dev/null
+
+          node --input-type=module <<'NODE'
+          import fs from "node:fs";
+          import path from "node:path";
+
+          const cliRoot = path.join(process.cwd(), "node_modules/trellis-hermes");
+          const cliPackage = JSON.parse(
+            fs.readFileSync(path.join(cliRoot, "package.json"), "utf8"),
+          );
+          const coreDependency = cliPackage.dependencies?.["trellis-hermes-core"];
+          if (coreDependency !== cliPackage.version) {
+            throw new Error(
+              `trellis-hermes depends on trellis-hermes-core@${coreDependency}, expected exact ${cliPackage.version}`,
+            );
+          }
+
+          const requiredCliFiles = [
+            "dist/templates/trellis/hermes/config.yaml",
+            "dist/templates/trellis/hermes/HERMES_MAIN_AGENT_BOOT_GUARD.md",
+            "dist/templates/trellis/hermes/state_machine.yaml",
+            "dist/templates/trellis/scripts/hermes/experiment.py",
+            "dist/templates/trellis/scripts/hermes/runner.py",
+            "dist/templates/trellis/scripts/hermes/report.py",
+            "dist/templates/shared-hooks/hermes-runtime-guard.py",
+          ];
+          const missingCliFiles = requiredCliFiles.filter(
+            (file) => !fs.existsSync(path.join(cliRoot, file)),
+          );
+          if (missingCliFiles.length > 0) {
+            throw new Error(`Installed CLI is missing files: ${missingCliFiles.join(", ")}`);
+          }
+
+          const specifiers = [
+            "trellis-hermes",
+            "trellis-hermes-core",
+            "trellis-hermes-core/channel",
+            "trellis-hermes-core/mem",
+            "trellis-hermes-core/task",
+            "trellis-hermes-core/testing",
+          ];
+          await Promise.all(specifiers.map((specifier) => import(specifier)));
+          NODE
