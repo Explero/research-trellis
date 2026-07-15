@@ -1,0 +1,44 @@
+:root {
+  --md-primary-fg-color: #166534;
+  --md-primary-fg-color--light: #15803d;
+  --md-primary-fg-color--dark: #14532d;
+  --md-accent-fg-color: #b45309;
+}
+
+body,
+.md-typeset {
+  letter-spacing: 0;
+}
+
+.md-header {
+  border-bottom: 3px solid #d97706;
+}
+
+.md-typeset h1,
+.md-typeset h2,
+.md-typeset h3 {
+  letter-spacing: 0;
+}
+
+.md-typeset h1 {
+  color: #14532d;
+  font-weight: 700;
+}
+
+[data-md-color-scheme="slate"] .md-typeset h1 {
+  color: #86efac;
+}
+
+.md-typeset code {
+  border-radius: 4px;
+}
+
+.md-typeset table:not([class]) th {
+  background: #f0fdf4;
+  color: #14532d;
+}
+
+[data-md-color-scheme="slate"] .md-typeset table:not([class]) th {
+  background: #1f2937;
+  color: #fde68a;
+}
