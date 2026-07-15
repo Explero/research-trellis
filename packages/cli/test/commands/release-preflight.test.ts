@@ -365,7 +365,7 @@ describe("release-preflight check-versions", () => {
 
           expect(out).toContain("Hermes Python templates compile");
           const pycachePrefix = fs.readFileSync(pycachePrefixPath, "utf-8");
-          expect(pycachePrefix).toContain("trellis-hermes-pycompile-");
+          expect(pycachePrefix).toContain("research-trellis-pycompile-");
           expect(pycachePrefix).not.toContain("packages/cli/src/templates");
         } finally {
           fs.rmSync(pycachePrefixPath, { force: true });

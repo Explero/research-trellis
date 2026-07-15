@@ -1715,7 +1715,7 @@ export async function update(options: UpdateOptions): Promise<void> {
   // Check if Trellis is initialized
   if (!fs.existsSync(path.join(cwd, DIR_NAMES.WORKFLOW))) {
     console.log(chalk.red("Error: Trellis not initialized in this directory."));
-    console.log(chalk.gray("Run 'trellis init' first."));
+    console.log(chalk.gray("Run 'research-trellis init' first."));
     return;
   }
 
@@ -1753,7 +1753,7 @@ export async function update(options: UpdateOptions): Promise<void> {
         `⚠️  Your CLI (${cliVersion}) is behind npm (${latestNpmVersion}).`,
       ),
     );
-    console.log(chalk.yellow(`   Run: trellis upgrade\n`));
+    console.log(chalk.yellow(`   Run: research-trellis upgrade\n`));
   }
 
   // Check for downgrade situation
@@ -1767,9 +1767,11 @@ export async function update(options: UpdateOptions): Promise<void> {
 
     if (!options.allowDowngrade) {
       console.log(chalk.gray("Solutions:"));
-      console.log(chalk.gray(`  1. Update your CLI: trellis upgrade`));
+      console.log(chalk.gray(`  1. Update your CLI: research-trellis upgrade`));
       console.log(
-        chalk.gray(`  2. Force downgrade: trellis update --allow-downgrade\n`),
+        chalk.gray(
+          `  2. Force downgrade: research-trellis update --allow-downgrade\n`,
+        ),
       );
       return;
     }
@@ -1792,7 +1794,7 @@ export async function update(options: UpdateOptions): Promise<void> {
   if (isUnknownVersion) {
     console.log(
       chalk.yellow(
-        "⚠️  No version file found. Skipping migrations — run trellis init to fix.",
+        "⚠️  No version file found. Skipping migrations — run research-trellis init to fix.",
       ),
     );
     console.log(chalk.gray("   Template updates will still be applied."));
@@ -1817,7 +1819,7 @@ export async function update(options: UpdateOptions): Promise<void> {
 
   // Self-heal poisoned manifests: prune entries that no current platform
   // configurator owns. This silently removes user-owned paths that early
-  // buggy versions of `trellis init` over-hashed (e.g. .codex/sessions/*).
+  // buggy versions of `research-trellis init` over-hashed (e.g. .codex/sessions/*).
   // Include codex in known-platforms when codexUpgradeNeeded so legacy Codex
   // markers under .agents/skills/ survive into the upgrade flow.
   {
@@ -1957,7 +1959,7 @@ export async function update(options: UpdateOptions): Promise<void> {
             ),
         );
         console.log("");
-        console.log(chalk.yellow(`  Run: trellis update --migrate`));
+        console.log(chalk.yellow(`  Run: research-trellis update --migrate`));
         console.log("");
         console.log(
           chalk.gray(
@@ -2448,7 +2450,7 @@ export async function update(options: UpdateOptions): Promise<void> {
         prdContent += `**From Version**: ${projectVersion}\n`;
         prdContent += `**To Version**: ${cliVersion}\n`;
         prdContent += `**Assignee**: ${currentDeveloper}\n\n`;
-        prdContent += `## Status\n\n- [ ] Review migration guide\n- [ ] Update custom files\n- [ ] Run \`trellis update --migrate\`\n- [ ] Test workflows\n\n`;
+        prdContent += `## Status\n\n- [ ] Review migration guide\n- [ ] Update custom files\n- [ ] Run \`research-trellis update --migrate\`\n- [ ] Test workflows\n\n`;
 
         for (const {
           version,

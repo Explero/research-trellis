@@ -49,9 +49,9 @@
 
 ## 验证记录
 
-- 日期：2026-07-14。
-- 版本：`0.6.0-beta.30`（测试版）。
-- 基准提交：`9f7dc8497b4782878d6fa7ac3b63eba5bde507df`（当前基准）。
+- 日期：2026-07-15。
+- 版本：`0.6.0-beta.31`（测试版）。
+- 更名前基准提交：`9f7dc8497b4782878d6fa7ac3b63eba5bde507df`。
 - 命令：`rg -n -m 1 "tasks|hermes|workflow" packages/cli/src/constants packages/cli/src/configurators packages/cli/src/templates/trellis`（目录来源核对）。
 - 结果：项目、任务和科研记录目录均与当前常量及模板对齐。
 - 未验证项：本轮未在新初始化项目中重新生成完整文件树。

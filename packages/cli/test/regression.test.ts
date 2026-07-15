@@ -96,7 +96,7 @@ describe("regression: workflow archive without commit", () => {
   });
 });
 
-describe("regression: package rename to trellis-hermes", () => {
+describe("regression: package rename to research-trellis", () => {
   it("[rename] CLI package template metadata is publish-safe for npm bin links", () => {
     const packageJsonPath = path.resolve(
       fileURLToPath(new URL("../package.json", import.meta.url)),
@@ -105,8 +105,9 @@ describe("regression: package rename to trellis-hermes", () => {
       fs.readFileSync(packageJsonPath, "utf-8"),
     ) as { name: string; bin?: Record<string, string> };
 
-    expect(packageJson.name).toBe("trellis-hermes");
+    expect(packageJson.name).toBe("research-trellis");
     expect(packageJson.bin).toMatchObject({
+      "research-trellis": "bin/trellis.js",
       trellis: "bin/trellis.js",
       tl: "bin/trellis.js",
     });
@@ -966,14 +967,16 @@ describe("regression: agent-session Trellis update hint", () => {
     return match?.[0] ?? "";
   }
 
-  it("shows a concise update hint when trellis --version reports a newer version", () => {
+  it("shows a concise update hint when legacy version output reports a newer version", () => {
     const output = runContextWithTrellisOutput(
       "0.5.0",
       "Trellis update available: 0.5.0 → 0.5.9\nRun: trellis update\n0.5.9",
     );
 
-    expect(output).toContain("Trellis update available: 0.5.0 -> 0.5.9");
-    expect(output).toContain("run trellis upgrade");
+    expect(output).toContain(
+      "Research Trellis update available: 0.5.0 -> 0.5.9",
+    );
+    expect(output).toContain("run research-trellis upgrade");
     expect(output).toContain("SESSION CONTEXT");
   });
 
@@ -1010,20 +1013,26 @@ describe("regression: agent-session Trellis update hint", () => {
 
     const output = runContextWithTrellisOutput("0.5.0", "0.5.9");
 
-    expect(output).toContain("Trellis update available: 0.5.0 -> 0.5.9");
+    expect(output).toContain(
+      "Research Trellis update available: 0.5.0 -> 0.5.9",
+    );
   });
 
-  it("uses the final trellis --version token when no update line is present", () => {
+  it("uses the final research-trellis --version token when no update line is present", () => {
     const output = runContextWithTrellisOutput("0.5.0", "0.5.9");
 
-    expect(output).toContain("Trellis update available: 0.5.0 -> 0.5.9");
+    expect(output).toContain(
+      "Research Trellis update available: 0.5.0 -> 0.5.9",
+    );
   });
 
   it("only attempts the default text update hint once per session", () => {
     const first = runContextWithTrellisOutput("0.5.0", "0.5.9");
     const second = runContextWithTrellisOutput("0.5.0", "0.5.9");
 
-    expect(first).toContain("Trellis update available: 0.5.0 -> 0.5.9");
+    expect(first).toContain(
+      "Research Trellis update available: 0.5.0 -> 0.5.9",
+    );
     expect(second).not.toContain("Trellis update available");
     expect(
       fs.existsSync(

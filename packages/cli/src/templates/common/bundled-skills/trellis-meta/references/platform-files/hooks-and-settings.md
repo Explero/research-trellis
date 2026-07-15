@@ -28,7 +28,7 @@ Common files:
 | Factory Droid | `.factory/settings.json` |
 | Pi Agent | `.pi/settings.json`, `.pi/extensions/trellis/` |
 
-Whether these files exist in a project depends on which `trellis init --<platform>` flags the user ran.
+Whether these files exist in a project depends on which `research-trellis init --<platform>` flags the user ran.
 
 ## Hook Script Types
 

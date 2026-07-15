@@ -9,7 +9,7 @@
 提交 Bug 前，请先查看 [已有 Issues](https://github.com/mindfold-ai/Trellis/issues) 避免重复。
 
 报告 Bug 时请包含：
-- Trellis 版本 (`trellis --version`)
+- Research Trellis 版本 (`research-trellis --version`)
 - Node.js 版本 (`node --version`)
 - 操作系统
 - 复现步骤

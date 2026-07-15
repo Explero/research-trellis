@@ -1,6 +1,6 @@
-# Trellis-Hermes 中文手册
+# Research Trellis 中文手册
 
-这套手册面向第一次把 `Trellis-Hermes`（科研改造版）放进真实科研项目的人。当前仓库版本为 `0.6.0-beta.30`（测试版）；它基于 `mindfold-ai/Trellis`（上游项目）修改，不是上游官方版本，也不代表上游立场。
+这套手册面向第一次把 `Research Trellis`（科研改造版）放进真实科研项目的人。当前仓库版本为 `0.6.0-beta.31`（测试版）；它基于 `mindfold-ai/Trellis`（上游项目）修改，不是上游官方版本，也不代表上游立场。
 
 ## 最短上手路径
 
@@ -13,7 +13,7 @@
 
 ```bash
 git status --short
-trellis init -y -u "$USER" --codex --no-monorepo
+research-trellis init -y -u "$USER" --codex --no-monorepo
 python3 ./.trellis/scripts/task.py list
 ```
 

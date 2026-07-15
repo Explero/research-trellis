@@ -55,7 +55,9 @@ export function resolveUpgradeTag(
 function binaryCheckCommand(
   platform: NodeJS.Platform = process.platform,
 ): string {
-  return platform === "win32" ? "where trellis" : "which trellis";
+  return platform === "win32"
+    ? "where research-trellis"
+    : "which research-trellis";
 }
 
 export function buildUpgradeCommand(
@@ -98,7 +100,7 @@ function troubleshooting(plan: UpgradeCommandPlan): string {
     "Troubleshooting:",
     `- Manual command: ${plan.displayCommand}`,
     "- Check npm global prefix and PATH: npm config get prefix",
-    `- Check which Trellis binary your shell resolves: ${plan.binaryCheckCommand}`,
+    `- Check which Research Trellis binary your shell resolves: ${plan.binaryCheckCommand}`,
     "- If this is a permissions error, fix your Node/npm install or npm prefix; Trellis does not run sudo.",
     "- If npm reports an existing binary or locked file, resolve that npm error manually; Trellis does not run --force.",
   ].join("\n");
@@ -110,7 +112,7 @@ export async function upgrade(
 ): Promise<void> {
   const plan = buildUpgradeCommand(options);
 
-  console.log(chalk.cyan(`Upgrading Trellis CLI to ${plan.target}`));
+  console.log(chalk.cyan(`Upgrading Research Trellis CLI to ${plan.target}`));
   console.log(chalk.gray(`Run: ${plan.displayCommand}`));
 
   if (options.dryRun) {
@@ -140,7 +142,7 @@ export async function upgrade(
     );
   }
 
-  console.log(chalk.green("\n✓ Trellis CLI upgrade completed"));
-  console.log(chalk.gray("Run: trellis --version"));
+  console.log(chalk.green("\n✓ Research Trellis CLI upgrade completed"));
+  console.log(chalk.gray("Run: research-trellis --version"));
   console.log(chalk.gray(`Run: ${plan.binaryCheckCommand}`));
 }

@@ -43,9 +43,9 @@ python3 ./.trellis/scripts/hermes/experiment.py validate --task "$TASK"
 
 ## 验证记录
 
-- 日期：2026-07-14。
-- 版本：`0.6.0-beta.30`（测试版）。
-- 基准提交：`9f7dc8497b4782878d6fa7ac3b63eba5bde507df`（当前基准）。
+- 日期：2026-07-15。
+- 版本：`0.6.0-beta.31`（测试版）。
+- 更名前基准提交：`9f7dc8497b4782878d6fa7ac3b63eba5bde507df`。
 - 命令：`rg -n -m 1 "dispatch_mode|session_auto_commit|allowed_commands" packages/cli/src/templates/trellis`（配置模板核对）。
 - 结果：会话、`Codex`（代码代理）调度和实验命令配置均可定位，默认子代理语义已对齐。
 - 未验证项：生命周期钩子中的用户自定义命令需在具体项目单独验证。

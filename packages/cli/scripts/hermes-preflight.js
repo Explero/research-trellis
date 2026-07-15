@@ -217,7 +217,7 @@ export function checkPythonCompile(repoRoot = DEFAULT_REPO_ROOT) {
   if (pythonFiles.length === 0) {
     return result("Python compile", false, ["no Python template files found"]);
   }
-  const pycache = fs.mkdtempSync(path.join(os.tmpdir(), "trellis-hermes-pycache-"));
+  const pycache = fs.mkdtempSync(path.join(os.tmpdir(), "research-trellis-pycache-"));
   try {
     const run = spawnSync("python3", ["-m", "py_compile", ...pythonFiles], {
       cwd: repoRoot,
@@ -311,30 +311,30 @@ export function runPreflight(options = {}) {
   if (quick) {
     checks.push(
       result("Template tests", true, [
-        `${YELLOW}quick mode${RESET}: skipped; run pnpm --filter trellis-hermes exec vitest run test/templates/hermes-runtime.test.ts test/templates/trellis.test.ts test/templates/claude.test.ts test/templates/codex.test.ts test/templates/shared-hooks.test.ts`,
+        `${YELLOW}quick mode${RESET}: skipped; run pnpm --filter research-trellis exec vitest run test/templates/hermes-runtime.test.ts test/templates/trellis.test.ts test/templates/claude.test.ts test/templates/codex.test.ts test/templates/shared-hooks.test.ts`,
       ]),
       result("Typecheck", true, [
-        `${YELLOW}quick mode${RESET}: skipped; run pnpm --filter trellis-hermes typecheck`,
+        `${YELLOW}quick mode${RESET}: skipped; run pnpm --filter research-trellis typecheck`,
       ]),
       result("Build", true, [
-        `${YELLOW}quick mode${RESET}: skipped; run pnpm --filter trellis-hermes build`,
+        `${YELLOW}quick mode${RESET}: skipped; run pnpm --filter research-trellis build`,
       ]),
     );
   } else {
     checks.push(
       runCommandCheck("Template tests", repoRoot, "pnpm", [
         "--filter",
-        "trellis-hermes",
+        "research-trellis",
         ...TEMPLATE_TEST_ARGS,
       ]),
       runCommandCheck("Typecheck", repoRoot, "pnpm", [
         "--filter",
-        "trellis-hermes",
+        "research-trellis",
         "typecheck",
       ]),
       runCommandCheck("Build", repoRoot, "pnpm", [
         "--filter",
-        "trellis-hermes",
+        "research-trellis",
         "build",
       ]),
     );

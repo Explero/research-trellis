@@ -77,7 +77,7 @@ function walkOpenCodeTemplateDir(): Map<string, string> {
 }
 
 /**
- * Collect all opencode template files that `trellis update` should track.
+ * Collect all opencode template files that `research-trellis update` should track.
  *
  * Must stay in sync with `configureOpenCode`: both paths produce the same
  * `Map<relPath, content>`. If they drift, update will spuriously flag newly

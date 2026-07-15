@@ -6,7 +6,7 @@
 
 ## 适用范围
 
-适用于 `Ubuntu 24.04`（Ubuntu 24.04 操作系统）和相近的本地开发环境。当前包已发布到 `npm`（Node 包平台），也可以从源码运行。
+适用于 `Ubuntu 24.04`（Ubuntu 24.04 操作系统）和相近的本地开发环境。新包发布前应从源码运行；发布后可从 `npm`（Node 包平台）安装。
 
 ## 前置条件
 
@@ -25,36 +25,44 @@ python3 --version
 git --version
 ```
 
-推荐固定安装本手册验证过的测试版：
+新包发布后，推荐固定安装本手册对应的测试版：
 
 ```bash
-npm install --global trellis-hermes@0.6.0-beta.30
-trellis --version
-trellis --help
+npm install --global research-trellis@0.6.0-beta.31
+research-trellis --version
+research-trellis --help
 ```
 
 如不希望全局安装，可临时执行：
 
 ```bash
-npm exec --yes --package trellis-hermes@0.6.0-beta.30 -- trellis --version
+npm exec --yes --package research-trellis@0.6.0-beta.31 -- research-trellis --version
+```
+
+已经安装旧包时，先卸载旧名称，再安装新包：
+
+```bash
+npm uninstall --global trellis-hermes
+npm install --global research-trellis@0.6.0-beta.31
+research-trellis --version
 ```
 
 需要核对或修改源码时，使用源码方式：
 
 ```bash
-git clone https://github.com/Explero/Trellis-Hermes.git
-cd Trellis-Hermes
+git clone https://github.com/Explero/research-trellis.git
+cd research-trellis
 corepack enable
 pnpm install --frozen-lockfile
 pnpm build
 node packages/cli/bin/trellis.js --version
 ```
 
-源码命令不会自动变成全局 `trellis`（命令）；后续应继续使用 `node /绝对路径/packages/cli/bin/trellis.js`（源码入口），或另行全局安装。
+源码命令不会自动变成全局 `research-trellis`（命令）；后续应继续使用 `node /绝对路径/packages/cli/bin/trellis.js`（源码入口），或在新包发布后另行全局安装。
 
 ## 预期结果
 
-版本命令输出 `0.6.0-beta.30`，帮助中能看到 `init`（初始化）、`update`（更新）、`workflow`（工作流）、`channel`（协作频道）和 `mem`（会话记忆）等命令。
+版本命令输出 `0.6.0-beta.31`，帮助中能看到 `init`（初始化）、`update`（更新）、`workflow`（工作流）、`channel`（协作频道）和 `mem`（会话记忆）等命令。
 
 ## 失败恢复
 
@@ -65,11 +73,11 @@ node packages/cli/bin/trellis.js --version
 
 ## 验证记录
 
-- 日期：2026-07-14。
-- 版本：`0.6.0-beta.30`（测试版）。
-- 基准提交：`9f7dc8497b4782878d6fa7ac3b63eba5bde507df`（当前基准）。
+- 日期：2026-07-15。
+- 版本：`0.6.0-beta.31`（测试版）。
+- 更名前基准提交：`9f7dc8497b4782878d6fa7ac3b63eba5bde507df`。
 - 命令：`node -p "require('./packages/cli/package.json').version"`（包版本核对）。
-- 结果：源码包版本为 `0.6.0-beta.30`（测试版），运行时要求与包配置一致。
+- 结果：源码包版本为 `0.6.0-beta.31`（测试版），运行时要求与包配置一致。
 - 未验证项：本轮未重新进行全局安装，也未实时查询 `npm`（Node 包平台）标签。
 
 ## 来源

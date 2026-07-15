@@ -1,15 +1,15 @@
-# Trellis-Hermes
+# Research Trellis
 
 面向科研项目的 `Trellis`（原版 Trellis）实验性改造分支。
 
-[![CI](https://github.com/Explero/Trellis-Hermes/actions/workflows/ci.yml/badge.svg)](https://github.com/Explero/Trellis-Hermes/actions/workflows/ci.yml)
+[![CI](https://github.com/Explero/research-trellis/actions/workflows/ci.yml/badge.svg)](https://github.com/Explero/research-trellis/actions/workflows/ci.yml)
 [![License: AGPL-3.0-or-later](https://img.shields.io/badge/license-AGPL--3.0--or--later-16a34a.svg?style=flat-square)](LICENSE)
 
 这个仓库是在原版 `Trellis`（原版项目）基础上改造出来的科研实验分支，不是上游官方版本，也不代表上游项目立场。它更接近一个科研项目里的工作流工具实验：在原版 Trellis 的任务、规范、平台接入基础上，加入更强的 `Hermes`（科研工作流）记录、门禁和子代理协作约束。
 
 当前状态：可以放进低风险真实科研项目里试部署；不建议直接用于不可回滚的关键项目。
 
-当前 npm 发布包为 `trellis-hermes`（CLI 包）和 `trellis-hermes-core`（核心包）。
+从 `0.6.0-beta.31`（测试版）开始，项目使用 `research-trellis`（CLI 包）和 `research-trellis-core`（核心包），与上游原版名称明确区分。旧包 `trellis-hermes` 和 `trellis-hermes-core` 停留在 `0.6.0-beta.30`（旧测试版），仅用于已有安装迁移。
 
 ## 上游来源与修改声明
 
@@ -17,14 +17,14 @@
 
 为了避免混淆，这里先说明几个边界：
 
-- `Trellis-Hermes`（科研改造版）不是上游 `Trellis`（原版项目）的官方发布版本；
+- `Research Trellis`（科研改造版）不是上游 `Trellis`（原版项目）的官方发布版本；
 - 仓库中的原始 Trellis 代码、模板、文档结构和许可证声明应继续归属于其原始作者和贡献者；
 - 本仓库新增和改动的部分主要围绕 `Hermes`（科研工作流）、记录门禁、子代理治理、科研计划变更记录和发布前预检；
 - 如果后续公开发布到 `npm`（包平台）或 `GitHub`（代码托管平台），应继续保留上游来源、许可证和修改说明。
 
 ## 这是什么
 
-`Trellis-Hermes`（科研改造版）是一个本地开发工具，用来把 AI 协作开发过程里的关键动作落到仓库文件中：
+`Research Trellis`（科研改造版）是一个本地开发工具，用来把 AI 协作开发过程里的关键动作落到仓库文件中：
 
 - 需求、设计、实现计划和检查记录放进 `.trellis/tasks/`；
 - 项目规范和工作流规则放进 `.trellis/spec/` 与 `.trellis/workflow.md`；
@@ -42,7 +42,7 @@ pnpm install --frozen-lockfile
 pnpm lint
 pnpm test
 pnpm build
-pnpm --filter trellis-hermes hermes:preflight
+pnpm --filter research-trellis hermes:preflight
 ```
 
 这些检查覆盖：
@@ -64,18 +64,18 @@ pnpm --filter trellis-hermes hermes:preflight
 pnpm lint
 pnpm test
 pnpm build
-pnpm --filter trellis-hermes hermes:preflight
+pnpm --filter research-trellis hermes:preflight
 node packages/cli/scripts/release-preflight.js check-versions --require-tag
 node packages/cli/scripts/release-preflight.js verify-packed-cli
 ```
 
-检查通过后，它会先发布 `trellis-hermes-core`（核心包），再发布 `trellis-hermes`（CLI 包），最后从 npm registry 验证两个包是否可见。
+检查通过后，它会先发布 `research-trellis-core`（核心包），再发布 `research-trellis`（CLI 包），最后从 npm registry 验证两个包是否可见。
 
 发布前还需要在 `npm`（包平台）侧完成：
 
-- 创建或认领 `trellis-hermes-core` 与 `trellis-hermes` 两个包；
+- 创建或认领 `research-trellis-core` 与 `research-trellis` 两个包；
 - 给两个包配置 `trusted publishing`（可信发布）；
-- `Owner`（所有者）填写 `Explero`，`Repository`（仓库）填写 `Trellis-Hermes`；
+- `Owner`（所有者）填写 `Explero`，`Repository`（仓库）填写 `research-trellis`；
 - `Workflow filename`（流程文件名）填写 `publish.yml`；
 - `Environment`（环境）填写 `npm-production`。
 
@@ -94,18 +94,28 @@ node packages/cli/scripts/release-preflight.js verify-packed-cli
 
 ## 从源码试用
 
-普通试用可安装已发布的测试版：
+新包发布后，可固定安装本次测试版：
 
 ```bash
-npm install -g trellis-hermes@0.6.0-beta.30
-trellis --version
+npm install -g research-trellis@0.6.0-beta.31
+research-trellis --version
+```
+
+原有 `trellis` 与 `tl` 命令继续可用，便于已有脚本迁移；新文档统一使用 `research-trellis` 作为主命令。
+
+已经安装旧包时，发布后按下面的方式迁移：
+
+```bash
+npm uninstall -g trellis-hermes
+npm install -g research-trellis@0.6.0-beta.31
+research-trellis --version
 ```
 
 需要修改或审阅实现时，再从 GitHub 源码运行：
 
 ```bash
-git clone git@github.com:Explero/Trellis-Hermes.git
-cd Trellis-Hermes
+git clone git@github.com:Explero/research-trellis.git
+cd research-trellis
 corepack enable
 pnpm install --frozen-lockfile
 pnpm build
@@ -117,14 +127,14 @@ pnpm build
 cd /path/to/your/research-project
 git status
 git add .
-git commit -m "chore: checkpoint before Trellis-Hermes trial"
-node /path/to/Trellis-Hermes/packages/cli/bin/trellis.js init -u your-name --claude
+git commit -m "chore: checkpoint before Research Trellis trial"
+node /path/to/research-trellis/packages/cli/bin/trellis.js init -u your-name --claude
 ```
 
 如果项目里已经有 Trellis，可以先用 `update`（更新）而不是重新初始化：
 
 ```bash
-node /path/to/Trellis-Hermes/packages/cli/bin/trellis.js update
+node /path/to/research-trellis/packages/cli/bin/trellis.js update
 ```
 
 执行前请先看清楚提示，涉及覆盖文件时不要盲目确认。
@@ -135,7 +145,7 @@ node /path/to/Trellis-Hermes/packages/cli/bin/trellis.js update
 
 ```text
 准备一个干净 git checkpoint
-→ 初始化或更新 Trellis-Hermes
+→ 初始化或更新 Research Trellis
 → 用自然语言提出一个小任务
 → 让 AI 创建任务并补齐 planning
 → 检查 .trellis/tasks/ 下的 prd/design/implement 产物
@@ -187,7 +197,7 @@ node /path/to/Trellis-Hermes/packages/cli/bin/trellis.js update
 
 这个项目基于原版 `Trellis`（原版 AI coding 工作流工具）继续改造，仍然保留：
 
-- `trellis init` / `trellis update`；
+- `research-trellis init` / `research-trellis update`；
 - `.trellis/spec/` 项目规范；
 - `.trellis/tasks/` 任务系统；
 - 多平台接入模板；
@@ -239,7 +249,7 @@ node /path/to/Trellis-Hermes/packages/cli/bin/trellis.js update
 pnpm lint
 pnpm test
 pnpm build
-pnpm --filter trellis-hermes hermes:preflight
+pnpm --filter research-trellis hermes:preflight
 ```
 
 如果改动涉及 Hermes 模板、hook 或任务流，优先补充对应测试，再看 GitHub Actions 结果。

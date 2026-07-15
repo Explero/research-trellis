@@ -19,7 +19,7 @@
 1. 查看正式命令支持的平台：
 
 ```bash
-trellis init --help
+research-trellis init --help
 ```
 
 当前提供 `Claude Code`（Claude 代码工具）、`Cursor`（Cursor 编辑器）、`OpenCode`（开放代码工具）、`Codex`（代码代理平台）、`Kilo CLI`（Kilo 命令行工具）、`Kiro Code`（Kiro 代码工具）、`Gemini CLI`（Gemini 命令行工具）、`Antigravity`（Antigravity 工作流）、`Windsurf`（Windsurf 编辑器）、`Qoder`（Qoder 工具）、`CodeBuddy`（CodeBuddy 工具）、`GitHub Copilot`（GitHub 编程助手）、`Factory Droid`（Factory Droid 工具）和 `Pi Agent`（Pi 代理）模板。
@@ -29,7 +29,7 @@ trellis init --help
 2. 初始化时显式选择平台：
 
 ```bash
-trellis init -y -u "$USER" --claude --codex --no-monorepo
+research-trellis init -y -u "$USER" --claude --codex --no-monorepo
 ```
 
 不指定平台且使用 `-y`（自动确认）时，当前默认选择 `Claude Code`（Claude 代码工具）和 `Cursor`（Cursor 编辑器）。
@@ -37,7 +37,7 @@ trellis init -y -u "$USER" --claude --codex --no-monorepo
 3. 查看工作流模板：
 
 ```bash
-trellis workflow --list
+research-trellis workflow --list
 ```
 
 当前列表包含内置 `native`（默认工作流），以及市场中的 `tdd`（测试驱动工作流）和 `channel-driven-subagent-dispatch`（频道驱动子代理工作流）。市场模板需要网络，内容来源可能随市场更新。
@@ -45,14 +45,14 @@ trellis workflow --list
 4. 安全预览另一个工作流，不替换当前文件：
 
 ```bash
-trellis workflow --template tdd --create-new
+research-trellis workflow --template tdd --create-new
 diff -u .trellis/workflow.md .trellis/workflow.md.new
 ```
 
 确认后再执行替换：
 
 ```bash
-trellis workflow --template tdd --force
+research-trellis workflow --template tdd --force
 ```
 
 5. `Codex`（代码代理平台）缺省为 `sub-agent`（子代理）调度，与 `PreToolUse`（工具使用前）的主代理只读门禁保持一致。需要钩子时，在用户级 `~/.codex/config.toml`（Codex 用户配置）启用：
@@ -97,13 +97,13 @@ trust_level = "trusted"
 - 只是 `workflow --list`（工作流列表）时市场失败：列表仍保留内置 `native`（默认工作流）并显示警告。显式选择市场模板时，索引或文件下载失败会终止，不会静默改用 `native`（默认工作流）。
 - 工作流有本地修改：优先生成 `.new`（新副本）比较，不要直接 `--force`（强制替换）。
 - 平台没有自动注入：核对上表是否支持钩子、钩子是否启用，以及初始化是否真的选择了该平台；不支持自动注入的平台应按派发协议手动读取。
-- 添加平台时已有配置：重复运行 `trellis init --平台参数`（平台初始化）会跳过已配置平台。
+- 添加平台时已有配置：重复运行 `research-trellis init --平台参数`（平台初始化）会跳过已配置平台。
 
 ## 验证记录
 
-- 日期：2026-07-14。
-- 版本：`0.6.0-beta.30`（测试版）。
-- 基准提交：`9f7dc8497b4782878d6fa7ac3b63eba5bde507df`（当前基准）。
+- 日期：2026-07-15。
+- 版本：`0.6.0-beta.31`（测试版）。
+- 更名前基准提交：`9f7dc8497b4782878d6fa7ac3b63eba5bde507df`。
 - 命令：`rg -n -m 1 "dispatch_mode|agentCapable|hasHooks" packages/cli/src packages/cli/test`（平台能力核对）。
 - 结果：14 个平台的上下文注入、子代理、门禁和启用条件已与注册表及钩子配置对齐。
 - 未验证项：本轮未启动 14 种平台主机，也未访问远程工作流市场。

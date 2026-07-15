@@ -68,9 +68,9 @@ python3 ./.trellis/scripts/hermes/report.py approval-gate --task "$TASK" --claim
 
 ## 验证记录
 
-- 日期：2026-07-14。
-- 版本：`0.6.0-beta.30`（测试版）。
-- 基准提交：`9f7dc8497b4782878d6fa7ac3b63eba5bde507df`（当前基准）。
+- 日期：2026-07-15。
+- 版本：`0.6.0-beta.31`（测试版）。
+- 更名前基准提交：`9f7dc8497b4782878d6fa7ac3b63eba5bde507df`。
 - 命令：`rg -n -m 1 "claim-review|approval-gate" packages/cli/src/templates/trellis/scripts/hermes packages/cli/test/templates/hermes-runtime.test.ts`（主张与审批边界核对）。
 - 结果：主张审查和审批门禁入口可定位，报告与人工批准保持分离。
 - 未验证项：本轮未进行真实人工审批，也未验证外部身份系统。

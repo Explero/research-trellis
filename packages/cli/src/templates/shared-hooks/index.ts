@@ -45,7 +45,7 @@ export type SharedHookPlatform =
 /**
  * Which shared hooks each platform actually invokes. Single source of truth
  * for shared-hook distribution — both `writeSharedHooks` (runtime install)
- * and `collectSharedHooks` (`trellis update` diff) read from this table.
+ * and `collectSharedHooks` (`research-trellis update` diff) read from this table.
  *
  * Routing rules encoded here:
  * - `session-start.py` — shipped by every platform with a SessionStart

@@ -25,12 +25,12 @@
 | 质量门禁缺少统计字段 | 见[指标与比较](11-metrics-and-comparison.md)中的当前限制 |
 | 审批门禁失败 | 等待真实 `human/root`（人工根权限）批准记录 |
 | 记忆搜索提示 OpenCode 不可用 | 当前未实现，不是本地故障 |
-| 更新有冲突 | 使用 `trellis update --create-new`（生成新副本）比较 |
+| 更新有冲突 | 使用 `research-trellis update --create-new`（生成新副本）比较 |
 
 进一步检查：
 
 ```bash
-trellis --version
+research-trellis --version
 python3 ./.trellis/scripts/task.py current --source
 python3 ./.trellis/scripts/task.py list
 ```
@@ -45,9 +45,9 @@ python3 ./.trellis/scripts/task.py list
 
 ## 验证记录
 
-- 日期：2026-07-14。
-- 版本：`0.6.0-beta.30`（测试版）。
-- 基准提交：`9f7dc8497b4782878d6fa7ac3b63eba5bde507df`（当前基准）。
+- 日期：2026-07-15。
+- 版本：`0.6.0-beta.31`（测试版）。
+- 更名前基准提交：`9f7dc8497b4782878d6fa7ac3b63eba5bde507df`。
 - 命令：`rg -n -m 1 "quality gate|missing evidence|approval" packages/cli/src/templates/trellis/scripts/hermes packages/cli/test/templates/hermes-runtime.test.ts`（失败关闭分支核对）。
 - 结果：质量门禁、缺失证据和审批失败分支都有实现或测试依据。
 - 未验证项：本页不包含所有平台主机和网络环境的故障组合。

@@ -1,6 +1,6 @@
 # Local Customization Overview
 
-This directory is for local AI working in a user project where Trellis was installed through npm and `trellis init` has already been run. The AI should modify generated `.trellis/` and platform directories inside the project, not Trellis CLI upstream source code.
+This directory is for local AI working in a user project where Trellis was installed through npm and `research-trellis init` has already been run. The AI should modify generated `.trellis/` and platform directories inside the project, not Trellis CLI upstream source code.
 
 ## First Determine What The User Actually Wants To Change
 
@@ -38,7 +38,7 @@ This directory is for local AI working in a user project where Trellis was insta
 ## Things Not To Do By Default
 
 - Do not edit the global npm install directory.
-- Do not edit `node_modules/trellis-hermes`.
+- Do not edit `node_modules/research-trellis`.
 - Do not assume the user has the Trellis GitHub repository.
 - Do not overwrite local files already modified by the user with default templates.
 - Do not put team project rules into public `trellis-meta`; project rules belong in `.trellis/spec/` or a local skill.
@@ -50,6 +50,6 @@ Switch to an upstream source-code perspective only when the user explicitly expr
 - "I want to open a PR to Trellis"
 - "I want to change npm package publish contents"
 - "I want to fork Trellis"
-- "I want to modify the generation logic for `trellis init/update`"
+- "I want to modify the generation logic for `research-trellis init/update`"
 
 Otherwise, default to modifying local Trellis files inside the user project.

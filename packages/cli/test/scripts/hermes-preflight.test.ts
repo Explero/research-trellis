@@ -18,7 +18,7 @@ const scriptPath = path.join(
 );
 
 function withTempRoot<T>(run: (root: string) => T): T {
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "trellis-hermes-preflight-"));
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "research-trellis-preflight-"));
   try {
     return run(tmpDir);
   } finally {

@@ -19,10 +19,10 @@
 1. 创建项目范围聊天频道并发送消息：
 
 ```bash
-trellis channel create research-sync --scope project --description "研究任务协作"
-trellis channel send research-sync --scope project --as main "请核对当前证据清单"
-trellis channel messages research-sync --scope project --last 20
-trellis channel list --scope project
+research-trellis channel create research-sync --scope project --description "研究任务协作"
+research-trellis channel send research-sync --scope project --as main "请核对当前证据清单"
+research-trellis channel messages research-sync --scope project --last 20
+research-trellis channel list --scope project
 ```
 
 频道事件保存在用户目录下的 `.trellis/channels/`（频道存储），项目范围会按当前目录分桶，不写入项目的任务记录。
@@ -30,9 +30,9 @@ trellis channel list --scope project
 2. 需要工作代理时，可启动当前仅支持的 `claude`（Claude 提供方）或 `codex`（Codex 提供方）：
 
 ```bash
-trellis channel spawn research-sync --scope project --provider codex --as evaluator --cwd "$PWD"
-trellis channel send research-sync --scope project --as main --to evaluator "检查固定指标的证据引用"
-trellis channel wait research-sync --scope project --as main --from evaluator --kind done --timeout 5m
+research-trellis channel spawn research-sync --scope project --provider codex --as evaluator --cwd "$PWD"
+research-trellis channel send research-sync --scope project --as main --to evaluator "检查固定指标的证据引用"
+research-trellis channel wait research-sync --scope project --as main --from evaluator --kind done --timeout 5m
 ```
 
 `spawn`（启动工作代理）会创建后台监督进程。工作完成后用 `channel kill`（停止工作代理）结束仍在运行的进程；删除频道前先看[命令参考](appendix-a-cli-reference.md)。
@@ -40,9 +40,9 @@ trellis channel wait research-sync --scope project --as main --from evaluator --
 3. 查看会话记忆命令：
 
 ```bash
-trellis mem help
-trellis mem projects --json
-trellis mem search "固定指标" --platform codex --cwd "$PWD" --limit 10
+research-trellis mem help
+research-trellis mem projects --json
+research-trellis mem search "固定指标" --platform codex --cwd "$PWD" --limit 10
 ```
 
 默认只搜索当前项目；`--global`（全局搜索）会扩大到所有项目，应注意本地隐私。`extract`（提取）和 `context`（上下文）可进一步查看命中的对话。
@@ -63,9 +63,9 @@ trellis mem search "固定指标" --platform codex --cwd "$PWD" --limit 10
 
 ## 验证记录
 
-- 日期：2026-07-14。
-- 版本：`0.6.0-beta.30`（测试版）。
-- 基准提交：`9f7dc8497b4782878d6fa7ac3b63eba5bde507df`（当前基准）。
+- 日期：2026-07-15。
+- 版本：`0.6.0-beta.31`（测试版）。
+- 更名前基准提交：`9f7dc8497b4782878d6fa7ac3b63eba5bde507df`。
 - 命令：`rg -n -m 1 "OpenCode|channel|mem" packages/cli/src/commands packages/core/src packages/cli/test packages/core/test`（频道与会话读取核对）。
 - 结果：频道、会话读取和 `OpenCode`（开放代码工具）未实现分支均有当前代码与测试依据。
 - 未验证项：本轮未登录真实 `Claude`（Claude 工具）或 `Codex`（代码代理）会话账户。

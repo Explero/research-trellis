@@ -64,9 +64,9 @@ python3 ./.trellis/scripts/hermes/runner.py replay --task "$TASK" --run-id "$RUN
 
 ## 验证记录
 
-- 日期：2026-07-14。
-- 版本：`0.6.0-beta.30`（测试版）。
-- 基准提交：`9f7dc8497b4782878d6fa7ac3b63eba5bde507df`（当前基准）。
+- 日期：2026-07-15。
+- 版本：`0.6.0-beta.31`（测试版）。
+- 更名前基准提交：`9f7dc8497b4782878d6fa7ac3b63eba5bde507df`。
 - 命令：`rg -n -m 1 "run_manifest|replay" packages/cli/src/templates/trellis/scripts/hermes packages/cli/test/templates/hermes-runtime.test.ts`（运行清单与复查核对）。
 - 结果：运行清单、输出摘要和复查失败分支均有实现与测试依据。
 - 未验证项：本轮未手工执行文中的完整任务卡、运行和复查示例。

@@ -71,9 +71,9 @@ python3 ./.trellis/scripts/hermes/validate.py --task "$TASK" --kind evidence
 
 ## 验证记录
 
-- 日期：2026-07-14。
-- 版本：`0.6.0-beta.30`（测试版）。
-- 基准提交：`9f7dc8497b4782878d6fa7ac3b63eba5bde507df`（当前基准）。
+- 日期：2026-07-15。
+- 版本：`0.6.0-beta.31`（测试版）。
+- 更名前基准提交：`9f7dc8497b4782878d6fa7ac3b63eba5bde507df`。
 - 命令：`rg -n "validate_artifact_file|artifact_ref_errors|has_symlink_component" packages/cli/src/templates/trellis/scripts/hermes/runtime.py`（路径与引用边界核对）。
 - 结果：示例已改为先创建产物和摘要，再写产物与证据账本；路径检查范围已明示。
 - 未验证项：产物路径不是符号链接隔离或操作系统级安全边界。

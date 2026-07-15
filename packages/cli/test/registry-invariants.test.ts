@@ -104,7 +104,7 @@ describe("release metadata invariants", () => {
       };
 
       expect(packageJson.repository?.url).toBe(
-        "git+https://github.com/Explero/Trellis-Hermes.git",
+        "git+https://github.com/Explero/research-trellis.git",
       );
     }
   });
@@ -113,7 +113,7 @@ describe("release metadata invariants", () => {
     const readme = fs.readFileSync(path.join(repoRoot, "README.md"), "utf-8");
 
     expect(readme).not.toContain("Trellis-Herbivore");
-    expect(readme).toContain("Trellis-Hermes");
+    expect(readme).toContain("Research Trellis");
   });
 });
 

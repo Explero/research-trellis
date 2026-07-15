@@ -1,5 +1,5 @@
 /**
- * Scrubbers for structured config files during `trellis uninstall`.
+ * Scrubbers for structured config files during `research-trellis uninstall`.
  *
  * Each scrubber takes the file content (and any context it needs) and returns
  * `{ content, fullyEmpty }`:
