@@ -973,6 +973,29 @@ describe("configurePlatform", () => {
     );
   });
 
+  it("codex hooks register workflow injection and Hermes runtime gates", () => {
+    const config = JSON.parse(getCodexHooksConfig()) as {
+      hooks: Record<string, { matcher?: string }[]>;
+    };
+
+    expect(Object.keys(config.hooks)).toEqual(
+      expect.arrayContaining([
+        "UserPromptSubmit",
+        "PreToolUse",
+        "Stop",
+        "SubagentStop",
+      ]),
+    );
+    expect(config.hooks.PreToolUse[0]?.matcher).toBe(
+      "Edit|Write|MultiEdit|Bash|apply_patch",
+    );
+    for (const event of ["PreToolUse", "Stop", "SubagentStop"]) {
+      expect(JSON.stringify(config.hooks[event])).toContain(
+        "hermes-runtime-guard.py",
+      );
+    }
+  });
+
   it("cursor hooks.json matches both documented and native subagent tool names", () => {
     const hooksConfig = JSON.parse(getCursorHooksConfig()) as {
       hooks: { preToolUse: { matcher: string }[] };

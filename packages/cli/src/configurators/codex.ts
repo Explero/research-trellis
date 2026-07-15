@@ -80,7 +80,7 @@ export async function configureCodex(cwd: string): Promise<void> {
 
   // Codex is a class-2 (pull-based) platform: sub-agent context is not pushed
   // by Task hooks, so sub-agents must load Trellis context themselves via the
-  // prelude injected here. PreToolUse remains available for local write guards.
+  // prelude injected here. Hermes PreToolUse still guards local writes.
   for (const agent of applyPullBasedPreludeToml(getAllAgents())) {
     await writeFile(
       path.join(codexAgentsRoot, `${agent.name}.toml`),
@@ -92,9 +92,9 @@ export async function configureCodex(cwd: string): Promise<void> {
   const hooksDir = path.join(codexRoot, "hooks");
   ensureDir(hooksDir);
 
-  // Codex-specific hook files. hooks.json currently registers only
-  // UserPromptSubmit; session-start.py is retained as a compact compatibility
-  // template and regression surface.
+  // Codex-specific hook files. hooks.json registers UserPromptSubmit plus
+  // Hermes PreToolUse / Stop gates; session-start.py is retained as a compact
+  // compatibility template and regression surface.
   for (const hook of getAllHooks()) {
     await writeFile(
       path.join(hooksDir, hook.name),
@@ -102,8 +102,8 @@ export async function configureCodex(cwd: string): Promise<void> {
     );
   }
 
-  // Shared hooks (inject-workflow-state.py only). Sub-agent context is
-  // pull-based (class-2).
+  // Shared workflow-state and Hermes guard hooks. Sub-agent context is
+  // pull-based (class-2), so inject-subagent-context.py is not installed.
   await writeSharedHooks(hooksDir, "codex");
 
   // Hooks config → .codex/hooks.json
@@ -125,9 +125,9 @@ export async function configureCodex(cwd: string): Promise<void> {
     process.stderr.write(
       "⚠️  Codex hooks require `features.hooks = true` in your " +
         "~/.codex/config.toml (Codex 0.129+; older versions: `codex_hooks = true`). " +
-        "On Codex 0.129+ also run `/hooks` once to approve the Trellis " +
-        "UserPromptSubmit hook. Without these the Trellis workflow breadcrumb " +
-        "won't auto-inject. See Trellis docs for details.\n",
+        "On Codex 0.129+ also run `/hooks` once to review and approve the " +
+        "Trellis hooks. Without these, workflow context and Hermes runtime " +
+        "gates stay inactive. See Trellis docs for details.\n",
     );
   }
 

@@ -2891,7 +2891,7 @@ describe("regression: current-task path normalization", () => {
     const ctx = parsed.hookSpecificOutput.additionalContext;
     expect(parsed.hookSpecificOutput.hookEventName).toBe("UserPromptSubmit");
     expect(ctx).not.toContain("<sub-agent-notice>");
-    expect(ctx).toContain("<codex-mode>inline:");
+    expect(ctx).toContain("<codex-mode>sub-agent:");
     expect(ctx.indexOf("</codex-mode>")).toBeLessThan(
       ctx.indexOf("<workflow-state>"),
     );
@@ -3400,9 +3400,8 @@ print(len(entries))
       path.join(".trellis", "workflow.md"),
       templateWorkflowMd(),
     );
-    // Codex defaults to inline since 0.5.9; opt into sub-agent dispatch
-    // explicitly so the legacy spawn-trellis-implement block surfaces.
-    writeConfigYaml("codex:\n  dispatch_mode: sub-agent\n");
+    // Codex defaults to sub-agent dispatch, so the legacy
+    // spawn-trellis-implement block surfaces without an override.
 
     const contextScript = path.join(
       tmpDir,
@@ -3456,9 +3455,8 @@ print(len(entries))
       path.join(".trellis", "workflow.md"),
       templateWorkflowMd(),
     );
-    // Codex defaults to inline since 0.5.9; opt into sub-agent dispatch
-    // explicitly so the [codex-sub-agent] block surfaces.
-    writeConfigYaml("codex:\n  dispatch_mode: sub-agent\n");
+    // Codex defaults to sub-agent dispatch, so the [codex-sub-agent]
+    // block surfaces without an override.
 
     const contextScript = path.join(
       tmpDir,
@@ -3723,7 +3721,7 @@ print(len(entries))
     writeProjectFile(path.join(".trellis", "config.yaml"), content);
   }
 
-  it("[issue-codex-dispatch-mode] codex breadcrumb defaults to inline dispatch when config absent", () => {
+  it("[issue-codex-dispatch-mode] codex breadcrumb defaults to sub-agent dispatch when config absent", () => {
     setupTaskRepo();
     writeSessionContext("session_workflow-a", ".trellis/tasks/issue-106");
     const codexHookPath = writeCodexInjectHook();
@@ -3741,8 +3739,8 @@ print(len(entries))
       runPython(codexHookPath, JSON.stringify({ cwd: tmpDir, session_id: "workflow-a" })),
     ) as { hookSpecificOutput: { additionalContext: string } };
     const ctx = parsed.hookSpecificOutput.additionalContext;
-    expect(ctx).toContain("MAIN SESSION edits code");
-    expect(ctx).not.toContain("DISPATCH the trellis-implement");
+    expect(ctx).toContain("DISPATCH the trellis-implement");
+    expect(ctx).not.toContain("MAIN SESSION edits code");
   });
 
   it("[issue-codex-dispatch-mode] codex breadcrumb routes to plain status when codex.dispatch_mode=sub-agent", () => {
@@ -3891,8 +3889,7 @@ print(len(entries))
     ) as Record<string, string>;
     expect(result.codex_inline).toBe("in_progress-inline");
     expect(result.codex_subagent).toBe("in_progress");
-    // Default for codex (missing config) is inline since 0.5.9.
-    expect(result.codex_missing).toBe("in_progress-inline");
+    expect(result.codex_missing).toBe("in_progress");
     expect(result.claude_inline).toBe("in_progress");
   });
 
@@ -3969,11 +3966,11 @@ print(len(entries))
     const result = JSON.parse(
       output.split("\n").filter((l) => l.startsWith("{")).pop() ?? "{}",
     ) as Record<string, string>;
-    expect(result.codex_default).toBe("codex-inline");
+    expect(result.codex_default).toBe("codex-sub-agent");
     expect(result.codex_explicit_subagent).toBe("codex-sub-agent");
     expect(result.codex_inline).toBe("codex-inline");
-    // Invalid mode falls back to default inline rather than passing through.
-    expect(result.codex_invalid_mode).toBe("codex-inline");
+    // Invalid mode falls back to default sub-agent rather than passing through.
+    expect(result.codex_invalid_mode).toBe("codex-sub-agent");
     // Non-codex platforms ignore the codex.dispatch_mode setting.
     expect(result.claude_passthrough).toBe("claude");
   });
@@ -3995,21 +3992,21 @@ print(len(entries))
       "[workflow-state:in_progress]\nDISPATCH the trellis-implement.\n[/workflow-state:in_progress]\n[workflow-state:in_progress-inline]\nMAIN SESSION inline edit.\n[/workflow-state:in_progress-inline]\n",
     );
 
-    // Default (no config.yaml) → inline banner.
+    // Default (no config.yaml) → sub-agent banner.
     const defaultRun = JSON.parse(
       runPython(codexHookPath, JSON.stringify({ cwd: tmpDir, session_id: "workflow-a" })),
     ) as { hookSpecificOutput: { additionalContext: string } };
     expect(defaultRun.hookSpecificOutput.additionalContext).toContain(
-      "<codex-mode>inline: the main session implements/checks directly; do not dispatch implement/check sub-agents.</codex-mode>",
+      "<codex-mode>sub-agent: implement/check work defaults to Trellis sub-agents; the main session still coordinates, clarifies, updates specs, commits, and finishes.</codex-mode>",
     );
 
-    // Explicit sub-agent → sub-agent banner.
-    writeConfigYaml("codex:\n  dispatch_mode: sub-agent\n");
-    const subAgentRun = JSON.parse(
+    // Explicit inline → inline banner.
+    writeConfigYaml("codex:\n  dispatch_mode: inline\n");
+    const inlineRun = JSON.parse(
       runPython(codexHookPath, JSON.stringify({ cwd: tmpDir, session_id: "workflow-a" })),
     ) as { hookSpecificOutput: { additionalContext: string } };
-    expect(subAgentRun.hookSpecificOutput.additionalContext).toContain(
-      "<codex-mode>sub-agent: implement/check work defaults to Trellis sub-agents; the main session still coordinates, clarifies, updates specs, commits, and finishes.</codex-mode>",
+    expect(inlineRun.hookSpecificOutput.additionalContext).toContain(
+      "<codex-mode>inline: the main session implements/checks directly; do not dispatch implement/check sub-agents.</codex-mode>",
     );
   });
 

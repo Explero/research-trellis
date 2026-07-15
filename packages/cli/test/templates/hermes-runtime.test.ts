@@ -173,6 +173,51 @@ describe("Hermes runtime scripts", () => {
   let tmpDir: string;
   let taskDir: string;
 
+  function writeQualityGateLedgers(): void {
+    const artifactContent = "accuracy=0.76\n";
+    fs.mkdirSync(path.join(tmpDir, "reports"), { recursive: true });
+    fs.writeFileSync(
+      path.join(tmpDir, "reports", "accuracy.txt"),
+      artifactContent,
+      "utf-8",
+    );
+    writeJsonl(path.join(taskDir, "hermes", "artifact_ledger.jsonl"), [
+      {
+        type: "artifact",
+        id: "ar-20260629-000000-demo",
+        path: "reports/accuracy.txt",
+        hash: sha256Text(artifactContent),
+        run_id: "run-20260629-000000-demo",
+        command_ref: "cmd-20260629-000000-demo",
+        summary: "captured accuracy output",
+      },
+    ]);
+    writeJsonl(path.join(taskDir, "hermes", "evidence_ledger.jsonl"), [
+      {
+        type: "evidence",
+        id: "ev-20260629-000000-demo",
+        timestamp: "2026-06-29T00:00:00Z",
+        source: "reports/accuracy.txt",
+        summary: "accuracy output is 0.76",
+        limits: "unit-test fixture",
+        artifact_refs: ["ar-20260629-000000-demo"],
+        command_refs: ["cmd-20260629-000000-demo"],
+      },
+    ]);
+    writeJsonl(path.join(taskDir, "hermes", "claim_ledger.jsonl"), [
+      {
+        type: "claim",
+        id: "cl-20260629-000000-demo",
+        timestamp: "2026-06-29T00:00:01Z",
+        text: "accuracy improved from 0.70 to 0.76",
+        evidence_ids: ["ev-20260629-000000-demo"],
+        scope: "unit-test fixture",
+        limits: "single deterministic sample",
+        state: "claim_ready",
+      },
+    ]);
+  }
+
   beforeEach(() => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "trellis-hermes-runtime-"));
     fs.mkdirSync(path.join(tmpDir, ".trellis", "tasks", "01-test", "hermes"), {
@@ -3268,6 +3313,7 @@ describe("Hermes runtime scripts", () => {
   });
 
   it("quality gate passes compare records with evidence and statistic fields", () => {
+    writeQualityGateLedgers();
     writeJsonl(path.join(taskDir, "hermes", "compare.jsonl"), [
       {
         type: "compare",
@@ -3299,6 +3345,48 @@ describe("Hermes runtime scripts", () => {
       status: "passed",
       compare_count: 1,
     });
+  });
+
+  it.each([
+    {
+      field: "evidence_refs",
+      missingId: "ev-20260629-000001-missing",
+      expected: "references missing evidence_id ev-20260629-000001-missing",
+    },
+    {
+      field: "claim_refs",
+      missingId: "cl-20260629-000001-missing",
+      expected: "references missing claim_id cl-20260629-000001-missing",
+    },
+  ])("quality gate rejects a missing ledger id in $field", ({ field, missingId, expected }) => {
+    writeQualityGateLedgers();
+    const compare: Record<string, unknown> = {
+      type: "compare",
+      id: "cmp-20260629-000001-missing-ref",
+      timestamp: "2026-06-29T00:00:02Z",
+      metric: "accuracy",
+      direction: "higher_is_better",
+      threshold: 0.05,
+      baseline: 0.7,
+      new: 0.76,
+      delta: 0.06,
+      passed: true,
+      evidence_refs: ["ev-20260629-000000-demo"],
+      claim_refs: ["cl-20260629-000000-demo"],
+      conclusion_state: "claim_ready",
+      sample_count: 12,
+    };
+    compare[field] = [missingId];
+    writeJsonl(path.join(taskDir, "hermes", "compare.jsonl"), [compare]);
+
+    const gate = runHermes(tmpDir, "report.py", [
+      "quality-gate",
+      "--task",
+      "01-test",
+    ]);
+
+    expect(gate.status).toBe(1);
+    expect(gate.stderr).toContain(expected);
   });
 
   it("rejects metric split baseline changes without HumanGate approval", () => {
