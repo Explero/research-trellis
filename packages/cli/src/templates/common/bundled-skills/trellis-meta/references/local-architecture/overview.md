@@ -1,6 +1,6 @@
 # Local Trellis Architecture Overview
 
-`trellis-meta` is for user projects that have already run `trellis init`. The user's machine usually has only the npm-installed `trellis` command plus the Trellis files generated inside the project; it may not have the Trellis CLI source code.
+`trellis-meta` is for user projects that have already run `research-trellis init`. The user's machine usually has only the npm-installed `trellis` command plus the Trellis files generated inside the project; it may not have the Trellis CLI source code.
 
 Therefore, when an AI uses this skill, the default customization target is local files inside the user project:
 

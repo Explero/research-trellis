@@ -36,12 +36,12 @@ describe("upgrade command", () => {
       buildUpgradeCommand({ tag: "beta" }, "0.5.12", "darwin"),
     ).toMatchObject({
       command: "npm",
-      args: ["install", "-g", "trellis-hermes@beta"],
+      args: ["install", "-g", "research-trellis@beta"],
       spawnOptions: { stdio: "inherit", shell: false },
-      displayCommand: "npm install -g trellis-hermes@beta",
-      target: "trellis-hermes@beta",
+      displayCommand: "npm install -g research-trellis@beta",
+      target: "research-trellis@beta",
       tag: "beta",
-      binaryCheckCommand: "which trellis",
+      binaryCheckCommand: "which research-trellis",
     });
   });
 
@@ -50,12 +50,12 @@ describe("upgrade command", () => {
       buildUpgradeCommand({ tag: "beta" }, "0.5.12", "win32"),
     ).toMatchObject({
       command: "cmd.exe",
-      args: ["/d", "/s", "/c", "npm install -g trellis-hermes@beta"],
+      args: ["/d", "/s", "/c", "npm install -g research-trellis@beta"],
       spawnOptions: { stdio: "inherit", shell: false },
-      displayCommand: "npm install -g trellis-hermes@beta",
-      target: "trellis-hermes@beta",
+      displayCommand: "npm install -g research-trellis@beta",
+      target: "research-trellis@beta",
       tag: "beta",
-      binaryCheckCommand: "where trellis",
+      binaryCheckCommand: "where research-trellis",
     });
   });
 
@@ -67,7 +67,7 @@ describe("upgrade command", () => {
 
     expect(runner).not.toHaveBeenCalled();
     expect(log).toHaveBeenCalledWith(
-      expect.stringContaining("Run: npm install -g trellis-hermes@latest"),
+      expect.stringContaining("Run: npm install -g research-trellis@latest"),
     );
 
     log.mockRestore();
@@ -86,7 +86,7 @@ describe("upgrade command", () => {
       plan.spawnOptions,
     );
     expect(log).toHaveBeenCalledWith(
-      expect.stringContaining("trellis --version"),
+      expect.stringContaining("research-trellis --version"),
     );
     expect(log).toHaveBeenCalledWith(
       expect.stringContaining(plan.binaryCheckCommand),

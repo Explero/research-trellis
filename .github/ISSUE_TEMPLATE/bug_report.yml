@@ -20,7 +20,7 @@ body:
     id: version
     attributes:
       label: Trellis Version
-      description: Output of `trellis --version`
+      description: Output of `research-trellis --version`
     validations:
       required: true
   - type: input

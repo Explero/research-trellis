@@ -22,7 +22,7 @@ import {
 } from "vitest";
 import * as nodeFs from "node:fs";
 import * as nodePath from "node:path";
-import { listMemProjects } from "trellis-hermes-core/mem";
+import { listMemProjects } from "research-trellis-core/mem";
 
 const { fakeHome } = vi.hoisted(() => {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -539,7 +539,7 @@ describe("runMem subcommand integration", () => {
 
   it("help command prints usage", () => {
     runMem(["help"]);
-    expect(logs.join("\n")).toContain("trellis mem");
+    expect(logs.join("\n")).toContain("research-trellis mem");
   });
 
   it("unknown command exits non-zero with 'unknown command' error", () => {

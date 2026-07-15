@@ -1,0 +1,9 @@
+{
+  "version": "0.6.0-beta.31",
+  "description": "项目更名为 Research Trellis，并启用新的 npm 包名与兼容命令。",
+  "breaking": true,
+  "recommendMigrate": false,
+  "changelog": "**项目更名：**\n- feat(brand): 项目、GitHub 仓库和在线手册统一更名为 Research Trellis。\n- feat(release): CLI 包改为 `research-trellis`，核心包改为 `research-trellis-core`。\n- feat(cli): 新增 `research-trellis` 主命令，并继续保留 `trellis` 与 `tl` 兼容命令。\n\n**迁移说明：**\n- 已安装旧包的用户需要卸载 `trellis-hermes`，再安装 `research-trellis`。\n- 项目内 `.trellis/` 数据格式和已有任务记录不需要迁移。",
+  "migrations": [],
+  "notes": "包名变更属于安装和导入层面的破坏性变化；项目内数据格式不变，不需要运行文件迁移。"
+}

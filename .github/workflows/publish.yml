@@ -50,7 +50,7 @@ jobs:
           pnpm lint
           pnpm test
           pnpm build
-          pnpm --filter trellis-hermes hermes:preflight
+          pnpm --filter research-trellis hermes:preflight
           node packages/cli/scripts/release-preflight.js check-versions --require-tag
           node packages/cli/scripts/release-preflight.js verify-packed-cli
 

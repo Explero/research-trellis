@@ -19,13 +19,13 @@
 1. 先查看当前版本支持的平台参数：
 
 ```bash
-trellis init --help
+research-trellis init --help
 ```
 
 2. 单仓库、非交互初始化示例：
 
 ```bash
-trellis init -y -u "$USER" --codex --no-monorepo
+research-trellis init -y -u "$USER" --codex --no-monorepo
 ```
 
 `-y`（自动确认）在冲突时采用跳过模式；只有显式 `--force`（强制覆盖）才会覆盖已有文件。
@@ -43,7 +43,7 @@ trellis init -y -u "$USER" --codex --no-monorepo
 3. 多包仓库可以让命令自动检测，也可以显式要求检测：
 
 ```bash
-trellis init -u "$USER" --codex --monorepo
+research-trellis init -u "$USER" --codex --monorepo
 ```
 
 当前实现会识别 `pnpm-workspace.yaml`（pnpm 工作区配置）、`package.json`（Node 包配置）、`Cargo.toml`（Rust 工作区配置）、`go.work`（Go 工作区配置）、`pyproject.toml`（Python 项目配置）、子模块和并列仓库。检测成功后，包信息写入 `.trellis/config.yaml`（项目配置）。
@@ -51,8 +51,8 @@ trellis init -u "$USER" --codex --monorepo
 4. 已经存在 `.trellis/`（工作流目录）时，增加平台或开发者身份：
 
 ```bash
-trellis init --claude
-trellis init -u "$USER"
+research-trellis init --claude
+research-trellis init -u "$USER"
 ```
 
 5. 完成后检查：
@@ -78,9 +78,9 @@ python3 ./.trellis/scripts/task.py list
 
 ## 验证记录
 
-- 日期：2026-07-14。
-- 版本：`0.6.0-beta.30`（测试版）。
-- 基准提交：`9f7dc8497b4782878d6fa7ac3b63eba5bde507df`（当前基准）。
+- 日期：2026-07-15。
+- 版本：`0.6.0-beta.31`（测试版）。
+- 更名前基准提交：`9f7dc8497b4782878d6fa7ac3b63eba5bde507df`。
 - 命令：`rg -n "options.yes|registry|selectedTemplate" packages/cli/src/commands/init.ts packages/cli/test/commands/init.integration.test.ts`（分支核对）。
 - 结果：默认、交互、指定模板、自定义源和 `-y`（自动确认）的失败行为已分开记录。
 - 未验证项：本轮未连接真实外部模板源注入网络故障。

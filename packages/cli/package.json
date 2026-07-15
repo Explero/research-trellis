@@ -1,11 +1,12 @@
 {
-  "name": "trellis-hermes",
-  "version": "0.6.0-beta.30",
-  "description": "AI capabilities grow like ivy — Trellis provides the structure to guide them along a disciplined path",
+  "name": "research-trellis",
+  "version": "0.6.0-beta.31",
+  "description": "Auditable AI-assisted research workflow tooling built on Trellis",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "bin": {
+    "research-trellis": "bin/trellis.js",
     "trellis": "bin/trellis.js",
     "tl": "bin/trellis.js"
   },
@@ -50,6 +51,8 @@
     "developer-tools",
     "agent",
     "memory",
+    "research",
+    "reproducibility",
     "trellis"
   ],
   "author": "Explero",
@@ -59,7 +62,7 @@
   ],
   "license": "AGPL-3.0-or-later",
   "dependencies": {
-    "trellis-hermes-core": "workspace:*",
+    "research-trellis-core": "workspace:*",
     "chalk": "^5.3.0",
     "commander": "^12.1.0",
     "figlet": "^1.9.4",
@@ -93,6 +96,6 @@
   ],
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/Explero/Trellis-Hermes.git"
+    "url": "git+https://github.com/Explero/research-trellis.git"
   }
 }

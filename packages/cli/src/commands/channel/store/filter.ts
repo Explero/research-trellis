@@ -1,6 +1,6 @@
 export {
   MEANINGFUL_EVENT_KINDS,
   matchesEventFilter,
-} from "trellis-hermes-core/channel";
+} from "research-trellis-core/channel";
 
-export type { ChannelEventFilter } from "trellis-hermes-core/channel";
+export type { ChannelEventFilter } from "research-trellis-core/channel";

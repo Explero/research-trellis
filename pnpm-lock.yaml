@@ -32,7 +32,7 @@ importers:
       inquirer:
         specifier: ^9.3.7
         version: 9.3.8(@types/node@20.19.28)
-      trellis-hermes-core:
+      research-trellis-core:
         specifier: workspace:*
         version: link:../core
       undici:

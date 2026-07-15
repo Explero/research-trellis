@@ -44,7 +44,7 @@ import { fileURLToPath } from "node:url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const MANIFESTS_DIR = path.join(__dirname, "../src/migrations/manifests");
-const PACKAGE_NAME = "trellis-hermes";
+const PACKAGE_NAME = "research-trellis";
 
 /**
  * Check whether `version` is already published on npm. Returns false on network

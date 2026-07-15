@@ -9,7 +9,7 @@ Thanks for your interest in contributing to Trellis! This document provides guid
 Before creating a bug report, please check [existing issues](https://github.com/mindfold-ai/Trellis/issues) to avoid duplicates.
 
 When reporting a bug, include:
-- Trellis version (`trellis --version`)
+- Research Trellis version (`research-trellis --version`)
 - Node.js version (`node --version`)
 - Operating system
 - Steps to reproduce

@@ -17,7 +17,7 @@
 
 按五层结构检查当前项目：
 
-1. `CLI`（命令行界面）层：`trellis init`（初始化）复制模板，`trellis update`（更新）比较模板哈希，`workflow`（工作流）切换流程文件。
+1. `CLI`（命令行界面）层：`research-trellis init`（初始化）复制模板，`research-trellis update`（更新）比较模板哈希，`workflow`（工作流）切换流程文件。
 2. 项目层：`.trellis/spec/`（项目规范）和 `.trellis/workflow.md`（工作流说明）保存长期规则。
 3. 任务层：`.trellis/tasks/<task>/`（任务目录）保存需求、设计、实施计划和代理上下文清单。
 4. 平台层：技能、代理和钩子读取当前会话身份、活动任务及上下文清单，再把信息交给人工智能工具。
@@ -57,9 +57,9 @@
 
 ## 验证记录
 
-- 日期：2026-07-14。
-- 版本：`0.6.0-beta.30`（测试版）。
-- 基准提交：`9f7dc8497b4782878d6fa7ac3b63eba5bde507df`（当前基准）。
+- 日期：2026-07-15。
+- 版本：`0.6.0-beta.31`（测试版）。
+- 更名前基准提交：`9f7dc8497b4782878d6fa7ac3b63eba5bde507df`。
 - 命令：`rg -n "state_machine|approval-gate|task.py" packages/cli/src/templates`（协议与实现核对）。
 - 结果：任务生命周期有实现支持；科研状态文件已准确标为协议模板。
 - 未验证项：没有通用运行时状态迁移引擎可供端到端验证。

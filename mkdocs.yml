@@ -1,8 +1,8 @@
-site_name: Trellis-Hermes 中文手册
-site_description: Trellis-Hermes 科研工作流的安装、使用、审计与维护手册
-site_url: https://explero.github.io/Trellis-Hermes/
-repo_url: https://github.com/Explero/Trellis-Hermes
-repo_name: Explero/Trellis-Hermes
+site_name: Research Trellis 中文手册
+site_description: Research Trellis 科研工作流的安装、使用、审计与维护手册
+site_url: https://explero.github.io/research-trellis/
+repo_url: https://github.com/Explero/research-trellis
+repo_name: Explero/research-trellis
 edit_uri: edit/main/docs/manual/
 
 docs_dir: docs/manual
@@ -59,7 +59,7 @@ markdown_extensions:
 extra_css:
   - stylesheets/extra.css
 
-copyright: Copyright 2026 Trellis-Hermes contributors. Based on mindfold-ai/Trellis.
+copyright: Copyright 2026 Research Trellis contributors. Based on mindfold-ai/Trellis.
 
 nav:
   - 首页: README.md

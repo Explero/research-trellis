@@ -19,15 +19,15 @@
 1. 先升级预览全局命令，不实际安装：
 
 ```bash
-trellis upgrade --dry-run
+research-trellis upgrade --dry-run
 ```
 
-实际升级会运行 `npm install -g trellis-hermes@latest`（安装最新全局包）。需要可复现环境时，应安装明确版本。
+实际升级会运行 `npm install -g research-trellis@latest`（安装最新全局包）。需要可复现环境时，应安装明确版本。
 
 2. 预览当前项目模板更新：
 
 ```bash
-trellis update --dry-run
+research-trellis update --dry-run
 ```
 
 更新器会区分未修改模板、用户修改模板和用户数据。当前实现明确保留 `.trellis/workspace/`（工作日志）、`.trellis/tasks/`（任务）、`.trellis/spec/`（规范）和开发者身份。
@@ -35,7 +35,7 @@ trellis update --dry-run
 3. 对冲突选择处理方式：
 
 ```bash
-trellis update --create-new
+research-trellis update --create-new
 ```
 
 该方式把有变化的模板写成 `.new`（新副本）供比较。`--skip-all`（全部跳过）保留本地文件，`--force`（强制覆盖）覆盖变化文件，`--migrate`（应用迁移）才执行待处理的重命名或删除。降级默认被拒绝，除非显式 `--allow-downgrade`（允许降级）。
@@ -45,13 +45,13 @@ trellis update --create-new
 5. 卸载前只做预览：
 
 ```bash
-trellis uninstall --dry-run
+research-trellis uninstall --dry-run
 ```
 
 预览会列出受管理的平台文件，并明确包含整个 `.trellis/`（工作流目录），其中的任务、记录和运行数据都会被删除。只有完成外部备份并确认列表后，才考虑：
 
 ```bash
-trellis uninstall --yes
+research-trellis uninstall --yes
 ```
 
 ## 预期结果
@@ -68,9 +68,9 @@ trellis uninstall --yes
 
 ## 验证记录
 
-- 日期：2026-07-14。
-- 版本：`0.6.0-beta.30`（测试版）。
-- 基准提交：`9f7dc8497b4782878d6fa7ac3b63eba5bde507df`（当前基准）。
+- 日期：2026-07-15。
+- 版本：`0.6.0-beta.31`（测试版）。
+- 更名前基准提交：`9f7dc8497b4782878d6fa7ac3b63eba5bde507df`。
 - 命令：`rg -n -m 1 "dry-run|create-new|allow-downgrade" packages/cli/src/commands packages/cli/test/commands`（更新与恢复核对）。
 - 结果：预览、冲突副本、降级拒绝和卸载预览分支均可定位。
 - 未验证项：本轮未在临时项目手工执行更新、升级或卸载预览。

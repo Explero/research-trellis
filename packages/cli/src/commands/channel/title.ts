@@ -2,7 +2,7 @@ import {
   clearChannelTitle,
   setChannelTitle,
   type ChannelScope,
-} from "trellis-hermes-core/channel";
+} from "research-trellis-core/channel";
 
 import { parseChannelScope } from "./store/schema.js";
 

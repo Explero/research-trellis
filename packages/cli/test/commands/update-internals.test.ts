@@ -271,7 +271,7 @@ describe("shouldExcludeFromBackup", () => {
   // after normalization, otherwise Trellis's native worktree protection
   // silently fails on Windows and `collectAllFiles` descends into nested
   // full project copies (observed in the field: stack-overflow crash on
-  // `trellis update --migrate`, late April 2026).
+  // `research-trellis update --migrate`, late April 2026).
   it.each([
     ".trellis\\trellis-worktrees\\feat-x\\src\\main.ts",
     ".claude\\worktrees\\feat-x\\src\\main.ts",

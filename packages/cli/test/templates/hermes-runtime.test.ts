@@ -219,7 +219,7 @@ describe("Hermes runtime scripts", () => {
   }
 
   beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "trellis-hermes-runtime-"));
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "research-trellis-runtime-"));
     fs.mkdirSync(path.join(tmpDir, ".trellis", "tasks", "01-test", "hermes"), {
       recursive: true,
     });

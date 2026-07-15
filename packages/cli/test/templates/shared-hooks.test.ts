@@ -301,7 +301,7 @@ function runHermesRuntimeGuard(
     throw new Error("hermes-runtime-guard.py template missing");
   }
   const scriptDir = fs.mkdtempSync(
-    path.join(os.tmpdir(), "trellis-hermes-guard-"),
+    path.join(os.tmpdir(), "research-trellis-guard-"),
   );
   const scriptPath = path.join(scriptDir, "hermes-runtime-guard.py");
   fs.writeFileSync(scriptPath, hook.content);
@@ -1128,7 +1128,7 @@ describe.skipIf(!hasPython())("hermes runtime guard hook", () => {
   const taskName = "06-04-hermes-runtime";
 
   beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "trellis-hermes-hook-"));
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "research-trellis-hook-"));
     repoRoot = path.join(tmpDir, "repo");
     setupMainRepo(repoRoot, taskName, "# prd\n");
     setSessionActiveTask(repoRoot, taskName);

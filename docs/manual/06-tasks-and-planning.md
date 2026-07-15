@@ -79,9 +79,9 @@ python3 ./.trellis/scripts/hermes/validate.py --task "$TASK" --kind plan_change
 
 ## 验证记录
 
-- 日期：2026-07-14。
-- 版本：`0.6.0-beta.30`（测试版）。
-- 基准提交：`9f7dc8497b4782878d6fa7ac3b63eba5bde507df`（当前基准）。
+- 日期：2026-07-15。
+- 版本：`0.6.0-beta.31`（测试版）。
+- 更名前基准提交：`9f7dc8497b4782878d6fa7ac3b63eba5bde507df`。
 - 命令：`rg -n "plan_change|decision_state|supersedes" packages/cli/src/templates/trellis/scripts/hermes packages/cli/test/templates/hermes-runtime.test.ts`（变更协议核对）。
 - 结果：提出、审阅、接受或拒绝、替代和校验流程已补全，并明示了结构校验边界。
 - 未验证项：审阅者身份、决定链语义和证据存在性仍需外部流程保证。

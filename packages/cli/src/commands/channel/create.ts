@@ -4,7 +4,7 @@ import {
   resolveChannelRef,
   type ChannelScope,
   type ChannelType,
-} from "trellis-hermes-core/channel";
+} from "research-trellis-core/channel";
 
 import {
   parseChannelScope,

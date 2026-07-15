@@ -222,7 +222,7 @@ const PLATFORM_FUNCTIONS: Record<AITool, PlatformFunctions> = {
       )) {
         files.set(filePath, content);
       }
-      // Mirror configureCodex's extra trellis-start write so `trellis update`
+      // Mirror configureCodex's extra trellis-start write so `research-trellis update`
       // picks up the file (was missing pre-0.5.7 — upgrade path silently
       // dropped the skill).
       const trellisStart = resolveCodexTrellisStartSkill(ctx);

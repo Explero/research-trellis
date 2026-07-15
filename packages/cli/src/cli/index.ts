@@ -35,10 +35,10 @@ function checkForUpdates(cwd: string): void {
     // CLI is newer than project - update available
     console.log(
       chalk.yellow(
-        `\n⚠️  Trellis update available: ${projectVersion} → ${cliVersion}`,
+        `\n⚠️  Research Trellis update available: ${projectVersion} → ${cliVersion}`,
       ),
     );
-    console.log(chalk.gray(`   Run: trellis update\n`));
+    console.log(chalk.gray(`   Run: research-trellis update\n`));
   } else if (comparison < 0) {
     // CLI is older than project - CLI needs updating
     console.log(
@@ -46,7 +46,7 @@ function checkForUpdates(cwd: string): void {
         `\n⚠️  Your CLI (${cliVersion}) is older than project (${projectVersion})`,
       ),
     );
-    console.log(chalk.gray(`   Run: trellis upgrade\n`));
+    console.log(chalk.gray(`   Run: research-trellis upgrade\n`));
   }
 }
 
@@ -59,7 +59,7 @@ if (fs.existsSync(path.join(cwd, DIR_NAMES.WORKFLOW))) {
 const program = new Command();
 
 program
-  .name("trellis")
+  .name("research-trellis")
   .description(
     "AI-assisted development workflow framework for Cursor, Claude Code and more",
   )
@@ -160,11 +160,8 @@ program
 
 program
   .command("upgrade")
-  .description("Upgrade the global Trellis CLI package")
-  .option(
-    "--tag <tag>",
-    "npm dist-tag or version to install (default: latest)",
-  )
+  .description("Upgrade the global Research Trellis CLI package")
+  .option("--tag <tag>", "npm dist-tag or version to install (default: latest)")
   .option("--dry-run", "Print the install command without running it")
   .action(async (options: Record<string, unknown>) => {
     try {
@@ -212,7 +209,7 @@ program
 program
   .command("mem")
   .description(
-    "Search/recall AI conversation history across Claude Code, Codex, OpenCode (run 'trellis mem help' for subcommands and flags)",
+    "Search/recall AI conversation history across Claude Code, Codex, OpenCode (run 'research-trellis mem help' for subcommands and flags)",
   )
   .allowUnknownOption(true)
   .helpOption(false)

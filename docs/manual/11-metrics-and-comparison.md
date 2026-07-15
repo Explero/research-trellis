@@ -76,9 +76,9 @@ python3 ./.trellis/scripts/hermes/report.py quality-gate --task "$TASK"
 
 ## 验证记录
 
-- 日期：2026-07-14。
-- 版本：`0.6.0-beta.30`（测试版）。
-- 基准提交：`9f7dc8497b4782878d6fa7ac3b63eba5bde507df`（当前基准）。
+- 日期：2026-07-15。
+- 版本：`0.6.0-beta.31`（测试版）。
+- 更名前基准提交：`9f7dc8497b4782878d6fa7ac3b63eba5bde507df`。
 - 命令：`rg -n -m 1 "quality-gate|evidence_refs|claim_refs" packages/cli/src/templates/trellis/scripts/hermes packages/cli/test/templates/hermes-runtime.test.ts`（门禁和引用核对）。
 - 结果：质量门禁已有账本编号存在性检查以及有效、缺失引用测试。
 - 未验证项：文中完整命令示例未在外部项目手工执行。

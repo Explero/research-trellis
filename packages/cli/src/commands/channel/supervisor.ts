@@ -2,7 +2,7 @@
  * Supervisor process: owns a single worker (claude or codex) and bridges
  * worker ↔ channel events.jsonl.
  *
- * Run as: `trellis channel __supervisor <channel> <worker> <config-path>`
+ * Run as: `research-trellis channel __supervisor <channel> <worker> <config-path>`
  *
  * Three concurrent loops:
  *   1. stdout reader  — parse worker stdout → adapter → append events
@@ -20,7 +20,7 @@ import type { Readable, Writable } from "node:stream";
 import {
   DEFAULT_INBOX_POLICY,
   type InboxPolicy,
-} from "trellis-hermes-core/channel";
+} from "research-trellis-core/channel";
 
 import { getAdapter, type Provider } from "./adapters/index.js";
 import { appendEvent } from "./store/events.js";
@@ -69,7 +69,7 @@ type Child = ChildProcessByStdio<Writable, Readable, Readable>;
 const SHUTDOWN_GRACE_MS = 3000;
 
 /**
- * Entry point invoked by `trellis channel __supervisor <channel> <worker> <config>`.
+ * Entry point invoked by `research-trellis channel __supervisor <channel> <worker> <config>`.
  */
 export async function runSupervisor(
   channelName: string,
@@ -78,7 +78,7 @@ export async function runSupervisor(
 ): Promise<void> {
   const config = readConfig(configPath);
 
-  // Self-pid file lets `trellis channel kill` find us.
+  // Self-pid file lets `research-trellis channel kill` find us.
   const project = process.env.TRELLIS_CHANNEL_PROJECT;
   fs.writeFileSync(
     workerFile(channelName, workerName, "pid", project),

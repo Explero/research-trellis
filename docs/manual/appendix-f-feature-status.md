@@ -6,7 +6,7 @@
 
 ## 适用范围
 
-适用于 `0.6.0-beta.30`（测试版），后续版本应重新核对。
+适用于 `0.6.0-beta.31`（测试版），后续版本应重新核对。
 
 ## 前置条件
 
@@ -47,7 +47,7 @@
 - 项目和两个发布包的 `SPDX`（许可证标识）以及根说明统一使用 `AGPL-3.0-or-later`（AGPL 第 3 版或任何后续版本），与上游 `COPYRIGHT`（版权声明）中“version 3 or any later version”（第 3 版或任何后续版本）的授权口径一致。
 - 根目录 `LICENSE`（许可证原文）和 `COPYRIGHT`（版权声明）必须随分发内容保留；发布预检只核对元数据与说明的一致性，不改写或缩减上游权利文本。
 - 发布修改版时应明确标注修改事实和日期，保留上游版权信息，并提供许可证要求的对应源码获取方式。
-- `trellis-hermes`（CLI 包）和 `trellis-hermes-core`（核心包）的打包清单都必须包含 `LICENSE`（许可证）和 `COPYRIGHT`（版权声明）；发布预检会对缺失文件失败关闭，不改写上游权利文本。
+- `research-trellis`（CLI 包）和 `research-trellis-core`（核心包）的打包清单都必须包含 `LICENSE`（许可证）和 `COPYRIGHT`（版权声明）；发布预检会对缺失文件失败关闭，不改写上游权利文本。
 
 ## 预期结果
 
@@ -59,9 +59,9 @@
 
 ## 验证记录
 
-- 日期：2026-07-14。
-- 版本：`0.6.0-beta.30`（测试版）。
-- 基准提交：`9f7dc8497b4782878d6fa7ac3b63eba5bde507df`（当前基）。
+- 日期：2026-07-15。
+- 版本：`0.6.0-beta.31`（测试版）。
+- 更名前基准提交：`9f7dc8497b4782878d6fa7ac3b63eba5bde507df`。
 - 命令：`node packages/cli/scripts/release-preflight.js check-licenses`（许可证元数据与权利说明一致性检查）；`rg -n -m 1 "COPYRIGHT|LICENSE|files" packages/cli/package.json packages/core/package.json packages/cli/scripts/release-preflight.js`（打包权利文件核对）。
 - 结果：项目和两个包的 `SPDX`（许可证标识）均为 `AGPL-3.0-or-later`（AGPL 第 3 版或任何后续版本）；两个包均声明 `LICENSE`（许可证）和 `COPYRIGHT`（版权声明），发布预检也将其列为必需文件。
 - 未验证项：许可证对特定分发或部署场景的适用性仍需维护者或法律专业人员确认。

@@ -36,7 +36,7 @@ jobs:
         run: pnpm build
 
       - name: Hermes preflight
-        run: pnpm --filter trellis-hermes hermes:preflight
+        run: pnpm --filter research-trellis hermes:preflight
 
       - name: Pack publish artifacts
         run: node packages/cli/scripts/release-preflight.js pack-publish-artifacts
@@ -83,11 +83,13 @@ jobs:
           cd "${smoke_dir}"
           npm install --ignore-scripts "${tarballs[@]}"
 
-          expected_version="$(node -p "require('./node_modules/trellis-hermes/package.json').version")"
-          core_version="$(node -p "require('./node_modules/trellis-hermes-core/package.json').version")"
+          expected_version="$(node -p "require('./node_modules/research-trellis/package.json').version")"
+          core_version="$(node -p "require('./node_modules/research-trellis-core/package.json').version")"
           test "${core_version}" = "${expected_version}"
+          test "$(./node_modules/.bin/research-trellis --version)" = "${expected_version}"
           test "$(./node_modules/.bin/trellis --version)" = "${expected_version}"
           test "$(./node_modules/.bin/tl --version)" = "${expected_version}"
+          ./node_modules/.bin/research-trellis --help >/dev/null
           ./node_modules/.bin/trellis --help >/dev/null
           ./node_modules/.bin/tl --help >/dev/null
 
@@ -95,14 +97,14 @@ jobs:
           import fs from "node:fs";
           import path from "node:path";
 
-          const cliRoot = path.join(process.cwd(), "node_modules/trellis-hermes");
+          const cliRoot = path.join(process.cwd(), "node_modules/research-trellis");
           const cliPackage = JSON.parse(
             fs.readFileSync(path.join(cliRoot, "package.json"), "utf8"),
           );
-          const coreDependency = cliPackage.dependencies?.["trellis-hermes-core"];
+          const coreDependency = cliPackage.dependencies?.["research-trellis-core"];
           if (coreDependency !== cliPackage.version) {
             throw new Error(
-              `trellis-hermes depends on trellis-hermes-core@${coreDependency}, expected exact ${cliPackage.version}`,
+              `research-trellis depends on research-trellis-core@${coreDependency}, expected exact ${cliPackage.version}`,
             );
           }
 
@@ -123,12 +125,12 @@ jobs:
           }
 
           const specifiers = [
-            "trellis-hermes",
-            "trellis-hermes-core",
-            "trellis-hermes-core/channel",
-            "trellis-hermes-core/mem",
-            "trellis-hermes-core/task",
-            "trellis-hermes-core/testing",
+            "research-trellis",
+            "research-trellis-core",
+            "research-trellis-core/channel",
+            "research-trellis-core/mem",
+            "research-trellis-core/task",
+            "research-trellis-core/testing",
           ];
           await Promise.all(specifiers.map((specifier) => import(specifier)));
           NODE

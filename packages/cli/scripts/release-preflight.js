@@ -299,7 +299,7 @@ function preparePackedCli() {
 }
 
 function verifyHermesPythonTemplates({ quiet = false } = {}) {
-  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "trellis-hermes-pycompile-"));
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "research-trellis-pycompile-"));
   try {
     const files = HERMES_PYTHON_TEMPLATE_FILES.map((file) => path.join(REPO_ROOT, file));
     for (const file of files) {

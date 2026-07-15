@@ -1,5 +1,5 @@
 /**
- * Public input / output types for `trellis-hermes-core/mem`.
+ * Public input / output types for `research-trellis-core/mem`.
  *
  * This model serves persisted AI-session retrieval and dialogue-context
  * extraction only. It is intentionally separate from the channel event schema:

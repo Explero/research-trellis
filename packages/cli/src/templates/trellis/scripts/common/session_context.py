@@ -44,7 +44,7 @@ from .paths import (
 # Helpers
 # =============================================================================
 
-_PACKAGE_NAME = "trellis-hermes"
+_PACKAGE_NAME = "research-trellis"
 _UPDATE_CHECK_TIMEOUT_SECONDS = 1.0
 _VERSION_RE = re.compile(
     r"^\s*(\d+)(?:\.(\d+))?(?:\.(\d+))?(?:-([0-9A-Za-z.-]+))?\s*$"
@@ -277,7 +277,7 @@ def _read_project_version(repo_root: Path) -> str | None:
 def _fetch_trellis_version_output() -> str | None:
     try:
         result = subprocess.run(
-            ["trellis", "--version"],
+            ["research-trellis", "--version"],
             capture_output=True,
             text=True,
             encoding="utf-8",
@@ -295,7 +295,7 @@ def _fetch_trellis_version_output() -> str | None:
 
 def _extract_available_update_version(output: str) -> str | None:
     update_match = re.search(
-        r"Trellis update available:\s*"
+        r"(?:Research )?Trellis update available:\s*"
         r"(?P<current>\S+)\s*(?:→|->)\s*(?P<latest>\S+)",
         output,
     )
@@ -411,8 +411,8 @@ def _get_update_hint(repo_root: Path) -> str | None:
         return None
 
     return (
-        f"Trellis update available: {current_version} -> {latest_version}, "
-        "run trellis upgrade"
+        f"Research Trellis update available: {current_version} -> {latest_version}, "
+        "run research-trellis upgrade"
     )
 
 
