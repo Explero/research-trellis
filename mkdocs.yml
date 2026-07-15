@@ -1,0 +1,93 @@
+site_name: Trellis-Hermes 中文手册
+site_description: Trellis-Hermes 科研工作流的安装、使用、审计与维护手册
+site_url: https://explero.github.io/Trellis-Hermes/
+repo_url: https://github.com/Explero/Trellis-Hermes
+repo_name: Explero/Trellis-Hermes
+edit_uri: edit/main/docs/manual/
+
+docs_dir: docs/manual
+site_dir: site
+
+theme:
+  name: material
+  language: zh
+  logo: assets/trellis.png
+  favicon: assets/trellis.png
+  features:
+    - content.code.copy
+    - navigation.footer
+    - navigation.indexes
+    - navigation.instant
+    - navigation.sections
+    - navigation.top
+    - search.highlight
+    - search.suggest
+    - toc.follow
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: green
+      accent: amber
+      toggle:
+        icon: material/brightness-7
+        name: 切换到深色模式
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: green
+      accent: amber
+      toggle:
+        icon: material/brightness-4
+        name: 切换到浅色模式
+
+plugins:
+  - search:
+      lang: zh
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.details
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.superfences
+
+extra_css:
+  - stylesheets/extra.css
+
+copyright: Copyright 2026 Trellis-Hermes contributors. Based on mindfold-ai/Trellis.
+
+nav:
+  - 首页: README.md
+  - 入门:
+      - 项目概览: 01-overview.md
+      - 安装: 02-installation.md
+      - 第一个科研任务: 03-first-research-task.md
+      - 工作原理: 04-how-it-works.md
+  - 项目与任务:
+      - 项目初始化: 05-project-setup.md
+      - 任务与规划: 06-tasks-and-planning.md
+      - 规范与上下文: 07-spec-and-context.md
+  - 科研记录:
+      - Hermes 记录: 08-hermes-records.md
+      - 实验配置: 09-experiments.md
+      - 运行与复查: 10-runs-and-replay.md
+      - 指标与比较: 11-metrics-and-comparison.md
+      - 报告与主张: 12-reports-and-claims.md
+  - 协作与维护:
+      - 工作代理与门禁: 13-workers-and-gates.md
+      - 工作流与平台: 14-workflows-and-platforms.md
+      - 频道与会话记忆: 15-channel-and-memory.md
+      - 更新、恢复与卸载: 16-update-recovery-and-uninstall.md
+  - 附录:
+      - 常用命令: appendix-a-cli-reference.md
+      - 目录参考: appendix-b-directory-reference.md
+      - 配置参考: appendix-c-configuration-reference.md
+      - 记录格式: appendix-d-record-schema.md
+      - 排障: appendix-e-troubleshooting.md
+      - 功能状态、安全与许可证: appendix-f-feature-status.md
+      - 事实来源: sources.md
