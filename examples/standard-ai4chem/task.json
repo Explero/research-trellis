@@ -1,0 +1,86 @@
+{
+  "id": "standard-ai4chem-solubility",
+  "name": "standard-ai4chem-solubility",
+  "title": "固定切分溶解度模型比较",
+  "description": "在固定分子数据切分上比较基线与候选模型",
+  "status": "planning",
+  "dev_type": null,
+  "scope": null,
+  "package": null,
+  "priority": "P1",
+  "creator": "researcher",
+  "assignee": "researcher",
+  "createdAt": "2026-07-15",
+  "completedAt": null,
+  "branch": null,
+  "base_branch": "main",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [],
+  "parent": null,
+  "relatedFiles": ["configs/solubility.yaml", "src/train.py", "src/evaluate.py"],
+  "notes": "示例仅用于规划，不代表真实科研结果。",
+  "meta": {
+    "research_contract": {
+      "hypothesis": "候选模型在固定测试集上的 RMSE 低于基线",
+      "dataset": "local-solubility-v1",
+      "split": "scaffold-v1",
+      "metric_definition": "test RMSE, lower_is_better",
+      "baseline": "baseline-rf-v1",
+      "claim_scope": "仅限固定数据版本和固定切分"
+    }
+  },
+  "hermes_phase": "planning",
+  "closure_state": "open",
+  "closure_mode": "standard",
+  "intent": "在固定数据和指标契约下得到可重复的候选模型比较结果",
+  "in_scope": ["local-solubility-v1", "scaffold-v1", "测试集 RMSE"],
+  "out_of_scope": ["跨数据集泛化", "临床或工业部署", "正式论文主张"],
+  "definition_of_done": [
+    "数据、切分和指标契约通过检查",
+    "基线与候选模型运行成功并登记产物",
+    "比较结果、证据和限制已记录"
+  ],
+  "work_packages": [
+    {
+      "id": "WP1",
+      "title": "锁定 AI4Chem 实验契约",
+      "outcome": "数据版本、切分、指标和基线定义可审阅且固定",
+      "done_when": ["数据、切分和指标契约通过检查", "实验配置校验通过", "数据和切分引用已确认"],
+      "evidence_required": ["experiment validation", "dataset provenance"],
+      "depends_on": [],
+      "status": "pending",
+      "evidence_refs": [],
+      "blocker": null
+    },
+    {
+      "id": "WP2",
+      "title": "产生可重复的模型运行",
+      "outcome": "基线和候选模型均完成可重复运行并登记产物",
+      "done_when": ["基线与候选模型运行成功并登记产物", "两次运行退出码为 0", "产物 hash 已登记", "测试集 RMSE 已记录"],
+      "evidence_required": ["run manifest", "artifact hash", "metrics"],
+      "depends_on": ["WP1"],
+      "status": "pending",
+      "evidence_refs": [],
+      "blocker": null
+    },
+    {
+      "id": "WP3",
+      "title": "形成受限的比较结论",
+      "outcome": "比较结果可追溯到运行和证据，并明确适用限制",
+      "done_when": ["比较结果、证据和限制已记录", "compare 记录存在", "evidence 记录存在", "claim limitations 已填写"],
+      "evidence_required": ["compare record", "evidence ledger", "claim limitations"],
+      "depends_on": ["WP2"],
+      "status": "pending",
+      "evidence_refs": [],
+      "blocker": null
+    }
+  ],
+  "current_work_package": null,
+  "next_action": "Run closure.py validate before starting work.",
+  "blockers": [],
+  "repair_count": 0,
+  "max_repair_count": 2
+}

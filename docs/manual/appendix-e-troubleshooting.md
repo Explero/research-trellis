@@ -19,7 +19,13 @@
 | 初始化提示 Python 不可用 | 确认 `python3 --version`（Python 版本）至少为 3.9，必要时设置 `TRELLIS_PYTHON_CMD`（Python 命令覆盖） |
 | 不允许在主目录初始化 | 进入真实项目根目录，不要绕过保护 |
 | 任务启动提示缺少会话身份 | 在人工智能会话运行，或设置唯一 `TRELLIS_CONTEXT_ID`（会话标识） |
+| 任务启动提示 closure 未准备 | 先填写 intent 和完成定义，再运行 `closure.py plan` 与 `closure.py validate` |
 | 任务启动提示实验无效 | 填完 `experiment.yaml`（实验配置）后单独运行实验校验 |
+| 工作包不能标记 done | 先运行 `package-check`，再用 `package-done --evidence` 登记真实验证引用 |
+| audit 显示 has_gaps | 按第一条 package、missing 和 action 补齐；不要自动生成新计划 |
+| repair 后仍有缺口 | 完成 repair 打开的工作包；超过上限后由人工停止任务，或批准 amend `max_repair_count` 并重新 validate |
+| amend 提示需要批准 | 数据集、假设、切分、指标、基线、主张范围和 scope 变化需真实 `human/root` 批准 |
+| archive 提示 closure 未关闭 | 先运行 `closure.py audit` 和 `closure.py close`；旧任务无 closure 字段时不受此限制 |
 | 运行命令被拒绝 | 核对允许命令和任务卡，不要扩大为笼统命令 |
 | 工作代理记录无效 | 先校验必填字段、唯一任务卡和文件范围 |
 | 质量门禁缺少统计字段 | 见[指标与比较](11-metrics-and-comparison.md)中的当前限制 |
@@ -33,6 +39,8 @@
 research-trellis --version
 python3 ./.trellis/scripts/task.py current --source
 python3 ./.trellis/scripts/task.py list
+python3 ./.trellis/scripts/closure.py status --task "$TASK"
+python3 ./.trellis/scripts/closure.py capsule --task "$TASK"
 ```
 
 ## 预期结果
@@ -46,7 +54,7 @@ python3 ./.trellis/scripts/task.py list
 ## 验证记录
 
 - 日期：2026-07-15。
-- 版本：`0.6.0-beta.31`（测试版）。
+- 版本：`0.7.0-beta.0`（测试版）。
 - 更名前基准提交：`9f7dc8497b4782878d6fa7ac3b63eba5bde507df`。
 - 命令：`rg -n -m 1 "quality gate|missing evidence|approval" packages/cli/src/templates/trellis/scripts/hermes packages/cli/test/templates/hermes-runtime.test.ts`（失败关闭分支核对）。
 - 结果：质量门禁、缺失证据和审批失败分支都有实现或测试依据。

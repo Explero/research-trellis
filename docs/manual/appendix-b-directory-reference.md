@@ -27,7 +27,10 @@
 │       ├── prd.md
 │       ├── implement.jsonl
 │       ├── check.jsonl
+│       ├── HANDOFF.md
+│       ├── closure-report.md
 │       └── hermes/
+│           └── task-events.jsonl
 ├── workspace/
 ├── hermes/
 └── scripts/
@@ -36,6 +39,8 @@
 
 - `.trellis/hermes/`（全局科研模板）只保存约定和模板。
 - `.trellis/tasks/<task>/hermes/`（任务科研记录）保存任务事实。
+- `task.json`（任务状态）保存当前 closure 状态；`task-events.jsonl`（任务事件）只追加重要历史。
+- `HANDOFF.md`（交接）按条件生成；`closure-report.md`（关闭报告）由通过的收口审计生成。
 - `.trellis/.runtime/`（会话运行状态）保存活动任务指针，通常不提交。
 - `.codex/`（Codex 配置）、`.claude/`（Claude 配置）等目录由平台选择决定。
 
@@ -50,7 +55,7 @@
 ## 验证记录
 
 - 日期：2026-07-15。
-- 版本：`0.6.0-beta.31`（测试版）。
+- 版本：`0.7.0-beta.0`（测试版）。
 - 更名前基准提交：`9f7dc8497b4782878d6fa7ac3b63eba5bde507df`。
 - 命令：`rg -n -m 1 "tasks|hermes|workflow" packages/cli/src/constants packages/cli/src/configurators packages/cli/src/templates/trellis`（目录来源核对）。
 - 结果：项目、任务和科研记录目录均与当前常量及模板对齐。

@@ -2,7 +2,7 @@
 
 ## 目标
 
-用任务目录保存需求和计划，并正确区分创建、启动、结束当前会话和归档。
+用任务目录保存需求和计划，通过 1–4 个工作包适度拆解，并正确区分运行、工作包完成、任务关闭和归档。
 
 ## 适用范围
 
@@ -28,47 +28,58 @@ python3 ./.trellis/scripts/task.py list
 - 轻量任务可以只有 `prd.md`（需求文档）；
 - 复杂任务应在启动前补齐 `prd.md`（需求文档）、`design.md`（设计文档）和 `implement.md`（实施计划）；
 - 需要工作代理读取额外规范或研究材料时，整理 `implement.jsonl`（实现上下文）和 `check.jsonl`（检查上下文）。
+- 默认只保留一个 task（任务），内部使用 1–4 个 work packages（工作包）；读取文件、修改文件和运行命令不是独立工作包。
+- 只有独立产物、独立验证、独立执行环境、可并行或独立审查等条件中至少满足两项时，才建立独立工作包或真正的 subtask（子任务）。
 
-3. 检查上下文并启动：
+3. 生成候选工作包并校验：
 
 ```bash
 TASK="$(find .trellis/tasks -maxdepth 1 -type d -name '*-fixed-eval' -printf '%f\n' | sort | tail -n 1)"
+python3 ./.trellis/scripts/closure.py plan --task "$TASK" \
+  --intent "在固定数据切分上得到经过验证的评估结果" \
+  --in-scope "固定数据与固定指标" \
+  --out-of-scope "论文级主张" \
+  --done-when "评估运行成功并记录基础验证证据"
+python3 ./.trellis/scripts/closure.py validate --task "$TASK"
 python3 ./.trellis/scripts/task.py validate "$TASK"
 python3 ./.trellis/scripts/hermes/experiment.py validate --task "$TASK"
 python3 ./.trellis/scripts/task.py start "$TASK"
 ```
 
-4. 查看当前任务和来源：
+4. 查看当前任务、来源和紧凑上下文：
 
 ```bash
 python3 ./.trellis/scripts/task.py current --source
+python3 ./.trellis/scripts/closure.py capsule --task "$TASK"
 ```
 
-5. 工作结束后的两个动作含义不同：
+5. 工作结束后的状态含义不同：
 
 ```bash
+python3 ./.trellis/scripts/closure.py package-check --task "$TASK"
+python3 ./.trellis/scripts/closure.py package-done --task "$TASK" --evidence "验证命令或报告引用"
+python3 ./.trellis/scripts/closure.py audit --task "$TASK"
+python3 ./.trellis/scripts/closure.py close --task "$TASK"
 python3 ./.trellis/scripts/task.py finish
 python3 ./.trellis/scripts/task.py archive "$TASK" --no-commit
 ```
 
-第一条只清除当前会话指针；第二条把任务标为已完成并移动到按月份组织的归档目录。去掉 `--no-commit`（不自动提交）后，默认配置可能自动提交归档改动。
+`package-done`（工作包完成）只处置当前结果；`close`（关闭）先做收口审计，成功后才把任务改为 `completed`（已完成）；`finish`（结束会话）只清除当前会话指针；`archive`（归档）移动已关闭任务。closure 未关闭时归档会被拒绝，旧任务没有 closure 字段时继续走原版兼容流程。
 
-6. 执行中需要改动需求、实验配置或评估基线时，使用追加式计划变更流程：
+6. 执行中需要改动计划时，使用 closure 变更命令：
 
 ```bash
-NOW="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-PROPOSAL="pc-$(date -u +%Y%m%d-%H%M%S)-proposal"
-python3 ./.trellis/scripts/hermes/record.py append --task "$TASK" --record-type plan_change --json "{\"type\":\"plan_change\",\"id\":\"$PROPOSAL\",\"timestamp\":\"$NOW\",\"plan_ref\":\"implement.md\",\"change_summary\":\"将评估限定为固定切分\",\"reason\":\"原范围超出任务时间\",\"requested_by\":\"coordinator\",\"decision_state\":\"proposed\",\"evidence_refs\":[],\"supersedes\":[]}"
-python3 ./.trellis/scripts/hermes/validate.py --task "$TASK" --kind plan_change
+python3 ./.trellis/scripts/closure.py amend --task "$TASK" \
+  --field work_packages.WP1.done_when \
+  --value '["固定切分评估通过"]' \
+  --reason "验收条件需要明确固定切分"
 ```
 
-审阅者先读取 `plan_ref`（计划引用）、变更理由和证据，再用新编号追加 `accepted`（已接受）或 `rejected`（已拒绝）记录，并令 `supersedes`（替代对象）指向 `$PROPOSAL`。只有接受后才修改计划文件；新方案取代已接受方案时，再追加 `superseded`（已被替代）记录指向旧决定，然后为新方案重复提出和审阅。最后重新运行 `plan_change`（计划变更）、任务和实验校验。
-
-校验器只检查必填字段、决定值、唯一编号和引用列表的结构；它不验证审阅者身份、证据编号是否存在、决定链是否完整，也不会自动修改计划文件。
+数据集、研究假设、数据切分、指标定义、基线、主张范围和任务范围属于高风险字段，必须增加 `--approved-by human/root`（人工批准）。变更直接写入 `task.json`（任务状态），同时向 `task-events.jsonl`（任务事件）追加 `plan_amended`（计划已修改）记录；变更后重新运行 closure 校验。正式研究仍可额外使用 Hermes `plan_change`（研究计划变更记录）保存更完整的提案和审阅链。
 
 ## 预期结果
 
-任务创建时状态为 `planning`（规划中）；启动后变为 `in_progress`（进行中）；归档后变为 `completed`（已完成）并移动到 `.trellis/tasks/archive/<year-month>/`（月度归档目录）。
+任务创建时状态为 `planning`（规划中）；启动后变为 `in_progress`（进行中）；只有 close gate（关闭门禁）通过后才变为 `completed`（已完成），随后可移动到 `.trellis/tasks/archive/<year-month>/`（月度归档目录）。
 
 ## 失败恢复
 
@@ -80,7 +91,7 @@ python3 ./.trellis/scripts/hermes/validate.py --task "$TASK" --kind plan_change
 ## 验证记录
 
 - 日期：2026-07-15。
-- 版本：`0.6.0-beta.31`（测试版）。
+- 版本：`0.7.0-beta.0`（测试版）。
 - 更名前基准提交：`9f7dc8497b4782878d6fa7ac3b63eba5bde507df`。
 - 命令：`rg -n "plan_change|decision_state|supersedes" packages/cli/src/templates/trellis/scripts/hermes packages/cli/test/templates/hermes-runtime.test.ts`（变更协议核对）。
 - 结果：提出、审阅、接受或拒绝、替代和校验流程已补全，并明示了结构校验边界。

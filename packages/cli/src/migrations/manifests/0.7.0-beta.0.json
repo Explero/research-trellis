@@ -1,0 +1,9 @@
+{
+  "version": "0.7.0-beta.0",
+  "description": "新增 Lean Research Closure，以轻量工作包、紧凑上下文和关闭门禁防止任务提前结束。",
+  "breaking": false,
+  "recommendMigrate": false,
+  "changelog": "**Lean Research Closure：**\n- feat(closure): 新任务默认使用 lean closure，并在一个 Trellis task 内安排 1–4 个结果型工作包。\n- feat(closure): 新增 plan、validate、capsule、package、audit、repair、amend、handoff 和 close 命令。\n- feat(workflow): Task Capsule 成为 closure 任务的默认每轮上下文，完整历史和无关规范改为按需读取。\n- feat(gates): closure 未通过时拒绝归档；standard 和 publication 模式按需增加科研证据门禁。\n- fix(types): 修正 Hermes 容器镜像类型收窄和记录校验未使用返回值，Python 静态检查恢复通过。\n- docs: 新增中文手册章节、lean 示例和 standard AI4Chem 示例。\n\n**兼容性：**\n- 原版 task.json.status 仍只使用 planning、in_progress 和 completed。\n- 旧任务没有 closure 字段时继续使用原版启动和归档兼容行为。\n- 现有 task、workflow 和平台目录保持兼容。",
+  "migrations": [],
+  "notes": "运行 research-trellis update 后，新模板会加入 closure.py 和 compact capsule hook。旧任务不自动改写；新任务需要先 plan/validate，close 后才能 archive。"
+}

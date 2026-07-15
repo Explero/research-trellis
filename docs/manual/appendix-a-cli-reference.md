@@ -6,7 +6,7 @@
 
 ## 适用范围
 
-适用于 `0.6.0-beta.31`（测试版）。
+适用于 `0.7.0-beta.0`（测试版）。
 
 ## 前置条件
 
@@ -39,6 +39,26 @@ python3 ./.trellis/scripts/task.py finish
 python3 ./.trellis/scripts/task.py archive "$TASK" --no-commit
 ```
 
+Closure 命令：
+
+```bash
+python3 ./.trellis/scripts/closure.py --help
+python3 ./.trellis/scripts/closure.py plan --task "$TASK"
+python3 ./.trellis/scripts/closure.py validate --task "$TASK"
+python3 ./.trellis/scripts/closure.py status --task "$TASK"
+python3 ./.trellis/scripts/closure.py next --task "$TASK"
+python3 ./.trellis/scripts/closure.py capsule --task "$TASK"
+python3 ./.trellis/scripts/closure.py package-start --task "$TASK"
+python3 ./.trellis/scripts/closure.py package-check --task "$TASK"
+python3 ./.trellis/scripts/closure.py package-done --task "$TASK" --evidence "验证引用"
+python3 ./.trellis/scripts/closure.py package-block --task "$TASK" --reason "阻塞原因"
+python3 ./.trellis/scripts/closure.py amend --task "$TASK" --field <field> --value <value> --reason <reason>
+python3 ./.trellis/scripts/closure.py audit --task "$TASK"
+python3 ./.trellis/scripts/closure.py repair --task "$TASK"
+python3 ./.trellis/scripts/closure.py handoff --task "$TASK"
+python3 ./.trellis/scripts/closure.py close --task "$TASK"
+```
+
 科研命令：
 
 ```bash
@@ -53,7 +73,7 @@ python3 ./.trellis/scripts/hermes/report.py quality-gate --task "$TASK"
 python3 ./.trellis/scripts/hermes/jobs.py check --task "$TASK"
 ```
 
-高风险入口包括 `research-trellis init --force`（强制初始化）、`research-trellis update --force`（强制更新）、`research-trellis uninstall --yes`（确认卸载）、`research-trellis channel rm`（删除频道）和 `task.py archive`（归档任务，默认可能提交）。
+高风险入口包括 `research-trellis init --force`（强制初始化）、`research-trellis update --force`（强制更新）、`research-trellis uninstall --yes`（确认卸载）、`research-trellis channel rm`（删除频道）、高风险 `closure.py amend`（计划变更）和 `task.py archive`（归档任务，默认可能提交）。
 
 ## 预期结果
 
@@ -66,7 +86,7 @@ python3 ./.trellis/scripts/hermes/jobs.py check --task "$TASK"
 ## 验证记录
 
 - 日期：2026-07-15。
-- 版本：`0.6.0-beta.31`（测试版）。
+- 版本：`0.7.0-beta.0`（测试版）。
 - 更名前基准提交：`9f7dc8497b4782878d6fa7ac3b63eba5bde507df`。
 - 命令：`rg -n -m 1 "\.command\(|task.py|hermes/" packages/cli/src/cli packages/cli/src/templates/trellis/scripts`（常用入口核对）。
 - 结果：本页列出的主命令、任务脚本和科研脚本入口均可定位。

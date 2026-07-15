@@ -69,19 +69,21 @@ trust_level = "trusted"
 
 `codex.dispatch_mode: inline`（Codex 主会话路由）是显式兼容模式，只改变工作流提示路由，不会绕过已启用的 `PreToolUse`（工具使用前）门禁。门禁活跃时不要使用它要求主会话直接写入。
 
+v0.7 的 closure 任务优先注入 Task Capsule（紧凑任务上下文），不默认注入完整 PRD、历史报告、事件和全部规范。Claude Code、Codex 和 OpenCode 使用相同字段与长度上限；Gemini、Qoder、CodeBuddy、Copilot 和 Factory Droid 通过共享每轮 hook 获得相同 Python 实现；Cursor 只在会话开始获得 capsule。Kiro、Kilo、Antigravity、Windsurf 和没有触发主会话 hook 的环境需要显式运行 `closure.py capsule`（生成紧凑上下文）。
+
 6. 逐平台能力和限制如下。“子代理”表示仓库会安装对应代理模板；“门禁”专指 `hermes-runtime-guard.py`（Hermes 运行时门禁），不包括只做上下文注入的同名钩子事件。
 
 | 平台 | 主会话上下文 | 子代理与上下文 | `PreToolUse / Stop`（门禁） | 启用条件与限制 |
 | --- | --- | --- | --- | --- |
 | `Claude Code`（Claude 代码工具） | `SessionStart + UserPromptSubmit`（会话开始和用户提交） | 支持；`Task / Agent`（代理工具）前推送任务上下文 | 两者都有 | 需平台读取项目 `settings.json`（设置）；环境开关可关闭 |
-| `Cursor`（Cursor 编辑器） | `sessionStart`（会话开始）和命令行上下文 | 支持；`Task / Subagent`（子代理工具）前推送 | 无 | 只有平台实际触发 `.cursor/hooks.json`（Cursor 钩子）时才注入 |
-| `OpenCode`（开放代码工具） | 无自动钩子 | 支持；代理按派发首行自行读取 | 无 | 依赖手动派发和代理前置说明 |
+| `Cursor`（Cursor 编辑器） | `sessionStart`（会话开始）注入 capsule 和命令行上下文 | 支持；`Task / Subagent`（子代理工具）前推送 | 无 | 没有每轮 capsule；只有平台实际触发 `.cursor/hooks.json`（Cursor 钩子）时才注入 |
+| `OpenCode`（开放代码工具） | `chat.message`（会话消息）注入会话摘要、每轮状态和 capsule | 支持；代理按派发首行自行读取 | 无 | 依赖 OpenCode 插件被实际加载；会话检索功能仍未实现 |
 | `Codex`（代码代理） | `UserPromptSubmit`（用户提交），无会话开始注入 | 支持；代理前置说明按派发首行拉取 | 两者都有 | 需用户级开关、项目信任和 `/hooks`（钩子审阅）；默认子代理 |
-| `Kilo CLI`（Kilo 命令行） | 无 | 无，主会话执行模板 | 无 | 依赖工作流文件和手动读取 |
+| `Kilo CLI`（Kilo 命令行） | 手动运行 capsule | 无，主会话执行模板 | 无 | 依赖工作流文件和手动读取 |
 | `Kiro Code`（Kiro 代码工具） | 无通用主会话注入 | 支持；`agentSpawn`（代理创建）时推送 | 无 | 只注册代理创建钩子，无会话开始和每轮主会话钩子 |
 | `Gemini CLI`（Gemini 命令行） | `SessionStart + BeforeAgent`（会话开始和代理前） | 支持；代理前置说明拉取 | 无 | 依赖 `.gemini/settings.json`（Gemini 设置）的当前钩子协议 |
-| `Antigravity`（Antigravity 工作流） | 无 | 无，主会话执行模板 | 无 | 依赖工作流和技能文件 |
-| `Windsurf`（Windsurf 编辑器） | 无 | 无，主会话执行模板 | 无 | 依赖工作流和技能文件 |
+| `Antigravity`（Antigravity 工作流） | 手动运行 capsule | 无，主会话执行模板 | 无 | 依赖工作流和技能文件 |
+| `Windsurf`（Windsurf 编辑器） | 手动运行 capsule | 无，主会话执行模板 | 无 | 依赖工作流和技能文件 |
 | `Qoder`（Qoder 工具） | `SessionStart + UserPromptSubmit`（会话开始和用户提交） | 支持；代理前置说明拉取 | 无 | 平台钩子失效时必须依赖派发首行 |
 | `CodeBuddy`（CodeBuddy 工具） | `SessionStart + UserPromptSubmit`（会话开始和用户提交） | 支持；`Task`（代理工具）前推送 | 无 | 其 `PreToolUse`（工具前）只用于上下文，不是 `Hermes`（科研工作流）门禁 |
 | `GitHub Copilot`（GitHub 编程助手） | `SessionStart + userPromptSubmitted`（会话开始和用户提交） | 支持；代理前置说明拉取 | 无 | `VS Code`（代码编辑器）代理钩子仍属预览能力，是否消费注入取决于安装版本 |
@@ -102,7 +104,7 @@ trust_level = "trusted"
 ## 验证记录
 
 - 日期：2026-07-15。
-- 版本：`0.6.0-beta.31`（测试版）。
+- 版本：`0.7.0-beta.0`（测试版）。
 - 更名前基准提交：`9f7dc8497b4782878d6fa7ac3b63eba5bde507df`。
 - 命令：`rg -n -m 1 "dispatch_mode|agentCapable|hasHooks" packages/cli/src packages/cli/test`（平台能力核对）。
 - 结果：14 个平台的上下文注入、子代理、门禁和启用条件已与注册表及钩子配置对齐。

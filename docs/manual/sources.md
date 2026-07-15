@@ -27,6 +27,7 @@
 - **S11**：[会话记忆命令](https://github.com/Explero/research-trellis/blob/main/packages/cli/src/commands/mem.ts)和 `packages/core/src/mem/`（会话记忆核心）。
 - **S12**：`packages/cli/test/`（命令与模板测试）、`packages/core/test/`（核心测试）和[科研预检脚本](https://github.com/Explero/research-trellis/blob/main/packages/cli/scripts/hermes-preflight.js)。
 - **S13**：[上游官方中文手册](https://docs.trytrellis.app/zh)：参考“概览、安装、首个任务、工作原理、日常使用、高级内容、附录”的教学顺序；访问日期为 2026-07-14。本手册不是该网站的官方翻译或镜像，科研功能仍以 S1 至 S12 为准。
+- **S14**：`packages/cli/src/templates/trellis/scripts/closure.py`（收口命令）、`common/closure.py`（收口状态与审计）、共享 hook（上下文钩子）、`packages/core/src/task/schema.ts`（任务结构）以及对应集成测试。
 
 ## 预期结果
 
@@ -39,7 +40,7 @@
 ## 验证记录
 
 - 日期：2026-07-15。
-- 版本：`0.6.0-beta.31`（测试版）。
+- 版本：`0.7.0-beta.0`（测试版）。
 - 更名前基准提交：`9f7dc8497b4782878d6fa7ac3b63eba5bde507df`。
 - 命令：`rg -n -m 1 "^## |^# " docs/manual/*.md`（手册结构核对）。
 - 结果：所有手册页的标题结构可读，来源索引仍指向当前仓库文件。

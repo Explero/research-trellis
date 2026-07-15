@@ -97,7 +97,7 @@ node packages/cli/scripts/release-preflight.js verify-packed-cli
 新包发布后，可固定安装本次测试版：
 
 ```bash
-npm install -g research-trellis@0.6.0-beta.31
+npm install -g research-trellis@0.7.0-beta.0
 research-trellis --version
 ```
 
@@ -107,7 +107,7 @@ research-trellis --version
 
 ```bash
 npm uninstall -g trellis-hermes
-npm install -g research-trellis@0.6.0-beta.31
+npm install -g research-trellis@0.7.0-beta.0
 research-trellis --version
 ```
 
@@ -148,10 +148,12 @@ node /path/to/research-trellis/packages/cli/bin/trellis.js update
 → 初始化或更新 Research Trellis
 → 用自然语言提出一个小任务
 → 让 AI 创建任务并补齐 planning
+→ 用 closure plan/validate 生成 1–4 个结果型工作包
 → 检查 .trellis/tasks/ 下的 prd/design/implement 产物
 → 派发一个低风险实现或检查子任务
 → 查看 Hermes worker records、报告和门禁结果
 → 运行项目自己的测试
+→ 执行 closure audit/close，确认不能提前结束
 → 决定保留、回滚或继续调整
 ```
 
@@ -187,7 +189,15 @@ node /path/to/research-trellis/packages/cli/bin/trellis.js update
 
 如果配置指向普通目录、无关仓库或不可识别的 worktree，流程会拒绝继续。
 
-### 5. 预检不是形式检查
+### 5. Lean Research Closure 防止提前结束
+
+新任务默认使用一个 Trellis task，并在内部安排 1–4 个结果型工作包。`task.json` 保存当前状态，`hermes/task-events.jsonl` 追加重要变化；每轮 hook 优先注入紧凑 Task Capsule，减少完整 PRD、历史报告和全部规范的重复加载。
+
+只有 `closure.py audit`（收口审计）通过后，`closure.py close`（关闭任务）才会写入 `completed`（已完成）。`lean`（轻量）、`standard`（标准）和 `publication`（发表）按需增加证据门禁；有限 repair（修复）不会扩大任务范围或改写已完成工作包。
+
+详见[中文手册：Lean Research Closure](docs/manual/17-lean-research-closure.md)。
+
+### 6. 预检不是形式检查
 
 `hermes:preflight`（Hermes 预检）会检查模板文件、Python 编译、Hermes hook、门禁文档、沙箱配置、模板测试、类型检查和构建。
 
@@ -208,6 +218,7 @@ node /path/to/research-trellis/packages/cli/bin/trellis.js update
 - Hermes 实验记录；
 - 子代理记录门禁；
 - planning 产物约束；
+- Lean Research Closure、Task Capsule 和有限修复；
 - 共享 worktree 检查；
 - 发布前预检。
 
