@@ -80,6 +80,7 @@ export const commonTypes = readTemplate("scripts/common/types.py");
 export const commonTasks = readTemplate("scripts/common/tasks.py");
 export const commonTaskContext = readTemplate("scripts/common/task_context.py");
 export const commonTaskStore = readTemplate("scripts/common/task_store.py");
+export const commonClosure = readTemplate("scripts/common/closure.py");
 export const commonSessionContext = readTemplate(
   "scripts/common/session_context.py",
 );
@@ -107,6 +108,7 @@ export const initDeveloperScript = readTemplate("scripts/init_developer.py");
 export const taskScript = readTemplate("scripts/task.py");
 export const getContextScript = readTemplate("scripts/get_context.py");
 export const addSessionScript = readTemplate("scripts/add_session.py");
+export const closureScript = readTemplate("scripts/closure.py");
 
 // Configuration files
 export const workflowMdTemplate = readTemplate("workflow.md");
@@ -139,6 +141,7 @@ export function getAllScripts(): Map<string, string> {
   scripts.set("common/tasks.py", commonTasks);
   scripts.set("common/task_context.py", commonTaskContext);
   scripts.set("common/task_store.py", commonTaskStore);
+  scripts.set("common/closure.py", commonClosure);
   scripts.set("common/session_context.py", commonSessionContext);
   scripts.set("common/packages_context.py", commonPackagesContext);
   scripts.set("common/workflow_phase.py", commonWorkflowPhase);
@@ -152,6 +155,7 @@ export function getAllScripts(): Map<string, string> {
   scripts.set("task.py", taskScript);
   scripts.set("get_context.py", getContextScript);
   scripts.set("add_session.py", addSessionScript);
+  scripts.set("closure.py", closureScript);
   scripts.set("trellis_switch.py", trellisSwitch);
   scripts.set("assert_trellis_enabled.py", assertTrellisEnabled);
 

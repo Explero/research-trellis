@@ -1,6 +1,6 @@
 {
   "name": "research-trellis-core",
-  "version": "0.6.0-beta.31",
+  "version": "0.7.0-beta.0",
   "description": "Research Trellis core SDK for channels, tasks, memory, and auditable research records",
   "type": "module",
   "main": "./dist/index.js",

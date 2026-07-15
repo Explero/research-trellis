@@ -265,6 +265,8 @@ def sandbox_execution_settings(experiment: dict[str, Any]) -> tuple[dict[str, An
         image_error = container_image_error(image)
         if image_error is not None:
             return settings, [image_error]
+        if not isinstance(image, str):
+            return settings, ["sandbox mode container requires sandbox.image"]
         settings["image"] = image.strip()
         return settings, []
     return settings, [

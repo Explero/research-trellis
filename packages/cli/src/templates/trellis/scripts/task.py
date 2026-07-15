@@ -205,6 +205,34 @@ def cmd_start(args: argparse.Namespace) -> int:
         task_dir = str(full_path)
 
     task_json_path = full_path / FILE_TASK_JSON
+    task_data = read_json(task_json_path) if task_json_path.is_file() else None
+    closure_package_id = None
+
+    if isinstance(task_data, dict):
+        from common.closure import is_closure_task, next_ready_package_id, validate_closure
+
+        if is_closure_task(task_data):
+            phase = task_data.get("hermes_phase")
+            if phase == "planning":
+                errors, _ = validate_closure(task_data)
+                detail = "; ".join(errors[:3]) if errors else "plan has not been validated"
+                print(colored(
+                    f"Error: Closure task is not ready: {detail}",
+                    Colors.RED,
+                ))
+                print("Run closure.py validate before task.py start.")
+                return 1
+            if phase == "ready":
+                closure_package_id = next_ready_package_id(task_data)
+                if closure_package_id is None:
+                    print(colored(
+                        "Error: Closure task has no dependency-ready work package.",
+                        Colors.RED,
+                    ))
+                    return 1
+            if phase == "closed" or task_data.get("closure_state") == "closed":
+                print(colored("Error: Closed closure task cannot be started.", Colors.RED))
+                return 1
 
     if not resolve_context_key():
         print(colored(
@@ -218,16 +246,38 @@ def cmd_start(args: argparse.Namespace) -> int:
         ))
         return 1
 
+    previous_active = resolve_active_task(repo_root)
     active = set_active_task(task_dir, repo_root)
     if active:
         print(colored(f"✓ Current task set to: {task_dir}", Colors.GREEN))
         print(f"Source: {active.source}")
 
-        if task_json_path.is_file():
-            data = read_json(task_json_path)
-            if data and data.get("status") == "planning":
-                data["status"] = "in_progress"
-                if write_json(task_json_path, data):
+        if isinstance(task_data, dict):
+            from common.closure import actor_name, is_closure_task, start_package
+
+            if is_closure_task(task_data):
+                if task_data.get("hermes_phase") == "ready":
+                    try:
+                        package = start_package(
+                            full_path,
+                            task_data,
+                            closure_package_id,
+                            actor=actor_name(repo_root),
+                            reason="task.py start",
+                        )
+                    except ValueError as exc:
+                        clear_active_task(repo_root)
+                        if previous_active.task_path:
+                            set_active_task(previous_active.task_path, repo_root)
+                        print(colored(f"Error: {exc}", Colors.RED))
+                        return 1
+                    print(colored(
+                        f"✓ Closure package started: {package['id']}",
+                        Colors.GREEN,
+                    ))
+            elif task_data.get("status") == "planning":
+                task_data["status"] = "in_progress"
+                if write_json(task_json_path, task_data):
                     print(colored("✓ Status: planning → in_progress", Colors.GREEN))
 
         print()
@@ -257,6 +307,20 @@ def cmd_finish(args: argparse.Namespace) -> int:
     print(f"Source: {active.source}")
 
     if task_json_path.is_file():
+        task_data = read_json(task_json_path)
+        if isinstance(task_data, dict):
+            from common.closure import is_closure_task, write_handoff
+
+            if is_closure_task(task_data) and task_data.get("closure_state") != "closed":
+                handoff_path = write_handoff(
+                    task_json_path.parent,
+                    task_data,
+                    repo_root,
+                )
+                print(colored(
+                    f"✓ Handoff updated: {handoff_path.relative_to(repo_root)}",
+                    Colors.GREEN,
+                ))
         run_task_hooks("after_finish", task_json_path, repo_root)
     return 0
 
