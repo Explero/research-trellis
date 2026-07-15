@@ -42,6 +42,7 @@ describe("hermes-preflight checks", () => {
       expect(result.ok).toBe(false);
       expect(result.messages.join("\n")).toContain("experiment.yaml");
       expect(result.messages.join("\n")).toContain("runner.py");
+      expect(result.messages.join("\n")).toContain("scripts/closure.py");
     });
   });
 
