@@ -3,13 +3,24 @@
 面向科研项目的 `Trellis`（原版 Trellis）实验性改造分支。
 
 [![CI](https://github.com/Explero/Trellis-Hermes/actions/workflows/ci.yml/badge.svg)](https://github.com/Explero/Trellis-Hermes/actions/workflows/ci.yml)
-[![License: AGPL-3.0](https://img.shields.io/badge/license-AGPL--3.0-16a34a.svg?style=flat-square)](LICENSE)
+[![License: AGPL-3.0-or-later](https://img.shields.io/badge/license-AGPL--3.0--or--later-16a34a.svg?style=flat-square)](LICENSE)
 
-这个仓库不是原版 `Trellis`（原版项目）的替代品，也不是已经准备大规模发布的 npm 包。它更接近一个科研项目里的工作流工具实验：在原版 Trellis 的任务、规范、平台接入基础上，加入更强的 `Hermes`（科研工作流）记录、门禁和子代理协作约束。
+这个仓库是在原版 `Trellis`（原版项目）基础上改造出来的科研实验分支，不是上游官方版本，也不代表上游项目立场。它更接近一个科研项目里的工作流工具实验：在原版 Trellis 的任务、规范、平台接入基础上，加入更强的 `Hermes`（科研工作流）记录、门禁和子代理协作约束。
 
 当前状态：可以放进低风险真实科研项目里试部署；不建议直接用于不可回滚的关键项目。
 
-准备发布到 npm 时，CLI 包名使用 `trellis-hermes`，核心包名使用 `trellis-hermes-core`。
+当前 npm 发布包为 `trellis-hermes`（CLI 包）和 `trellis-hermes-core`（核心包）。
+
+## 上游来源与修改声明
+
+本项目基于 `mindfold-ai/Trellis`（上游 Trellis 项目）继续修改，原项目地址为 `https://github.com/mindfold-ai/Trellis`（上游仓库）。
+
+为了避免混淆，这里先说明几个边界：
+
+- `Trellis-Hermes`（科研改造版）不是上游 `Trellis`（原版项目）的官方发布版本；
+- 仓库中的原始 Trellis 代码、模板、文档结构和许可证声明应继续归属于其原始作者和贡献者；
+- 本仓库新增和改动的部分主要围绕 `Hermes`（科研工作流）、记录门禁、子代理治理、科研计划变更记录和发布前预检；
+- 如果后续公开发布到 `npm`（包平台）或 `GitHub`（代码托管平台），应继续保留上游来源、许可证和修改说明。
 
 ## 这是什么
 
@@ -43,6 +54,33 @@ pnpm --filter trellis-hermes hermes:preflight
 
 你可以在 GitHub 的 `Actions`（自动化运行）页面里查看最新结果。绿色通过只说明当前仓库在干净环境里能安装、测试、构建和通过 Hermes 预检；它不等于已经完成公开发布级验证。
 
+## CD 发布准备
+
+仓库已经准备了 `.github/workflows/publish.yml`（发布流程）。这个流程不会在普通 `push`（推送）时发布，只会在 GitHub 上发布 `Release`（发布版本）时触发。
+
+发布流程会重新运行：
+
+```bash
+pnpm lint
+pnpm test
+pnpm build
+pnpm --filter trellis-hermes hermes:preflight
+node packages/cli/scripts/release-preflight.js check-versions --require-tag
+node packages/cli/scripts/release-preflight.js verify-packed-cli
+```
+
+检查通过后，它会先发布 `trellis-hermes-core`（核心包），再发布 `trellis-hermes`（CLI 包），最后从 npm registry 验证两个包是否可见。
+
+发布前还需要在 `npm`（包平台）侧完成：
+
+- 创建或认领 `trellis-hermes-core` 与 `trellis-hermes` 两个包；
+- 给两个包配置 `trusted publishing`（可信发布）；
+- `Owner`（所有者）填写 `Explero`，`Repository`（仓库）填写 `Trellis-Hermes`；
+- `Workflow filename`（流程文件名）填写 `publish.yml`；
+- `Environment`（环境）填写 `npm-production`。
+
+这个仓库不会保存 `NPM_TOKEN`（npm 令牌）。发布依赖 GitHub Actions 的 `id-token: write`（OIDC 身份令牌权限）和 npm 的 `trusted publishing`（可信发布）配置。
+
 ## 适合先放到什么项目里试
 
 建议先选择一个低风险真实项目：
@@ -56,7 +94,14 @@ pnpm --filter trellis-hermes hermes:preflight
 
 ## 从源码试用
 
-当前建议从 GitHub 源码运行；等 npm 发布完成后，再改用 `npm install -g trellis-hermes`。
+普通试用可安装已发布的测试版：
+
+```bash
+npm install -g trellis-hermes@0.6.0-beta.30
+trellis --version
+```
+
+需要修改或审阅实现时，再从 GitHub 源码运行：
 
 ```bash
 git clone git@github.com:Explero/Trellis-Hermes.git
@@ -114,19 +159,25 @@ node /path/to/Trellis-Hermes/packages/cli/bin/trellis.js update
 
 如果记录缺失、为空或格式不对，相关门禁会失败，而不是默认放行。
 
-### 2. 任务计划先落盘
+### 2. 三道闸门形成闭环
+
+`PreToolUse`（工具使用前）负责拦写入权限和危险动作；`RecordBus`（记录总线）负责保存每个 `agent`（代理）的 `JSONL`（逐行 JSON）记录；`Stop`（结束前）只读取 `RecordBus`（记录总线）、`git diff`（Git 差异）和测试运行记录做最终判定。
+
+也就是说：没有完成的 `coder`（编码代理）记录、没有 `passing`（通过）的 `runner`（运行代理）测试记录、没有 `reviewer`（审核代理）记录，任务就不能被判定为完成。
+
+### 3. 任务计划先落盘
 
 任务不再只是聊天里的临时约定。`prd.md`、`design.md`、`implement.md`、`implement.jsonl` 和 `check.jsonl` 用来保存需求、设计、实现策略和子代理上下文。
 
 这样做的代价是流程会慢一点；收益是后面可以 review、复盘和修正。
 
-### 3. 共享 worktree 策略更严格
+### 4. 共享 worktree 策略更严格
 
 对于需要子代理实现的任务，科研版更强调使用明确的共享工作目录，避免多个代理在不同目录里重复实现同一个任务。
 
 如果配置指向普通目录、无关仓库或不可识别的 worktree，流程会拒绝继续。
 
-### 4. 预检不是形式检查
+### 5. 预检不是形式检查
 
 `hermes:preflight`（Hermes 预检）会检查模板文件、Python 编译、Hermes hook、门禁文档、沙箱配置、模板测试、类型检查和构建。
 
@@ -150,7 +201,7 @@ node /path/to/Trellis-Hermes/packages/cli/bin/trellis.js update
 - 共享 worktree 检查；
 - 发布前预检。
 
-后续如果要改名并正式开源或发布 npm，需要再做一次包名、仓库链接、许可证说明、上游致谢、发布脚本和安装文档的集中整理。
+后续若再次改名或发布新版本，需同步核对包名、仓库链接、许可证说明、上游致谢、发布脚本和安装文档。
 
 ## 目录速览
 
@@ -203,6 +254,6 @@ pnpm --filter trellis-hermes hermes:preflight
 
 ## License
 
-本项目沿用 `AGPL-3.0-only`（AGPL 3.0 许可证）。
+本项目沿用上游项目授予的 `AGPL-3.0-or-later`（AGPL 第 3 版或任何后续版本）许可，不缩减 `COPYRIGHT`（版权声明）原文授予的权利。
 
-如果后续公开发布，需要明确保留上游 Trellis 的许可证与来源说明，并把当前科研改造部分的维护者、仓库地址和发布名称单独整理清楚。
+本仓库是基于 `mindfold-ai/Trellis`（上游 Trellis 项目）的修改版本。公开发布或分发时，应保留上游许可证、上游来源和本仓库的修改说明；当前仓库名称、包名和 `Hermes`（科研工作流）相关改造不表示上游官方认可或背书。

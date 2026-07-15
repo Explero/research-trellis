@@ -9,10 +9,14 @@ const scriptPath = path.join(
   repoRoot,
   "packages/cli/scripts/release-preflight.js",
 );
+const rootPkgPath = path.join(repoRoot, "package.json");
 const cliPkgPath = path.join(repoRoot, "packages/cli/package.json");
 const corePkgPath = path.join(repoRoot, "packages/core/package.json");
 
 const packedCliRequiredFiles = [
+  "package/README.md",
+  "package/LICENSE",
+  "package/COPYRIGHT",
   "package/package.json",
   "package/dist/templates/trellis/hermes/config.yaml",
   "package/dist/templates/trellis/hermes/HERMES_MAIN_AGENT_BOOT_GUARD.md",
@@ -26,6 +30,7 @@ const packedCliRequiredFiles = [
 const packedCoreRequiredFiles = [
   "package/README.md",
   "package/LICENSE",
+  "package/COPYRIGHT",
   "package/package.json",
   "package/dist/index.js",
   "package/dist/index.d.ts",
@@ -121,18 +126,78 @@ exit 1
   );
 }
 
+describe("release-preflight package metadata", () => {
+  it("keeps project, packages, docs, and the upstream grant on AGPL-3.0-or-later", () => {
+    const out = execFileSync(process.execPath, [scriptPath, "check-licenses"], {
+      cwd: repoRoot,
+      encoding: "utf-8",
+    });
+
+    expect(out).toContain("licenses agree on AGPL-3.0-or-later");
+    for (const packagePath of [rootPkgPath, corePkgPath, cliPkgPath]) {
+      const pkg = JSON.parse(fs.readFileSync(packagePath, "utf-8")) as {
+        license?: string;
+      };
+      expect(pkg.license).toBe("AGPL-3.0-or-later");
+    }
+  });
+
+  it("builds core before CLI through the lifecycle entry point", () => {
+    const corePkg = JSON.parse(fs.readFileSync(corePkgPath, "utf-8")) as {
+      name: string;
+    };
+    const cliPkg = JSON.parse(fs.readFileSync(cliPkgPath, "utf-8")) as {
+      name: string;
+    };
+    const commandLog = path.join(
+      os.tmpdir(),
+      `trellis-prepare-packed-cli-${process.pid}-${Date.now()}.txt`,
+    );
+    const pnpmBody =
+      process.platform === "win32"
+        ? `@echo off\r\necho %*>>"${commandLog}"\r\nexit /b 0\r\n`
+        : `#!/bin/sh\nprintf '%s\\n' "$*" >> '${commandLog}'\n`;
+
+    withTempBinScripts(
+      [{ name: process.platform === "win32" ? "pnpm.cmd" : "pnpm", body: pnpmBody }],
+      (binDir) => {
+        try {
+          execFileSync(process.execPath, [scriptPath, "prepare-packed-cli"], {
+            cwd: path.join(repoRoot, "packages/cli"),
+            env: {
+              ...process.env,
+              PATH: `${binDir}${path.delimiter}${process.env.PATH ?? ""}`,
+            },
+          });
+          expect(fs.readFileSync(commandLog, "utf-8").trim().split(/\r?\n/)).toEqual([
+            `--filter ${corePkg.name} build`,
+            `--filter ${cliPkg.name} build`,
+          ]);
+        } finally {
+          fs.rmSync(commandLog, { force: true });
+        }
+      },
+    );
+  });
+});
+
 describe("release-preflight verify-packed-core", () => {
   it("requires package docs, manifest, and every dist entry", () => {
     const out = runVerifyPackedCore(packedCoreRequiredFiles);
     expect(out).toContain("packed core includes package docs and dist entries");
   });
 
-  it("fails when the packed core is missing a required file", () => {
-    const incompleteFiles = packedCoreRequiredFiles.filter(
-      (file) => file !== "package/README.md",
-    );
-    expect(() => runVerifyPackedCore(incompleteFiles)).toThrowError(/README\.md/s);
-  });
+  it.each(["package/README.md", "package/COPYRIGHT"])(
+    "fails when the packed core is missing %s",
+    (missingFile) => {
+      const incompleteFiles = packedCoreRequiredFiles.filter(
+        (file) => file !== missingFile,
+      );
+      expect(() => runVerifyPackedCore(incompleteFiles)).toThrowError(
+        new RegExp(path.basename(missingFile)),
+      );
+    },
+  );
 });
 
 describe("release-preflight verify-packed-cli", () => {
@@ -219,7 +284,13 @@ describe("release-preflight verify-packed-cli", () => {
     );
   });
 
-  it("fails when packed CLI is missing Hermes runtime templates", () => {
+  it.each([
+    {
+      label: "a Hermes runtime template",
+      missingFile: "package/dist/templates/trellis/scripts/hermes/runner.py",
+    },
+    { label: "COPYRIGHT", missingFile: "package/COPYRIGHT" },
+  ])("fails when packed CLI is missing $label", ({ missingFile }) => {
     const cliPkg = JSON.parse(fs.readFileSync(cliPkgPath, "utf-8")) as {
       name: string;
       version: string;
@@ -229,7 +300,7 @@ describe("release-preflight verify-packed-cli", () => {
     };
     const tarball = `${cliPkg.name}-${cliPkg.version}.tgz`;
     const incompleteFiles = packedCliRequiredFiles.filter(
-      (file) => file !== "package/dist/templates/trellis/scripts/hermes/runner.py",
+      (file) => file !== missingFile,
     );
 
     const pnpmBody =
@@ -257,7 +328,7 @@ describe("release-preflight verify-packed-cli", () => {
             },
             stdio: ["pipe", "pipe", "pipe"],
           }),
-        ).toThrowError(/runner\.py/s);
+        ).toThrowError(new RegExp(path.basename(missingFile).replace(".", "\\.")));
       },
     );
   });

@@ -16,6 +16,9 @@
  * Commands:
  *   check-versions [--require-tag]   Verify core/cli (and optional GITHUB_REF
  *                                    tag) all agree on the exact version.
+ *   check-licenses                   Verify project/package SPDX metadata,
+ *                                    docs, and the upstream later-version grant.
+ *   prepare-packed-cli               Build core before CLI for pack/publish.
  *   npm-tag                          Print the computed npm dist-tag.
  *   publish-plan [--json|--github]   Decide which packages still need a
  *                                    publish. Idempotent: if a package
@@ -49,8 +52,20 @@ import { fileURLToPath } from "node:url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(__dirname, "../../..");
+const ROOT_PKG = path.join(REPO_ROOT, "package.json");
 const CORE_PKG = path.join(REPO_ROOT, "packages/core/package.json");
 const CLI_PKG = path.join(REPO_ROOT, "packages/cli/package.json");
+const ROOT_README = path.join(REPO_ROOT, "README.md");
+const CLI_README = path.join(REPO_ROOT, "packages/cli/README.md");
+const ROOT_COPYRIGHT = path.join(REPO_ROOT, "COPYRIGHT");
+const LICENSE_MANUAL = path.join(
+  REPO_ROOT,
+  "docs/manual/appendix-f-feature-status.md",
+);
+const EXPECTED_LICENSE = "AGPL-3.0-or-later";
+const FORBIDDEN_LICENSE = "AGPL-3.0-only";
+const CLI_PACK_LIFECYCLE =
+  "node scripts/release-preflight.js prepare-packed-cli && pnpm run sync-package-docs";
 const HERMES_PYTHON_TEMPLATE_FILES = [
   "packages/cli/src/templates/trellis/scripts/hermes/__init__.py",
   "packages/cli/src/templates/trellis/scripts/hermes/experiment.py",
@@ -65,6 +80,9 @@ const HERMES_PYTHON_TEMPLATE_FILES = [
   "packages/cli/src/templates/shared-hooks/hermes-runtime-guard.py",
 ];
 const PACKED_CLI_REQUIRED_FILES = [
+  "package/README.md",
+  "package/LICENSE",
+  "package/COPYRIGHT",
   "package/dist/templates/trellis/hermes/config.yaml",
   "package/dist/templates/trellis/hermes/HERMES_MAIN_AGENT_BOOT_GUARD.md",
   "package/dist/templates/trellis/hermes/state_machine.yaml",
@@ -82,6 +100,62 @@ const RESET = "\x1b[0m";
 
 function readJSON(p) {
   return JSON.parse(fs.readFileSync(p, "utf-8"));
+}
+
+function verifyLicenseConsistency({ quiet = false } = {}) {
+  const manifests = [
+    ["project", ROOT_PKG],
+    ["core package", CORE_PKG],
+    ["CLI package", CLI_PKG],
+  ];
+  for (const [label, manifestPath] of manifests) {
+    const license = readJSON(manifestPath).license;
+    if (license !== EXPECTED_LICENSE) {
+      fail(
+        `${label} SPDX license is "${license ?? "missing"}"; expected "${EXPECTED_LICENSE}".`,
+      );
+    }
+  }
+
+  const docs = [ROOT_README, CLI_README, LICENSE_MANUAL];
+  for (const docPath of docs) {
+    const text = fs.readFileSync(docPath, "utf-8");
+    const relativePath = path.relative(REPO_ROOT, docPath);
+    if (!text.includes(EXPECTED_LICENSE)) {
+      fail(`${relativePath} does not state ${EXPECTED_LICENSE}.`);
+    }
+    if (text.includes(FORBIDDEN_LICENSE)) {
+      fail(`${relativePath} still narrows the license to ${FORBIDDEN_LICENSE}.`);
+    }
+  }
+
+  const copyright = fs.readFileSync(ROOT_COPYRIGHT, "utf-8");
+  if (
+    !/either version 3 of the License, or\s+\(at your option\) any later version\./s.test(
+      copyright,
+    )
+  ) {
+    fail(
+      `COPYRIGHT must preserve the upstream "version 3 or any later version" grant.`,
+    );
+  }
+
+  if (!quiet) {
+    console.log(
+      `${GREEN}ok${RESET} project, package, and documentation licenses agree on ${EXPECTED_LICENSE}.`,
+    );
+  }
+}
+
+function verifyCliPackLifecycle() {
+  const scripts = readJSON(CLI_PKG).scripts ?? {};
+  for (const lifecycle of ["prepack", "prepublishOnly"]) {
+    if (scripts[lifecycle] !== CLI_PACK_LIFECYCLE) {
+      fail(
+        `CLI ${lifecycle} must run prepare-packed-cli before syncing package docs.`,
+      );
+    }
+  }
 }
 
 function readVersions() {
@@ -163,6 +237,8 @@ function fail(msg) {
 }
 
 function checkVersions({ requireTag, quiet = false }) {
+  verifyLicenseConsistency({ quiet: true });
+  verifyCliPackLifecycle();
   const v = readVersions();
   if (v.coreVersion !== v.cliVersion) {
     fail(
@@ -201,6 +277,25 @@ function checkVersions({ requireTag, quiet = false }) {
   }
   verifyHermesPythonTemplates({ quiet });
   return { ...v, tagVersion };
+}
+
+function preparePackedCli() {
+  verifyLicenseConsistency({ quiet: true });
+  verifyCliPackLifecycle();
+  const v = readVersions();
+  if (v.coreVersion !== v.cliVersion) {
+    fail(
+      `Version mismatch: ${v.coreName}@${v.coreVersion} != ${v.cliName}@${v.cliVersion}.`,
+    );
+  }
+  execFileSync("pnpm", ["--filter", v.coreName, "build"], {
+    cwd: REPO_ROOT,
+    stdio: "inherit",
+  });
+  execFileSync("pnpm", ["--filter", v.cliName, "build"], {
+    cwd: REPO_ROOT,
+    stdio: "inherit",
+  });
 }
 
 function verifyHermesPythonTemplates({ quiet = false } = {}) {
@@ -293,19 +388,24 @@ function withSyncedPackageDocs(packageDir, callback) {
 
   const readmePath = path.join(packageDir, "README.md");
   const licensePath = path.join(packageDir, "LICENSE");
+  const copyrightPath = path.join(packageDir, "COPYRIGHT");
   const rootReadmePath = path.join(REPO_ROOT, "README.md");
   const rootLicensePath = path.join(REPO_ROOT, "LICENSE");
+  const rootCopyrightPath = path.join(REPO_ROOT, "COPYRIGHT");
   const readmeSnapshot = snapshotFile(readmePath);
   const licenseSnapshot = snapshotFile(licensePath);
+  const copyrightSnapshot = snapshotFile(copyrightPath);
 
   fs.copyFileSync(rootReadmePath, readmePath);
   fs.copyFileSync(rootLicensePath, licensePath);
+  fs.copyFileSync(rootCopyrightPath, copyrightPath);
 
   try {
     return callback();
   } finally {
     restoreFileSnapshot(readmePath, readmeSnapshot);
     restoreFileSnapshot(licensePath, licenseSnapshot);
+    restoreFileSnapshot(copyrightPath, copyrightSnapshot);
   }
 }
 
@@ -352,6 +452,7 @@ function requiredPackedCoreFiles() {
   return [
     "package/README.md",
     "package/LICENSE",
+    "package/COPYRIGHT",
     "package/package.json",
     ...distEntries,
   ];
@@ -539,6 +640,8 @@ async function main() {
       `release-preflight <command>\n\n` +
         `commands:\n` +
         `  check-versions [--require-tag]\n` +
+        `  check-licenses\n` +
+        `  prepare-packed-cli\n` +
         `  npm-tag\n` +
         `  publish-plan [--json|--github]\n` +
         `  pack-publish-artifacts\n` +
@@ -551,6 +654,14 @@ async function main() {
   }
   if (cmd === "check-versions") {
     checkVersions({ requireTag: rest.includes("--require-tag") });
+    return;
+  }
+  if (cmd === "check-licenses") {
+    verifyLicenseConsistency();
+    return;
+  }
+  if (cmd === "prepare-packed-cli") {
+    preparePackedCli();
     return;
   }
   if (cmd === "npm-tag") {

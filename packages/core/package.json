@@ -36,7 +36,8 @@
   "files": [
     "dist",
     "README.md",
-    "LICENSE"
+    "LICENSE",
+    "COPYRIGHT"
   ],
   "sideEffects": false,
   "publishConfig": {
@@ -52,7 +53,8 @@
     "lint": "eslint src/ test/",
     "lint:fix": "eslint src/ test/ --fix",
     "typecheck": "tsc --noEmit",
-    "sync-package-docs": "node -e \"const fs=require('node:fs'); fs.copyFileSync('../../README.md','README.md'); fs.copyFileSync('../../LICENSE','LICENSE');\"",
+    "sync-package-docs": "node -e \"const fs=require('node:fs'); fs.copyFileSync('../../README.md','README.md'); fs.copyFileSync('../../LICENSE','LICENSE'); fs.copyFileSync('../../COPYRIGHT','COPYRIGHT');\"",
+    "prepack": "pnpm run build && pnpm run sync-package-docs",
     "prepublishOnly": "pnpm run build && pnpm run sync-package-docs"
   },
   "keywords": [
@@ -67,7 +69,7 @@
     "Mindfold LLC",
     "Trellis contributors"
   ],
-  "license": "AGPL-3.0-only",
+  "license": "AGPL-3.0-or-later",
   "devDependencies": {
     "@eslint/js": "^9.18.0",
     "@types/node": "^20.17.10",

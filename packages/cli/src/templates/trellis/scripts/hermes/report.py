@@ -337,11 +337,21 @@ def quality_gate_command(args: argparse.Namespace) -> int:
     task = args.task
     try:
         cmp_path = compare_path(root, task)
+        evidence_path = record_path(root, task, "evidence")
+        claim_path = record_path(root, task, "claim")
     except ValueError as exc:
         print(str(exc), file=sys.stderr)
         return 2
 
     compares, errors = load_compare_records(cmp_path)
+    evidence_errors = validate_records(evidence_path, "evidence")
+    claim_errors = validate_records(claim_path, "claim")
+    evidence_records, evidence_load_errors = records_by_id(evidence_path)
+    claim_records, claim_load_errors = records_by_id(claim_path)
+    errors.extend(evidence_errors)
+    errors.extend(claim_errors)
+    errors.extend(evidence_load_errors)
+    errors.extend(claim_load_errors)
     if not compares:
         errors.append("quality gate requires at least one compare record")
     for record in compares:
@@ -351,9 +361,21 @@ def quality_gate_command(args: argparse.Namespace) -> int:
         evidence_refs = record.get("evidence_refs")
         if not isinstance(evidence_refs, list) or not evidence_refs:
             errors.append(f"compare {compare_id} missing evidence_refs")
+        else:
+            for evidence_ref in evidence_refs:
+                if isinstance(evidence_ref, str) and evidence_ref not in evidence_records:
+                    errors.append(
+                        f"compare {compare_id} references missing evidence_id {evidence_ref}"
+                    )
         claim_refs = record.get("claim_refs")
         if not isinstance(claim_refs, list) or not claim_refs:
             errors.append(f"compare {compare_id} missing claim_refs")
+        else:
+            for claim_ref in claim_refs:
+                if isinstance(claim_ref, str) and claim_ref not in claim_records:
+                    errors.append(
+                        f"compare {compare_id} references missing claim_id {claim_ref}"
+                    )
         if "sample_count" not in record and "variance" not in record and "confidence_interval" not in record:
             errors.append(
                 f"compare {compare_id} missing sample_count, variance, or confidence_interval"

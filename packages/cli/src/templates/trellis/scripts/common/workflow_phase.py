@@ -144,21 +144,22 @@ def _platform_matches(platform: str, block_names: list[str]) -> bool:
 def resolve_effective_platform(platform: str, config: dict) -> str:
     """Map ``codex`` to a dispatch-mode-namespaced virtual platform name.
 
-    When ``--platform codex`` is passed, return ``"codex-inline"`` (default)
-    or ``"codex-sub-agent"`` based on ``.trellis/config.yaml`` ``codex.dispatch_mode``.
+    When ``--platform codex`` is passed, return ``"codex-sub-agent"`` (default)
+    or ``"codex-inline"`` based on ``.trellis/config.yaml`` ``codex.dispatch_mode``.
     ``filter_platform`` then surfaces blocks whose marker lists include the
     namespaced name (e.g. ``[codex-sub-agent, ...]`` or ``[codex-inline, Kilo,
     Antigravity, Windsurf]``).
 
-    Default is ``inline`` because Codex sub-agents run with ``fork_turns="none"``
-    isolation and can't inherit the parent session's task context — inline
-    keeps the main agent in charge so context isn't lost. Invalid / missing
-    values also fall back to inline.
+    Default is ``sub-agent`` so Codex matches the same coordinator-only
+    dispatch contract enforced by Hermes PreToolUse. Inline is an explicit
+    routing mode for installations where the Hermes runtime guard is not
+    active; it does not bypass PreToolUse. Invalid / missing values also
+    fall back to sub-agent.
 
     Other platforms are returned unchanged.
     """
     if platform == "codex":
-        mode = "inline"
+        mode = "sub-agent"
         codex_cfg = config.get("codex") if isinstance(config, dict) else None
         if isinstance(codex_cfg, dict):
             cfg_mode = codex_cfg.get("dispatch_mode")

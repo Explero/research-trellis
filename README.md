@@ -3,13 +3,13 @@
 面向科研项目的 `Trellis`（原版 Trellis）实验性改造分支。
 
 [![CI](https://github.com/Explero/Trellis-Hermes/actions/workflows/ci.yml/badge.svg)](https://github.com/Explero/Trellis-Hermes/actions/workflows/ci.yml)
-[![License: AGPL-3.0](https://img.shields.io/badge/license-AGPL--3.0-16a34a.svg?style=flat-square)](LICENSE)
+[![License: AGPL-3.0-or-later](https://img.shields.io/badge/license-AGPL--3.0--or--later-16a34a.svg?style=flat-square)](LICENSE)
 
 这个仓库是在原版 `Trellis`（原版项目）基础上改造出来的科研实验分支，不是上游官方版本，也不代表上游项目立场。它更接近一个科研项目里的工作流工具实验：在原版 Trellis 的任务、规范、平台接入基础上，加入更强的 `Hermes`（科研工作流）记录、门禁和子代理协作约束。
 
 当前状态：可以放进低风险真实科研项目里试部署；不建议直接用于不可回滚的关键项目。
 
-准备发布到 npm 时，CLI 包名使用 `trellis-hermes`，核心包名使用 `trellis-hermes-core`。
+当前 npm 发布包为 `trellis-hermes`（CLI 包）和 `trellis-hermes-core`（核心包）。
 
 ## 上游来源与修改声明
 
@@ -94,7 +94,14 @@ node packages/cli/scripts/release-preflight.js verify-packed-cli
 
 ## 从源码试用
 
-当前建议从 GitHub 源码运行；等 npm 发布完成后，再改用 `npm install -g trellis-hermes`。
+普通试用可安装已发布的测试版：
+
+```bash
+npm install -g trellis-hermes@0.6.0-beta.30
+trellis --version
+```
+
+需要修改或审阅实现时，再从 GitHub 源码运行：
 
 ```bash
 git clone git@github.com:Explero/Trellis-Hermes.git
@@ -194,7 +201,7 @@ node /path/to/Trellis-Hermes/packages/cli/bin/trellis.js update
 - 共享 worktree 检查；
 - 发布前预检。
 
-后续如果要改名并正式开源或发布 npm，需要再做一次包名、仓库链接、许可证说明、上游致谢、发布脚本和安装文档的集中整理。
+后续若再次改名或发布新版本，需同步核对包名、仓库链接、许可证说明、上游致谢、发布脚本和安装文档。
 
 ## 目录速览
 
@@ -247,6 +254,6 @@ pnpm --filter trellis-hermes hermes:preflight
 
 ## License
 
-本项目沿用上游项目的 `AGPL-3.0-only`（AGPL 3.0 许可证）。
+本项目沿用上游项目授予的 `AGPL-3.0-or-later`（AGPL 第 3 版或任何后续版本）许可，不缩减 `COPYRIGHT`（版权声明）原文授予的权利。
 
 本仓库是基于 `mindfold-ai/Trellis`（上游 Trellis 项目）的修改版本。公开发布或分发时，应保留上游许可证、上游来源和本仓库的修改说明；当前仓库名称、包名和 `Hermes`（科研工作流）相关改造不表示上游官方认可或背书。
