@@ -51,6 +51,14 @@ python3 ./.trellis/scripts/task.py archive <name>        # 移动到 archive/{ye
 python3 ./.trellis/scripts/task.py list [--mine] [--status <s>]
 python3 ./.trellis/scripts/task.py list-archive
 
+# Lean Research Closure（新任务默认启用）
+python3 ./.trellis/scripts/closure.py plan --task <name>
+python3 ./.trellis/scripts/closure.py validate --task <name>
+python3 ./.trellis/scripts/closure.py capsule --task <name>
+python3 ./.trellis/scripts/closure.py status --task <name>
+python3 ./.trellis/scripts/closure.py audit --task <name>
+python3 ./.trellis/scripts/closure.py close --task <name>
+
 # 代码规范上下文（通过 JSONL 注入 implement/check 子代理）。
 # `implement.jsonl` / `check.jsonl` 会在 `task create` 时为支持子代理的平台预置种子行；
 # 之后由 AI 在规划阶段补成真实 spec / research 条目。
@@ -73,7 +81,34 @@ python3 ./.trellis/scripts/task.py create-pr [name] [--dry-run]
 
 > 可运行 `python3 ./.trellis/scripts/task.py --help` 查看权威且最新的命令列表。
 
-**当前任务机制**：`task.py create` 会创建任务目录，并在存在会话身份时自动设置当前会话的活动任务指针，这样 planning breadcrumb 会立即生效。`task.py start` 会写入同一个指针（如果已存在则幂等），并把 `task.json.status` 从 `planning` 切换为 `in_progress`。状态文件保存在 `.trellis/.runtime/sessions/` 下。如果 hook 输入、`TRELLIS_CONTEXT_ID` 或平台原生会话环境变量里都没有上下文 key，则不会有活动任务，`task.py start` 会提示缺少会话身份。`task.py finish` 只删除当前会话文件（不改任务状态）。`task.py archive <task>` 会写入 `status=completed`、移动目录到 `archive/`，并删除仍指向该任务的运行时会话文件。
+**当前任务机制**：`task.py create` 会创建任务目录，并在存在会话身份时自动设置当前会话的活动任务指针，这样 planning breadcrumb 会立即生效。新任务默认带有 lean closure 字段；先运行 `closure.py plan` 和 `closure.py validate`，再运行 `task.py start`。启动后原版 `task.json.status` 仍从 `planning` 切换为 `in_progress`，Hermes 同时只启动一个 ready 工作包。状态文件保存在 `.trellis/.runtime/sessions/` 下。如果 hook 输入、`TRELLIS_CONTEXT_ID` 或平台原生会话环境变量里都没有上下文 key，则不会有活动任务。`task.py finish` 只删除当前会话文件（不改任务状态）。closure 任务只有在 `closure.py close` 成功后才能 archive；旧版非 closure 任务继续按原版兼容归档，并显示兼容提示。
+
+### Lean Research Closure
+
+默认仍然只创建一个 Trellis task。task 内部用 1–4 个 work package 表示适度的结果分组：每个 package 描述可观察结果和完成条件，不把读文件、改文件、运行命令、查看输出拆成 package。只有独立产物、独立验证、独立执行环境、可并行执行或独立审查等条件中至少满足两项时，才考虑分成独立 package。5 个以上只给出拆成多个 task 的建议，不自动拆分。
+
+work package 与 subtask 的边界：work package 属于同一 task 内部，适合顺序推进和共享上下文；subtask 用于可独立交付、独立审查或并行工作的任务。`task.json` 是当前状态唯一事实源，`hermes/task-events.jsonl` 只保存重要状态历史。
+
+```bash
+# 规划与验证
+python3 ./.trellis/scripts/closure.py plan --task <task> \
+  --intent "可观察目标" --done-when "完成条件"
+python3 ./.trellis/scripts/closure.py validate --task <task>
+
+# 每次只处理当前 package
+python3 ./.trellis/scripts/closure.py package-start --task <task>
+python3 ./.trellis/scripts/closure.py package-check --task <task>
+python3 ./.trellis/scripts/closure.py package-done --task <task> --evidence "验证记录"
+
+# 收口
+python3 ./.trellis/scripts/closure.py audit --task <task>
+python3 ./.trellis/scripts/closure.py repair --task <task>
+python3 ./.trellis/scripts/closure.py close --task <task>
+```
+
+每轮 hook 优先注入约 500–1000 字符的 Task Capsule，只包含 intent、范围、当前 package、done_when、next action、blockers 和最多 3 个相关引用。完整 PRD、报告、事件、ledger、历史任务和非当前 spec 均保留，但只在需要时读取。Claude Code、Codex 与 OpenCode 使用相同 capsule 语义；没有每轮 hook 的平台需要显式运行 `closure.py capsule`。
+
+阶段推进：planning 先 plan/validate；ready 显示下一动作；running 只执行当前 package；review 先 package 检查或全局 audit；audit 有缺口时只允许有界 repair，不重新规划已完成 package；close 通过后才允许 finish/archive。run finished、package done、task closed、claim approved 是四种不同状态，不能互相替代。
 
 ### Workspace 系统
 
@@ -153,7 +188,7 @@ Phase 3: Finish  → 验证、更新 spec、提交代码、最后收尾
 
 ### Parent / Child Task Trees
 
-当一个用户请求包含多个可独立验证的交付物时，使用父任务。父任务负责源需求集合、任务地图、跨子任务验收标准以及最终集成评审；除非它本身也有直接工作，否则通常不应作为实现目标。This means one request can cover several independently verifiable deliverables.
+默认先使用一个 task 和 1–4 个内部 work packages。只有交付物可以独立产出、验证、执行、并行或审查时才使用父/子任务。父任务负责源需求集合、任务地图、跨子任务验收标准以及最终集成评审；除非它本身也有直接工作，否则通常不应作为实现目标。This means one request can cover several independently verifiable deliverables.
 
 对子任务，应保证它们都可以独立地完成 planning、implement、check 与 archive。父子结构不是依赖系统：如果某个子任务必须等待另一个子任务，应该把这个顺序写在子任务自己的 `prd.md` / `implement.md` 里，并保持各子任务的验收标准可独立验证。Parent/child structure is not a dependency system: if one child must wait for another, write that ordering in the child artifacts instead.
 
@@ -180,6 +215,7 @@ Complex task: ask the user if you can create a Trellis task and enter the planni
 <!-- Per-turn breadcrumb: shown throughout Phase 1 (status='planning') -->
 
 [workflow-state:planning]
+Hermes closure: use the injected Task Capsule first. Run `closure.py plan` when packages are absent, then `closure.py validate`; keep one task with 1-4 observable-result packages by default. Five or more packages only trigger a split recommendation.
 Load `trellis-brainstorm`; stay in planning.
 Lightweight: `prd.md` can be enough. Complex: finish `prd.md`, `design.md`, and `implement.md`; ask for review before `task.py start`.
 Multi-deliverable scope: consider a parent task plus independently verifiable child tasks; dependencies must be written in child artifacts, not implied by tree position.
@@ -199,6 +235,7 @@ Before `task.py start`, record the development strategy decisions in the task do
      into a sub-agent. -->
 
 [workflow-state:planning-inline]
+Hermes closure: use the injected Task Capsule first. Run `closure.py plan` and `closure.py validate`; do not treat commands or file operations as packages.
 Load `trellis-brainstorm`; stay in planning.
 Lightweight: `prd.md` can be enough. Complex: finish `prd.md`, `design.md`, and `implement.md`; ask for review before `task.py start`.
 Multi-deliverable scope: consider a parent task plus independently verifiable child tasks; dependencies must be written in child artifacts, not implied by tree position.
@@ -221,6 +258,7 @@ Inline mode: skip jsonl curation; Phase 2 reads artifacts/specs via `trellis-bef
 Sub-agent dispatch protocol applies to all platforms and all sub-agents, including class-2 Codex/Copilot/Gemini/Qoder and `trellis-research`: every dispatch prompt starts with `Active task: <task path from task.py current>` before role-specific instructions.
 
 [workflow-state:in_progress]
+Hermes closure: follow only the current package in the Task Capsule. Move running -> review with `package-check`, record validation with `package-done`, then run `audit`; use at most the configured bounded `repair` rounds, and run `close` before archive. Do not load all reports, events, ledgers, history, or specs by default.
 Flow: `trellis-implement` -> `trellis-check` -> `trellis-update-spec` -> archive or commit as needed -> merge if needed -> optional `trellis-merge-review` -> build/test -> `/trellis:finish-work`.
 Claude Code optional review gates: if the task artifacts carry `Review-gate contract: explicit-selection-v1`, preserve the configured selection. Keep any enabled `trellis-spec-review`, `trellis-code-review`, and `trellis-code-architecture-review` in that order, run `trellis-improve-codebase-architecture` and `trellis-merge-review` only when the task strategy explicitly enables them, and keep `trellis-check` fixed outside this optional set. New tasks that use this contract must record `Optional review gates status: configured` plus explicit enabled/disabled lists; if the user picks none, record all five optional gates as disabled. Only tasks that entirely lack the contract marker count as legacy tasks and preserve the old behavior.
 Main-session default: dispatch implement/check sub-agents. Sub-agent self-exemption: if already running as `trellis-implement`, do NOT spawn another `trellis-implement` or `trellis-check`; if already running as `trellis-check`, do NOT spawn another `trellis-check` or `trellis-implement`. Dispatch is main session only.
@@ -242,6 +280,7 @@ If the user asks to archive the current task, do not block on commit; archive is
      instead of dispatching sub-agents. -->
 
 [workflow-state:in_progress-inline]
+Hermes closure: handle only the current package from the Task Capsule; run package check/done, audit, bounded repair when needed, and close before archive.
 Flow: `trellis-before-dev` -> edit -> `trellis-check` -> validation -> `trellis-update-spec` -> archive or commit as needed -> `/trellis:finish-work`.
 Do not dispatch implement/check sub-agents in inline mode.
 Read context: `prd.md` -> `design.md if present` -> `implement.md if present`, plus relevant spec/research loaded by skills.
@@ -265,7 +304,7 @@ If the user asks to archive the current task, do not block on commit; archive is
      channel as the live blocks. -->
 
 [workflow-state:completed]
-Task archived or code committed. Run `/trellis:finish-work`; if more validation or wrap-up is needed, do that before closing the work.
+Task closure passed. Keep task closed distinct from claim approval, then run `/trellis:finish-work` or archive.
 [/workflow-state:completed]
 
 ### Rules
@@ -301,6 +340,9 @@ Task archived or code committed. Run `/trellis:finish-work`; if more validation 
 - 用户同意创建任务，不等于同意开始实现；只有在产物 review 完成并执行 `task.py start` 后，才能进入实现。
 - 轻量任务允许只有 PRD；复杂任务必须有 `design.md` + `implement.md`。
 - planning 必须落盘到任务产物；完成前必须跑检查。
+- closure 任务不能靠自然语言声明完成；状态迁移必须通过 closure 命令写入 `task.json` 和事件日志。
+- `audit` 有缺口时只修缺口，不扩大 scope，不重写 done package；高风险研究契约变化必须人工批准。
+- lean 是默认低 token 模式；standard 增加运行、产物、指标和证据检查；publication 再增加统计比较、claim、STATE/CLAIMS 和人工审批门禁。
 
 ### Loading Step Detail
 

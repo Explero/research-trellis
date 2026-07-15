@@ -169,6 +169,36 @@ def get_active_task(root: Path, input_data: dict) -> Optional[tuple[str, str, st
     return task_id, status, active.source
 
 
+def get_task_capsule(root: Path, input_data: dict) -> str | None:
+    """Build the compact Hermes capsule for the active closure task."""
+    active = _resolve_active_task(root, input_data)
+    if not active.task_path or active.stale:
+        return None
+    task_dir = Path(active.task_path)
+    if not task_dir.is_absolute():
+        task_dir = root / task_dir
+    task_json = task_dir / "task.json"
+    if not task_json.is_file():
+        return None
+    try:
+        data = json.loads(task_json.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return None
+    if not isinstance(data, dict) or not any(
+        field in data for field in ("closure_state", "hermes_phase", "work_packages")
+    ):
+        return None
+    scripts_dir = root / ".trellis" / "scripts"
+    if str(scripts_dir) not in sys.path:
+        sys.path.insert(0, str(scripts_dir))
+    try:
+        from common.closure import build_capsule  # type: ignore[import-not-found]
+
+        return build_capsule(task_dir, data, root)
+    except Exception:
+        return None
+
+
 # ---------------------------------------------------------------------------
 # Breadcrumb loading: parse workflow.md, fall back to hardcoded defaults
 # ---------------------------------------------------------------------------
@@ -307,6 +337,17 @@ def build_breadcrumb(
     return f"<workflow-state>\n{header}\n{body}\n</workflow-state>"
 
 
+def build_closure_breadcrumb(task_id: str, status: str) -> str:
+    return (
+        "<workflow-state>\n"
+        f"Task: {task_id} ({status})\n"
+        "Hermes closure: use only the Task Capsule and its next action. "
+        "Plan/validate before start; execute only the current package; audit in review; "
+        "use bounded repair for listed gaps; close before archive. Load full artifacts on demand.\n"
+        "</workflow-state>"
+    )
+
+
 # ---------------------------------------------------------------------------
 # Entry
 # ---------------------------------------------------------------------------
@@ -356,6 +397,7 @@ def main() -> int:
     config = _read_trellis_config(root)
     platform = _detect_platform(data)
     task = get_active_task(root, data)
+    capsule = get_task_capsule(root, data)
     if task is None:
         # No active task — still emit a breadcrumb nudging AI toward
         # trellis-brainstorm + task.py create when user describes real work.
@@ -370,6 +412,8 @@ def main() -> int:
         breadcrumb = build_breadcrumb(
             task_id, status, templates, source_for_breadcrumb, breadcrumb_key=status_key
         )
+        if capsule:
+            breadcrumb = build_closure_breadcrumb(task_id, status)
     if platform == "codex":
         parts: list[str] = []
         boot_guard_notice = _build_codex_hermes_boot_guard_notice(root)
@@ -379,7 +423,11 @@ def main() -> int:
             parts.append(CODEX_NO_TASK_BOOTSTRAP_NOTICE)
         parts.append(_codex_mode_banner(config))
         parts.append(breadcrumb)
+        if capsule:
+            parts.append(f"<task-capsule>\n{capsule}\n</task-capsule>")
         breadcrumb = "\n\n".join(parts)
+    elif capsule:
+        breadcrumb = f"{breadcrumb}\n\n<task-capsule>\n{capsule}\n</task-capsule>"
 
     # Gemini CLI 0.40.x rejects "UserPromptSubmit" — its per-turn event is
     # named "BeforeAgent". Other platforms (Claude/Cursor/Qoder/CodeBuddy/

@@ -80,6 +80,10 @@ function getTaskStatus(ctx, platformInput = null) {
   const taskTitle = taskData.title || taskRef
   const taskStatus = taskData.status || "unknown"
 
+  if (["closure_state", "hermes_phase", "work_packages"].some(field => field in taskData)) {
+    return `Status: HERMES CLOSURE\n${buildTaskCapsule(taskData, taskRef, taskDir)}`
+  }
+
   if (taskStatus === "completed") {
     return `Status: COMPLETED\nTask: ${taskTitle}\nNext-Action: Run /trellis:finish-work. If the working tree is dirty, return to Phase 3.4 first.`
   }
@@ -125,6 +129,52 @@ function getTaskStatus(ctx, platformInput = null) {
     "Next-Action: Follow the matching per-turn workflow-state. " +
     "Implementation/check context order is jsonl entries -> `prd.md` -> `design.md if present` -> `implement.md if present`."
   )
+}
+
+function compactValue(value, limit) {
+  const text = String(value || "").replace(/\s+/g, " ").trim()
+  return text.length <= limit ? text : `${text.slice(0, limit - 3).trim()}...`
+}
+
+function compactValues(value, count, limit = 180) {
+  return compactValue(Array.isArray(value) ? value.slice(0, count).join("; ") : "", limit)
+}
+
+function closureContextRefs(data, taskDir) {
+  const refs = []
+  for (const filename of ["implement.jsonl", "check.jsonl"]) {
+    try {
+      const content = readFileSync(join(taskDir, filename), "utf-8")
+      for (const line of content.split(/\r?\n/)) {
+        if (!line.trim()) continue
+        const row = JSON.parse(line)
+        if (typeof row?.file === "string" && row.file.trim()) refs.push(row.file.trim())
+      }
+    } catch {
+      // Missing or malformed optional context is skipped.
+    }
+  }
+  if (Array.isArray(data.relatedFiles)) refs.push(...data.relatedFiles)
+  return [...new Set(refs.filter(value => typeof value === "string" && value.trim()))].slice(0, 3)
+}
+
+function buildTaskCapsule(data, taskRef, taskDir) {
+  const packages = Array.isArray(data.work_packages) ? data.work_packages : []
+  const current = packages.find(item => item?.id === data.current_work_package)
+  const lines = [
+    `Task: ${data.id || taskRef} | ${data.title || taskRef}`,
+    `Intent: ${compactValue(data.intent || data.description || "", 180)}`,
+    `Scope: ${compactValues(data.in_scope, 2) || "-"} | Out: ${compactValues(data.out_of_scope, 2) || "-"}`,
+    `Mode/Phase: ${data.closure_mode || "lean"} / ${data.hermes_phase || "planning"}`,
+    `Current: ${data.current_work_package || "-"}${current ? ` - ${compactValue(current.outcome, 140)}` : ""}`,
+  ]
+  if (current) lines.push(`Done when: ${compactValues(current.done_when, 3, 240)}`)
+  lines.push(`Next: ${compactValue(data.next_action || "-", 180)}`)
+  lines.push(`Blockers: ${compactValues(data.blockers, 2) || "-"}`)
+  const refs = closureContextRefs(data, taskDir)
+  if (refs.length > 0) lines.push(`Refs: ${refs.join(", ")}`)
+  const capsule = lines.join("\n")
+  return capsule.length <= 1000 ? capsule : `${capsule.slice(0, 997).trim()}...`
 }
 
 function loadTrellisConfig(directory, contextKey = null) {
@@ -442,9 +492,9 @@ Trellis compact SessionStart context. Use it to orient the session; load details
 
   parts.push("<guidelines>")
   parts.push(
-    "Task context order for implementation/check: jsonl entries -> `prd.md` -> " +
-    "`design.md if present` -> `implement.md if present`. Missing optional artifacts " +
-    "are skipped for lightweight tasks.\n"
+    "Task context order for Hermes closure tasks: Task Capsule -> current package -> related jsonl/spec entries. " +
+    "Load full PRD, reports, events, ledgers, history, and unrelated specs only when needed. " +
+    "Legacy task context remains jsonl -> PRD -> optional design/implement files.\n"
   )
 
   if (paths.length > 0) {

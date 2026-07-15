@@ -42,18 +42,30 @@ Then route:
   > "FYI, dirty files outside this task's scope — leaving them for the other window: `<list>`."
 - **Genuinely unsure** — ask the user once: "Are `<list>` this task's work I forgot to commit, or another window's? (commit / ignore)" — then route per their answer.
 
-## Step 3: Run Hermes quality gates
+## Step 3: Run Hermes closure gates
 
-Use the current active task name for `<task>`. Before archiving anything, run:
+Use the current active task name for `<task>`. Every closure task runs audit and close:
 
 ```bash
-{{PYTHON_CMD}} ./.trellis/scripts/hermes/report.py quality-gate --task <task>
+{{PYTHON_CMD}} ./.trellis/scripts/closure.py audit --task <task>
+{{PYTHON_CMD}} ./.trellis/scripts/closure.py close --task <task>
+```
+
+For `standard` and `publication`, also validate the existing Hermes records:
+
+```bash
 {{PYTHON_CMD}} ./.trellis/scripts/hermes/validate.py --task <task> --kind audit
 {{PYTHON_CMD}} ./.trellis/scripts/hermes/validate.py --task <task> --kind provenance
 {{PYTHON_CMD}} ./.trellis/scripts/hermes/validate.py --task <task> --kind service_queue
 ```
 
-Do not archive any task if any command fails. Fix the Hermes quality gate, audit, provenance, or service queue issue first, then re-run this step and only continue after all commands exit 0.
+For `publication` only, additionally run the formal comparison gate:
+
+```bash
+{{PYTHON_CMD}} ./.trellis/scripts/hermes/report.py quality-gate --task <task>
+```
+
+Run only the gates required by `closure_mode`. Do not archive while `closure_state` is not `closed`. Legacy tasks without closure fields retain the original compatibility path.
 
 ## Step 4: Archive task(s)
 

@@ -498,6 +498,19 @@ def _get_task_status(trellis_dir: Path, input_data: dict) -> str:
 
     task_title = task_data.get("title", task_ref)
     task_status = task_data.get("status", "unknown")
+    if isinstance(task_data, dict) and any(
+        field in task_data for field in ("closure_state", "hermes_phase", "work_packages")
+    ):
+        scripts_dir = trellis_dir / "scripts"
+        if str(scripts_dir) not in sys.path:
+            sys.path.insert(0, str(scripts_dir))
+        try:
+            from common.closure import build_capsule  # type: ignore[import-not-found]
+
+            capsule = build_capsule(task_dir, task_data, trellis_dir.parent)
+            return f"Status: HERMES CLOSURE\n{capsule}"
+        except Exception:
+            pass
     artifact_names = ("prd.md", "design.md", "implement.md", "implement.jsonl", "check.jsonl")
     present = [name for name in artifact_names if (task_dir / name).is_file()]
     if (task_dir / "research").is_dir():
@@ -944,9 +957,10 @@ Trellis compact SessionStart context. Use it to orient the session; load details
 
     output.write("<guidelines>\n")
     output.write(
-        "Task context order for implementation/check: jsonl entries -> `prd.md` -> "
-        "`design.md if present` -> `implement.md if present`. Missing optional artifacts "
-        "are skipped for lightweight tasks.\n\n"
+        "Task context order for Hermes closure tasks: Task Capsule -> current work package -> "
+        "related jsonl/spec entries. Load `prd.md`, reports, task-events.jsonl, ledgers, "
+        "historical tasks, and unrelated specs only when needed. Legacy task context order "
+        "remains jsonl entries -> `prd.md` -> optional design/implement files.\n\n"
     )
 
     if spec_index_paths:

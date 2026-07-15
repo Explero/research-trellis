@@ -76,10 +76,60 @@ function getActiveTask(ctx, platformInput = null) {
     const status = typeof data.status === "string" ? data.status : ""
     if (!status) return null
     const id = data.id || taskRef.split("/").pop()
-    return { id, status, source: active.source }
+    return { id, status, source: active.source, data, taskDir }
   } catch {
     return null
   }
+}
+
+function clip(value, limit) {
+  const compact = String(value || "").replace(/\s+/g, " ").trim()
+  return compact.length <= limit ? compact : `${compact.slice(0, limit - 3).trim()}...`
+}
+
+function compactList(value, count, limit = 180) {
+  return clip(Array.isArray(value) ? value.slice(0, count).join("; ") : "", limit)
+}
+
+function contextRefs(task) {
+  const refs = []
+  for (const filename of ["implement.jsonl", "check.jsonl"]) {
+    try {
+      const content = readFileSync(join(task.taskDir, filename), "utf-8")
+      for (const line of content.split(/\r?\n/)) {
+        if (!line.trim()) continue
+        const row = JSON.parse(line)
+        if (typeof row?.file === "string" && row.file.trim()) refs.push(row.file.trim())
+      }
+    } catch {
+      // Missing or malformed optional context is skipped.
+    }
+  }
+  if (Array.isArray(task.data.relatedFiles)) refs.push(...task.data.relatedFiles)
+  return [...new Set(refs.filter(value => typeof value === "string" && value.trim()))].slice(0, 3)
+}
+
+function buildTaskCapsule(task) {
+  const data = task?.data
+  if (!data || !["closure_state", "hermes_phase", "work_packages"].some(field => field in data)) {
+    return ""
+  }
+  const packages = Array.isArray(data.work_packages) ? data.work_packages : []
+  const current = packages.find(item => item?.id === data.current_work_package)
+  const lines = [
+    `Task: ${data.id || task.id} | ${data.title || task.id}`,
+    `Intent: ${clip(data.intent || data.description || "", 180)}`,
+    `Scope: ${compactList(data.in_scope, 2) || "-"} | Out: ${compactList(data.out_of_scope, 2) || "-"}`,
+    `Mode/Phase: ${data.closure_mode || "lean"} / ${data.hermes_phase || "planning"}`,
+    `Current: ${data.current_work_package || "-"}${current ? ` - ${clip(current.outcome, 140)}` : ""}`,
+  ]
+  if (current) lines.push(`Done when: ${compactList(current.done_when, 3, 240)}`)
+  lines.push(`Next: ${clip(data.next_action || "-", 180)}`)
+  lines.push(`Blockers: ${compactList(data.blockers, 2) || "-"}`)
+  const refs = contextRefs(task)
+  if (refs.length > 0) lines.push(`Refs: ${refs.join(", ")}`)
+  const capsule = lines.join("\n")
+  return capsule.length <= 1000 ? capsule : `${capsule.slice(0, 997).trim()}...`
 }
 
 /**
@@ -96,6 +146,10 @@ function buildBreadcrumb(id, status, templates) {
   }
   let header = id === null ? `Status: ${status}` : `Task: ${id} (${status})`
   return `<workflow-state>\n${header}\n${body}\n</workflow-state>`
+}
+
+function buildClosureBreadcrumb(task) {
+  return `<workflow-state>\nTask: ${task.id} (${task.status})\nHermes closure: use only the Task Capsule and its next action. Plan/validate before start; execute only the current package; audit in review; use bounded repair for listed gaps; close before archive. Load full artifacts on demand.\n</workflow-state>`
 }
 
 // OpenCode 1.2.x expects plugins to be factory functions (see inject-subagent-context.js comment).
@@ -126,9 +180,11 @@ export default async ({ directory }) => {
           }
           const templates = loadBreadcrumbs(directory)
           const task = getActiveTask(ctx, input)
-          const breadcrumb = task
-            ? buildBreadcrumb(task.id, task.status, templates, task.source)
+          const capsule = buildTaskCapsule(task)
+          let breadcrumb = task
+            ? (capsule ? buildClosureBreadcrumb(task) : buildBreadcrumb(task.id, task.status, templates, task.source))
             : buildBreadcrumb(null, "no_task", templates)
+          if (capsule) breadcrumb += `\n\n<task-capsule>\n${capsule}\n</task-capsule>`
 
           const parts = output?.parts || []
           const textPartIndex = parts.findIndex(

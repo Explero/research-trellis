@@ -12,6 +12,14 @@ Resume work on the current task — pick up at the right phase/step in `.trellis
 
 Confirms: current task, git state, recent commits.
 
+If the active task has Hermes closure fields, immediately load the compact capsule:
+
+```bash
+{{PYTHON_CMD}} ./.trellis/scripts/closure.py capsule --task <task>
+```
+
+Use the current work package as the execution boundary. Full PRD, reports, events, ledgers, historical tasks, and unrelated specs are read only when needed.
+
 ## Step 2: Load the Phase Index
 
 ```bash
@@ -32,6 +40,7 @@ Shows the Phase Index (Plan / Execute / Finish) with routing + skill mapping.
 - `status=in_progress` + implementation done, not yet checked → **2.2**
 - `status=in_progress` + check passed → **3.1**
 - `status=completed` (rare; usually archived immediately) → archive flow
+- `hermes_phase=planning` → plan/validate; `ready` → start the next package; `running` → work only on the current package; `review` → package check or closure audit; `blocked` → follow handoff/human gate; `closed` → finish/archive.
 
 Phase rules (full detail in `.trellis/workflow.md`):
 
