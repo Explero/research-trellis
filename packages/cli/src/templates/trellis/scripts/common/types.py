@@ -49,6 +49,19 @@ class TaskData(TypedDict, total=False):
     relatedFiles: list[str]
     notes: str
     meta: dict
+    hermes_phase: str
+    closure_state: str
+    closure_mode: str
+    intent: str
+    in_scope: list[str]
+    out_of_scope: list[str]
+    definition_of_done: list[str]
+    work_packages: list[dict]
+    current_work_package: str | None
+    next_action: str | None
+    blockers: list[str]
+    repair_count: int
+    max_repair_count: int
 
 
 # =============================================================================

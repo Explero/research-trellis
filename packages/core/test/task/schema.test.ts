@@ -21,6 +21,11 @@ describe("emptyTaskRecord", () => {
     expect(record.children).toEqual([]);
     expect(record.relatedFiles).toEqual([]);
     expect(record.meta).toEqual({});
+    expect(record.hermes_phase).toBe("planning");
+    expect(record.closure_state).toBe("open");
+    expect(record.closure_mode).toBe("lean");
+    expect(record.work_packages).toEqual([]);
+    expect(record.max_repair_count).toBe(1);
     expect(record.createdAt).toMatch(/^\d{4}-\d{2}-\d{2}$/);
   });
 
@@ -71,6 +76,54 @@ describe("taskRecordSchema", () => {
     expect(parsed).not.toBe(input);
   });
 
+  it("parses compact closure work packages", () => {
+    const parsed = taskRecordSchema.parse(
+      emptyTaskRecord({
+        work_packages: [
+          {
+            id: "WP1",
+            title: "Verified result",
+            outcome: "A result exists",
+            done_when: ["Tests pass"],
+            evidence_required: ["test output"],
+            depends_on: [],
+            status: "ready",
+            evidence_refs: [],
+            blocker: null,
+          },
+        ],
+      }),
+    );
+    expect(parsed.work_packages?.[0]?.status).toBe("ready");
+    expect(parsed.work_packages?.[0]?.done_when).toEqual(["Tests pass"]);
+  });
+
+  it("accepts legacy task records without closure fields", () => {
+    const closureFields = new Set([
+      "hermes_phase",
+      "closure_state",
+      "closure_mode",
+      "intent",
+      "in_scope",
+      "out_of_scope",
+      "definition_of_done",
+      "work_packages",
+      "current_work_package",
+      "next_action",
+      "blockers",
+      "repair_count",
+      "max_repair_count",
+    ]);
+    const legacy = Object.fromEntries(
+      Object.entries(emptyTaskRecord()).filter(
+        ([field]) => !closureFields.has(field),
+      ),
+    );
+    const parsed = taskRecordSchema.parse(legacy);
+    expect(parsed.hermes_phase).toBeUndefined();
+    expect(parsed.work_packages).toBeUndefined();
+  });
+
   it("rejects non-object inputs", () => {
     expect(() => taskRecordSchema.parse("nope")).toThrow(/must be a JSON object/);
     expect(() => taskRecordSchema.parse(null)).toThrow();
@@ -93,6 +146,36 @@ describe("taskRecordSchema", () => {
         meta: { nested: new Date() },
       }),
     ).toThrow(/task.meta.nested must contain only JSON values/);
+    expect(() =>
+      taskRecordSchema.parse({
+        ...emptyTaskRecord(),
+        work_packages: [
+          {
+            id: "WP1",
+            title: "Invalid",
+            outcome: "Invalid status",
+            done_when: ["never"],
+            evidence_required: [],
+            depends_on: [],
+            status: "complete",
+            evidence_refs: [],
+            blocker: null,
+          },
+        ],
+      }),
+    ).toThrow(/status is invalid/);
+    expect(() =>
+      taskRecordSchema.parse({
+        ...emptyTaskRecord(),
+        closure_mode: "fast",
+      }),
+    ).toThrow(/closure_mode is invalid/);
+    expect(() =>
+      taskRecordSchema.parse({
+        ...emptyTaskRecord(),
+        hermes_phase: "complete",
+      }),
+    ).toThrow(/hermes_phase is invalid/);
   });
 
   it("rejects records missing canonical fields", () => {

@@ -1,6 +1,6 @@
 # Research Trellis 中文手册
 
-这套手册面向第一次把 `Research Trellis`（科研改造版）放进真实科研项目的人。当前仓库版本为 `0.6.0-beta.31`（测试版）；它基于 `mindfold-ai/Trellis`（上游项目）修改，不是上游官方版本，也不代表上游立场。
+这套手册面向第一次把 `Research Trellis`（科研改造版）放进真实科研项目的人。当前仓库版本为 `0.7.0-beta.0`（测试版）；它基于 `mindfold-ai/Trellis`（上游项目）修改，不是上游官方版本，也不代表上游立场。
 
 ## 最短上手路径
 
@@ -24,7 +24,7 @@ python3 ./.trellis/scripts/task.py list
 | 认识与安装 | [01 项目概览](01-overview.md) · [02 安装](02-installation.md) · [03 第一个科研任务](03-first-research-task.md) · [04 工作原理](04-how-it-works.md) |
 | 项目与任务 | [05 项目初始化](05-project-setup.md) · [06 任务与规划](06-tasks-and-planning.md) · [07 规范与上下文](07-spec-and-context.md) |
 | 科研记录 | [08 Hermes 记录](08-hermes-records.md) · [09 实验配置](09-experiments.md) · [10 运行与复查](10-runs-and-replay.md) · [11 指标与比较](11-metrics-and-comparison.md) · [12 报告与主张](12-reports-and-claims.md) |
-| 协作与维护 | [13 工作代理与门禁](13-workers-and-gates.md) · [14 工作流与平台](14-workflows-and-platforms.md) · [15 频道与会话记忆](15-channel-and-memory.md) · [16 更新、恢复与卸载](16-update-recovery-and-uninstall.md) |
+| 协作与维护 | [13 工作代理与门禁](13-workers-and-gates.md) · [14 工作流与平台](14-workflows-and-platforms.md) · [15 频道与会话记忆](15-channel-and-memory.md) · [16 更新、恢复与卸载](16-update-recovery-and-uninstall.md) · [17 Lean Research Closure](17-lean-research-closure.md) |
 | 参考 | [命令参考](appendix-a-cli-reference.md) · [目录参考](appendix-b-directory-reference.md) · [配置参考](appendix-c-configuration-reference.md) · [记录格式](appendix-d-record-schema.md) · [排障](appendix-e-troubleshooting.md) · [功能状态、安全与许可证](appendix-f-feature-status.md) · [事实来源](sources.md) |
 
 ## 使用边界

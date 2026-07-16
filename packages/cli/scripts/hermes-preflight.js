@@ -26,6 +26,8 @@ const REQUIRED_FILES = [
   "packages/cli/src/templates/trellis/hermes/experiments/experiment.yaml",
   "packages/cli/src/templates/trellis/hermes/metrics/metrics_schema.yaml",
   "packages/cli/src/templates/trellis/hermes/reports/report.md",
+  "packages/cli/src/templates/trellis/scripts/closure.py",
+  "packages/cli/src/templates/trellis/scripts/common/closure.py",
   "packages/cli/src/templates/trellis/scripts/hermes/runner.py",
   "packages/cli/src/templates/trellis/scripts/hermes/report.py",
   "packages/cli/src/templates/trellis/scripts/hermes/service.py",
@@ -41,6 +43,7 @@ const TEMPLATE_TEST_ARGS = [
   "test/templates/claude.test.ts",
   "test/templates/codex.test.ts",
   "test/templates/shared-hooks.test.ts",
+  "test/scripts/closure.integration.test.ts",
 ];
 
 function result(name, ok, messages = []) {

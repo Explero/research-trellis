@@ -1062,9 +1062,9 @@ describe("init() integration", () => {
     expect(Array.isArray(taskJson.subtasks)).toBe(true);
     expect(taskJson.subtasks).toEqual([]);
 
-    // Canonical shape: legacy current_phase / next_action must NOT appear
+    // Legacy current_phase stays absent; v0.7 closure owns next_action.
     expect(taskJson.current_phase).toBeUndefined();
-    expect(taskJson.next_action).toBeUndefined();
+    expect(taskJson.next_action).toBeNull();
 
     // relatedFiles point to spec/<name>/
     expect(taskJson.relatedFiles).toContain(".trellis/spec/core/");

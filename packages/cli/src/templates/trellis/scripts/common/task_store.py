@@ -53,6 +53,7 @@ from .task_utils import (
     resolve_task_dir,
     run_task_hooks,
 )
+from .closure import closure_defaults, is_closure_task
 
 
 # =============================================================================
@@ -255,6 +256,7 @@ def cmd_create(args: argparse.Namespace) -> int:
         "relatedFiles": [],
         "notes": "",
         "meta": {},
+        **closure_defaults(),
     }
 
     write_json(task_json_path, task_data)
@@ -320,6 +322,7 @@ def cmd_create(args: argparse.Namespace) -> int:
     print("", file=sys.stderr)
     print(colored("Next steps:", Colors.BLUE), file=sys.stderr)
     print("  - Fill prd.md with requirements and acceptance criteria", file=sys.stderr)
+    print("  - Run closure.py plan, then closure.py validate", file=sys.stderr)
     print("  - Lightweight task: PRD-only is valid", file=sys.stderr)
     print("  - Complex task: add design.md and implement.md before task.py start", file=sys.stderr)
     if seeded_jsonl:
@@ -375,9 +378,27 @@ def cmd_archive(args: argparse.Namespace) -> int:
     if task_json_path.is_file():
         data = read_json(task_json_path)
         if data:
-            data["status"] = "completed"
-            data["completedAt"] = today
-            write_json(task_json_path, data)
+            if is_closure_task(data):
+                if data.get("closure_state") != "closed":
+                    print(
+                        colored(
+                            "Error: Hermes closure task is not closed; run closure.py audit/close before archive.",
+                            Colors.RED,
+                        ),
+                        file=sys.stderr,
+                    )
+                    return 1
+            else:
+                print(
+                    colored(
+                        "Compatibility mode: legacy non-closure task; archive will mark it completed.",
+                        Colors.YELLOW,
+                    ),
+                    file=sys.stderr,
+                )
+                data["status"] = "completed"
+                data["completedAt"] = today
+                write_json(task_json_path, data)
 
             # Handle subtask relationships on archive.
             # Keep this task in its parent's children list so progress

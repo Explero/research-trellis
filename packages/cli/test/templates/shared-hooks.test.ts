@@ -239,6 +239,36 @@ function runSessionStart(worktreeRoot: string): string {
   }
 }
 
+function runWorkflowState(repoRoot: string, contextId: string): string {
+  const hook = getSharedHookScripts().find(
+    (item) => item.name === "inject-workflow-state.py",
+  );
+  if (!hook) throw new Error("inject-workflow-state.py template missing");
+  const scriptDir = fs.mkdtempSync(
+    path.join(os.tmpdir(), "trellis-workflow-state-"),
+  );
+  const scriptPath = path.join(scriptDir, "inject-workflow-state.py");
+  fs.writeFileSync(scriptPath, hook.content);
+  try {
+    const result = spawnSync(PYTHON, [scriptPath], {
+      cwd: repoRoot,
+      encoding: "utf-8",
+      env: {
+        ...process.env,
+        CLAUDE_PROJECT_DIR: repoRoot,
+        TRELLIS_CONTEXT_ID: contextId,
+      },
+      input: JSON.stringify({ cwd: repoRoot, session_id: contextId }),
+    });
+    if (result.status !== 0) {
+      throw new Error(result.stderr || result.stdout || "workflow-state failed");
+    }
+    return result.stdout;
+  } finally {
+    fs.rmSync(scriptDir, { recursive: true, force: true });
+  }
+}
+
 function runPreToolUseHook(
   cwd: string,
   input: Record<string, unknown>,
@@ -481,6 +511,69 @@ describe("shared-hooks capability table", () => {
     expect(content).toContain("<worktree-sync>");
     expect(content).not.toContain("Status: READY");
     expect(content).not.toContain("<workflow>");
+  });
+
+  it("injects a compact closure capsule without full task artifacts", () => {
+    const repoRoot = fs.mkdtempSync(path.join(os.tmpdir(), "trellis-capsule-hook-"));
+    try {
+      setupMainRepo(
+        repoRoot,
+        "capsule-task",
+        "FULL_PRD_MUST_NOT_BE_INJECTED\n",
+      );
+      const taskDir = path.join(repoRoot, ".trellis", "tasks", "capsule-task");
+      const taskJsonPath = path.join(taskDir, "task.json");
+      const task = JSON.parse(fs.readFileSync(taskJsonPath, "utf-8"));
+      Object.assign(task, {
+        closure_state: "open",
+        closure_mode: "lean",
+        hermes_phase: "running",
+        intent: "Verify one bounded result",
+        in_scope: ["current package"],
+        out_of_scope: ["unrelated history"],
+        definition_of_done: ["Result is tested"],
+        current_work_package: "WP1",
+        next_action: "Run the focused test",
+        blockers: [],
+        repair_count: 0,
+        max_repair_count: 1,
+        work_packages: [
+          {
+            id: "WP1",
+            title: "Tested result",
+            outcome: "Result is tested",
+            done_when: ["Focused test passes"],
+            evidence_required: [],
+            depends_on: [],
+            status: "running",
+            evidence_refs: [],
+            blocker: null,
+          },
+        ],
+      });
+      fs.writeFileSync(taskJsonPath, `${JSON.stringify(task, null, 2)}\n`);
+      const contextId = setSessionActiveTask(
+        repoRoot,
+        "capsule-task",
+        "capsule-hook",
+      );
+      const raw = runWorkflowState(repoRoot, contextId);
+      const payload = JSON.parse(raw) as {
+        hookSpecificOutput: { additionalContext: string };
+      };
+      const context = payload.hookSpecificOutput.additionalContext;
+      expect(context).toContain("<task-capsule>");
+      expect(context).toContain("Current: WP1");
+      expect(context).toContain("Done when: Focused test passes");
+      expect(context).toContain("use only the Task Capsule");
+      expect(context).not.toContain("Claude review gates are read-only gates");
+      expect(context).not.toContain("FULL_PRD_MUST_NOT_BE_INJECTED");
+      const capsule =
+        /<task-capsule>\n([\s\S]*?)\n<\/task-capsule>/.exec(context)?.[1] ?? "";
+      expect(capsule.length).toBeLessThanOrEqual(1000);
+    } finally {
+      fs.rmSync(repoRoot, { recursive: true, force: true });
+    }
   });
 
   it("shared session-start.py injects only a compact Hermes main-agent boot guard", () => {

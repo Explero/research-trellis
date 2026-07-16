@@ -19,8 +19,8 @@
 
 1. `CLI`（命令行界面）层：`research-trellis init`（初始化）复制模板，`research-trellis update`（更新）比较模板哈希，`workflow`（工作流）切换流程文件。
 2. 项目层：`.trellis/spec/`（项目规范）和 `.trellis/workflow.md`（工作流说明）保存长期规则。
-3. 任务层：`.trellis/tasks/<task>/`（任务目录）保存需求、设计、实施计划和代理上下文清单。
-4. 平台层：技能、代理和钩子读取当前会话身份、活动任务及上下文清单，再把信息交给人工智能工具。
+3. 任务层：`.trellis/tasks/<task>/`（任务目录）以 `task.json`（任务状态）保存当前 closure 状态，并保存需求、设计、实施计划和代理上下文清单。
+4. 平台层：技能、代理和钩子优先读取 Task Capsule（紧凑上下文）及当前工作包，再按需读取完整材料。
 5. `Hermes`（科研工作流）层：任务内 `hermes/`（科研记录目录）保存追加式记录、实验配置、运行清单、比较和报告。
 
 实际流程可以简化为：
@@ -28,10 +28,12 @@
 ```text
 初始化项目
   -> 创建任务并写 planning 产物
-  -> 启动任务，状态变为 in_progress
-  -> 平台读取活动任务和上下文
+  -> plan/validate 生成并校验 1–4 个工作包
+  -> 启动任务，状态变为 in_progress，首个工作包变为 running
+  -> 平台每轮读取 capsule 和当前工作包
   -> 工作代理按 task_card 边界执行
   -> runner 写运行清单，reviewer 检查记录
+  -> package done 后执行 closure audit/close
   -> 证据支持 claim_ready 主张
   -> human/root 记录批准后才算 approved
 ```
@@ -39,11 +41,13 @@
 需要特别区分：
 
 - `task.py finish`（结束当前任务）只清除当前会话的活动任务指针，不把任务标记为完成；
-- `task.py archive`（归档任务）才会把状态写为 `completed`（已完成）并移动目录；
+- `closure.py close`（关闭任务）通过审计后才把新任务状态写为 `completed`（已完成）；
+- `task.py archive`（归档任务）只移动已关闭的新任务；旧任务没有 closure 字段时保留原版兼容行为；
+- `run finished`（运行结束）、`package done`（工作包完成）、`task closed`（任务关闭）和 `claim approved`（主张批准）互不等同；
 - `Hermes`（科研工作流）的 `approved`（已批准）是主张审批状态，不等同于任务归档；
 - 聊天内容不是科研事实来源，任务目录中的记录才是后续门禁读取对象。
 
-`.trellis/hermes/state_machine.yaml`（科研状态协议）是角色和记录应遵循的协议模板，不是已接入所有命令的状态机引擎。当前实现只在具体校验器中检查部分边界，例如待审批主张必须引用证据，已审批需要真实人工记录。
+`.trellis/hermes/state_machine.yaml`（科研状态协议）仍是角色和科研记录协议，不是通用 claim 状态机引擎。v0.7 只把 task closure（任务收口）的紧凑阶段接入 CLI；claim 审批继续由科研记录和人工门禁处理。
 
 ## 预期结果
 
@@ -58,7 +62,7 @@
 ## 验证记录
 
 - 日期：2026-07-15。
-- 版本：`0.6.0-beta.31`（测试版）。
+- 版本：`0.7.0-beta.0`（测试版）。
 - 更名前基准提交：`9f7dc8497b4782878d6fa7ac3b63eba5bde507df`。
 - 命令：`rg -n "state_machine|approval-gate|task.py" packages/cli/src/templates`（协议与实现核对）。
 - 结果：任务生命周期有实现支持；科研状态文件已准确标为协议模板。

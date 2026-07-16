@@ -1662,6 +1662,22 @@ describe("regression: current-task path normalization", () => {
     };
     expect(beforeStart.status).toBe("planning");
 
+    // New v0.7 tasks require a validated lean closure plan before start.
+    const closureScriptPath = path.join(
+      tmpDir,
+      ".trellis",
+      "scripts",
+      "closure.py",
+    );
+    execSync(
+      `${pythonCmd} ${JSON.stringify(closureScriptPath)} plan --task ${JSON.stringify(relTaskDir)} --intent "Idempotent task start" --done-when "Task start is recorded"`,
+      { cwd: tmpDir, encoding: "utf-8" },
+    );
+    execSync(
+      `${pythonCmd} ${JSON.stringify(closureScriptPath)} validate --task ${JSON.stringify(relTaskDir)}`,
+      { cwd: tmpDir, encoding: "utf-8" },
+    );
+
     // Now run start with the same session — must not error.
     let startStatus = 0;
     let startOutput = "";
@@ -1680,7 +1696,7 @@ describe("regression: current-task path normalization", () => {
       startOutput = (e.stdout ?? "") + (e.stderr ?? "");
     }
     expect(startStatus).toBe(0);
-    expect(startOutput).toContain("planning → in_progress");
+    expect(startOutput).toContain("Closure package started: WP1");
 
     // Status flipped to in_progress.
     const afterStart = JSON.parse(fs.readFileSync(taskJsonPath, "utf-8")) as {
@@ -2952,10 +2968,10 @@ describe("regression: current-task path normalization", () => {
   });
 
   // ------------------------------------------------------------
-  // Legacy current_phase / next_action field removal (FP round 3 cleanup)
+  // Legacy current_phase removal + Hermes next_action introduction
   // ------------------------------------------------------------
 
-  it("[workflow-v2] task.py create does NOT write legacy current_phase / next_action fields", () => {
+  it("[workflow-v2] task.py create omits current_phase and initializes closure next_action", () => {
     setupTaskRepo();
     const taskScriptPath = path.join(tmpDir, ".trellis", "scripts", "task.py");
     execSync(
@@ -2974,7 +2990,7 @@ describe("regression: current-task path normalization", () => {
       next_action?: unknown;
     };
     expect(data.current_phase).toBeUndefined();
-    expect(data.next_action).toBeUndefined();
+    expect(data.next_action).toBeNull();
   });
 
   // ------------------------------------------------------------

@@ -23,7 +23,10 @@
 ```bash
 python3 ./.trellis/scripts/get_context.py --mode packages
 python3 ./.trellis/scripts/task.py list-context "$TASK"
+python3 ./.trellis/scripts/closure.py capsule --task "$TASK"
 ```
+
+新任务每轮优先使用 capsule（紧凑上下文）：目标、范围、当前工作包、完成条件、下一动作、阻塞项和最多 3 个相关引用。完整 PRD、报告、事件、证据账本、历史任务和非当前规范只在需要时读取。这个优化不删除原始文件。
 
 4. 向实现和检查清单追加需要的规范或研究材料：
 
@@ -45,7 +48,7 @@ python3 ./.trellis/scripts/task.py validate "$TASK"
 
 ## 预期结果
 
-上下文校验显示两个清单均有效，代理只加载与任务有关的规范和研究材料，规划文档仍保留在任务目录中。
+上下文校验显示两个清单均有效，代理只加载当前工作包需要的规范和研究材料，规划文档和完整历史仍保留在任务目录中。
 
 ## 失败恢复
 
@@ -57,7 +60,7 @@ python3 ./.trellis/scripts/task.py validate "$TASK"
 ## 验证记录
 
 - 日期：2026-07-15。
-- 版本：`0.6.0-beta.31`（测试版）。
+- 版本：`0.7.0-beta.0`（测试版）。
 - 更名前基准提交：`9f7dc8497b4782878d6fa7ac3b63eba5bde507df`。
 - 命令：`rg -n "implement.jsonl|check.jsonl|context" packages/cli/src/templates/trellis/scripts packages/cli/test`（上下文实现核对）。
 - 结果：上下文清单、重复检查和平台读取路径与当前模板一致。

@@ -10,6 +10,36 @@
  * services) should depend on this type instead of redefining their own
  * task.json shape.
  */
+export type ClosureMode = "lean" | "standard" | "publication";
+export type HermesPhase =
+  | "planning"
+  | "ready"
+  | "running"
+  | "review"
+  | "blocked"
+  | "closed";
+export type ClosureWorkPackageStatus =
+  | "pending"
+  | "ready"
+  | "running"
+  | "review"
+  | "done"
+  | "blocked"
+  | "deferred"
+  | "waived";
+
+export interface ClosureWorkPackage {
+  id: string;
+  title: string;
+  outcome: string;
+  done_when: string[];
+  evidence_required: string[];
+  depends_on: string[];
+  status: ClosureWorkPackageStatus;
+  evidence_refs: string[];
+  blocker: string | null;
+}
+
 export interface TrellisTaskRecord {
   id: string;
   name: string;
@@ -35,6 +65,19 @@ export interface TrellisTaskRecord {
   relatedFiles: string[];
   notes: string;
   meta: Record<string, unknown>;
+  hermes_phase?: HermesPhase;
+  closure_state?: "open" | "closed";
+  closure_mode?: ClosureMode;
+  intent?: string;
+  in_scope?: string[];
+  out_of_scope?: string[];
+  definition_of_done?: string[];
+  work_packages?: ClosureWorkPackage[];
+  current_work_package?: string | null;
+  next_action?: string | null;
+  blockers?: string[];
+  repair_count?: number;
+  max_repair_count?: number;
 }
 
 /**
@@ -66,6 +109,19 @@ export const TASK_RECORD_FIELD_ORDER = [
   "relatedFiles",
   "notes",
   "meta",
+  "hermes_phase",
+  "closure_state",
+  "closure_mode",
+  "intent",
+  "in_scope",
+  "out_of_scope",
+  "definition_of_done",
+  "work_packages",
+  "current_work_package",
+  "next_action",
+  "blockers",
+  "repair_count",
+  "max_repair_count",
 ] as const satisfies readonly (keyof TrellisTaskRecord)[];
 
 export type TaskRecordField = (typeof TASK_RECORD_FIELD_ORDER)[number];
@@ -81,6 +137,10 @@ const STRING_FIELDS: ReadonlySet<TaskRecordField> = new Set([
   "assignee",
   "createdAt",
   "notes",
+  "hermes_phase",
+  "closure_state",
+  "closure_mode",
+  "intent",
 ]);
 
 const NULLABLE_STRING_FIELDS: ReadonlySet<TaskRecordField> = new Set([
@@ -94,13 +154,50 @@ const NULLABLE_STRING_FIELDS: ReadonlySet<TaskRecordField> = new Set([
   "commit",
   "pr_url",
   "parent",
+  "current_work_package",
+  "next_action",
 ]);
 
 const STRING_ARRAY_FIELDS: ReadonlySet<TaskRecordField> = new Set([
   "subtasks",
   "children",
   "relatedFiles",
+  "in_scope",
+  "out_of_scope",
+  "definition_of_done",
+  "blockers",
 ]);
+
+const OPTIONAL_CLOSURE_FIELDS: ReadonlySet<TaskRecordField> = new Set([
+  "hermes_phase",
+  "closure_state",
+  "closure_mode",
+  "intent",
+  "in_scope",
+  "out_of_scope",
+  "definition_of_done",
+  "work_packages",
+  "current_work_package",
+  "next_action",
+  "blockers",
+  "repair_count",
+  "max_repair_count",
+]);
+
+const CLOSURE_MODES: ReadonlySet<string> = new Set([
+  "lean",
+  "standard",
+  "publication",
+]);
+const HERMES_PHASES: ReadonlySet<string> = new Set([
+  "planning",
+  "ready",
+  "running",
+  "review",
+  "blocked",
+  "closed",
+]);
+const CLOSURE_STATES: ReadonlySet<string> = new Set(["open", "closed"]);
 
 /**
  * Lightweight runtime schema for {@link TrellisTaskRecord}. Zero-dep on
@@ -108,11 +205,11 @@ const STRING_ARRAY_FIELDS: ReadonlySet<TaskRecordField> = new Set([
  * record, throwing on shape violations; `taskRecordSchema.safeParse`
  * returns a result discriminated by `success`.
  *
- * All canonical fields are required; older partial records are rejected rather
- * than backfilled with defaults. Unknown fields on the input are intentionally
- * omitted from this structured output. `writeTaskRecord` preserves unknown
- * fields already present on disk by merging canonical updates over the existing
- * JSON object.
+ * Original Trellis fields remain required. Optional Hermes closure fields are
+ * parsed when present so legacy records keep working unchanged. Unknown fields
+ * on the input are intentionally omitted from this structured output.
+ * `writeTaskRecord` preserves unknown fields already present on disk by merging
+ * canonical updates over the existing JSON object.
  */
 export const taskRecordSchema = {
   parse(input: unknown): TrellisTaskRecord {
@@ -138,9 +235,12 @@ function parseTaskRecord(input: unknown): TrellisTaskRecord {
   if (!isPlainObject(input)) {
     throw new Error("task record must be a JSON object");
   }
-  const out = emptyTaskRecord();
+  const out = {} as TrellisTaskRecord;
   for (const field of TASK_RECORD_FIELD_ORDER) {
     if (!(field in input)) {
+      if (OPTIONAL_CLOSURE_FIELDS.has(field)) {
+        continue;
+      }
       throw new Error(`task.${field} is required`);
     }
     const value = (input as Record<string, unknown>)[field];
@@ -158,6 +258,15 @@ function assignField(
   if (STRING_FIELDS.has(field)) {
     if (typeof value !== "string") {
       throw new Error(`task.${field} must be a string`);
+    }
+    if (field === "closure_mode" && !CLOSURE_MODES.has(value)) {
+      throw new Error("task.closure_mode is invalid");
+    }
+    if (field === "hermes_phase" && !HERMES_PHASES.has(value)) {
+      throw new Error("task.hermes_phase is invalid");
+    }
+    if (field === "closure_state" && !CLOSURE_STATES.has(value)) {
+      throw new Error("task.closure_state is invalid");
     }
     bag[field] = value;
     return;
@@ -183,6 +292,22 @@ function assignField(
     record.meta = cloneJsonObject(value, "task.meta");
     return;
   }
+  if (field === "work_packages") {
+    if (!Array.isArray(value)) {
+      throw new Error("task.work_packages must be an array");
+    }
+    record.work_packages = value.map((item, index) =>
+      parseClosureWorkPackage(item, index),
+    );
+    return;
+  }
+  if (field === "repair_count" || field === "max_repair_count") {
+    if (!Number.isInteger(value) || (value as number) < 0) {
+      throw new Error(`task.${field} must be a non-negative integer`);
+    }
+    record[field] = value as number;
+    return;
+  }
   // Should be unreachable given the field sets cover every canonical field.
   /* c8 ignore next */
   throw new Error(`unknown canonical task field: ${field}`);
@@ -191,7 +316,7 @@ function assignField(
 /**
  * Produce a fully-populated canonical-shape {@link TrellisTaskRecord}.
  *
- * All 24 fields are present in canonical order. `overrides` shallow-merges
+ * All canonical fields are present in canonical order. `overrides` shallow-merges
  * over the defaults — callers supply per-task values (id, name, title,
  * assignee, createdAt, etc.) and leave null-default fields untouched
  * unless they have a real value.
@@ -225,6 +350,19 @@ export function emptyTaskRecord(
     relatedFiles: [],
     notes: "",
     meta: {},
+    hermes_phase: "planning",
+    closure_state: "open",
+    closure_mode: "lean",
+    intent: "",
+    in_scope: [],
+    out_of_scope: [],
+    definition_of_done: [],
+    work_packages: [],
+    current_work_package: null,
+    next_action: null,
+    blockers: [],
+    repair_count: 0,
+    max_repair_count: 1,
   };
   const record = { ...base, ...overrides };
   if (overrides.subtasks !== undefined) {
@@ -236,10 +374,94 @@ export function emptyTaskRecord(
   if (overrides.relatedFiles !== undefined) {
     record.relatedFiles = [...overrides.relatedFiles];
   }
+  if (overrides.in_scope !== undefined) {
+    record.in_scope = [...overrides.in_scope];
+  }
+  if (overrides.out_of_scope !== undefined) {
+    record.out_of_scope = [...overrides.out_of_scope];
+  }
+  if (overrides.definition_of_done !== undefined) {
+    record.definition_of_done = [...overrides.definition_of_done];
+  }
+  if (overrides.blockers !== undefined) {
+    record.blockers = [...overrides.blockers];
+  }
+  if (overrides.work_packages !== undefined) {
+    record.work_packages = overrides.work_packages.map((item) => ({
+      ...item,
+      done_when: [...item.done_when],
+      evidence_required: [...item.evidence_required],
+      depends_on: [...item.depends_on],
+      evidence_refs: [...item.evidence_refs],
+    }));
+  }
   if (overrides.meta !== undefined) {
     record.meta = cloneJsonObject(overrides.meta, "task.meta");
   }
   return record;
+}
+
+const WORK_PACKAGE_STATUSES: ReadonlySet<string> = new Set([
+  "pending",
+  "ready",
+  "running",
+  "review",
+  "done",
+  "blocked",
+  "deferred",
+  "waived",
+]);
+
+function parseClosureWorkPackage(
+  input: unknown,
+  index: number,
+): ClosureWorkPackage {
+  if (!isPlainObject(input)) {
+    throw new Error(`task.work_packages[${index}] must be an object`);
+  }
+  const readString = (field: "id" | "title" | "outcome"): string => {
+    const value = input[field];
+    if (typeof value !== "string") {
+      throw new Error(`task.work_packages[${index}].${field} must be a string`);
+    }
+    return value;
+  };
+  const readStringArray = (
+    field: "done_when" | "evidence_required" | "depends_on" | "evidence_refs",
+  ): string[] => {
+    const value = input[field];
+    if (
+      !Array.isArray(value) ||
+      value.some((item) => typeof item !== "string")
+    ) {
+      throw new Error(
+        `task.work_packages[${index}].${field} must be an array of strings`,
+      );
+    }
+    return [...value] as string[];
+  };
+
+  const status = input.status;
+  if (typeof status !== "string" || !WORK_PACKAGE_STATUSES.has(status)) {
+    throw new Error(`task.work_packages[${index}].status is invalid`);
+  }
+  const blocker = input.blocker;
+  if (blocker !== null && typeof blocker !== "string") {
+    throw new Error(
+      `task.work_packages[${index}].blocker must be a string or null`,
+    );
+  }
+  return {
+    id: readString("id"),
+    title: readString("title"),
+    outcome: readString("outcome"),
+    done_when: readStringArray("done_when"),
+    evidence_required: readStringArray("evidence_required"),
+    depends_on: readStringArray("depends_on"),
+    status: status as ClosureWorkPackageStatus,
+    evidence_refs: readStringArray("evidence_refs"),
+    blocker,
+  };
 }
 
 export function isPlainObject(value: unknown): value is Record<string, unknown> {

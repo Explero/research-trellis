@@ -13,7 +13,13 @@ git status
 
 ## Step 2: Read Task Artifacts and Applicable Specs
 
-Read the current task artifacts in order:
+For a Hermes closure task, start with the compact capsule and current package:
+
+```bash
+python3 ./.trellis/scripts/closure.py capsule --task <task>
+```
+
+Read full task artifacts only when the capsule or changed files require them:
 
 - `prd.md`
 - `design.md` if present
@@ -37,16 +43,22 @@ Run the project's lint, type-check, and test commands. Fix any failures before p
 
 ## Step 4: Run Hermes Quality Gates
 
-Use the current active task name for `<task>`. Run all Hermes checks below in addition to the normal project checks:
+Use the current active task name for `<task>`. First finish the current package checks and record its evidence. Run closure audit only after all packages are disposed. Gate depth follows `closure_mode`; lean does not require publication evidence:
 
 ```bash
+# after all packages are done/deferred/waived
+{{PYTHON_CMD}} ./.trellis/scripts/closure.py audit --task <task>
+
+# standard and publication
 {{PYTHON_CMD}} ./.trellis/scripts/hermes/validate.py --task <task> --kind audit
 {{PYTHON_CMD}} ./.trellis/scripts/hermes/validate.py --task <task> --kind provenance
 {{PYTHON_CMD}} ./.trellis/scripts/hermes/validate.py --task <task> --kind service_queue
+
+# publication only
 {{PYTHON_CMD}} ./.trellis/scripts/hermes/report.py quality-gate --task <task>
 ```
 
-Fix any Hermes failures before proceeding. Do not mark `trellis-check` complete until all four commands exit 0.
+Fix any Hermes failures before proceeding, but run only the commands required by the active mode. Do not promote a lean engineering check into scientific claim approval.
 
 ## Step 5: Review Against Checklist
 
@@ -104,3 +116,5 @@ Skip this step if your change is confined to a single layer.
 ## Step 7: Report and Fix
 
 Report violations found and fix them directly. Re-run project checks after fixes.
+
+For a running Hermes package, move it to review with `closure.py package-check`. Mark it done only after the checks above pass and provide concrete `--evidence` references. When all packages are disposed, run `closure.py audit`; do not substitute a successful test run for task closure or claim approval.

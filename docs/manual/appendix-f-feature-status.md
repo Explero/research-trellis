@@ -6,7 +6,7 @@
 
 ## 适用范围
 
-适用于 `0.6.0-beta.31`（测试版），后续版本应重新核对。
+适用于 `0.7.0-beta.0`（测试版），后续版本应重新核对。
 
 ## 前置条件
 
@@ -18,6 +18,9 @@
 | --- | --- | --- |
 | 安装、初始化、更新、卸载预览 | 已实现 | 卸载实际执行会删除整个工作流目录 |
 | 任务、规范、上下文清单 | 已实现 | 规划质量仍需人工审阅 |
+| Lean Research Closure | 已实现、实验性 | 默认 1–4 个工作包；自动候选仍需人工审阅 |
+| Task Capsule 与条件式 Handoff | 已实现 | 平台没有主会话 hook 时需手动调用 |
+| Closure Audit 与有限 Repair | 已实现 | 只处理缺口和状态，不自动运行实验或批准主张 |
 | 科研记录与结构校验 | 已实现、实验性 | 追加式约定，不防篡改 |
 | 科研状态流程 | 协议模板 | `state_machine.yaml`（状态协议）未作为通用运行时迁移引擎强制执行 |
 | 实验运行与运行清单 | 已实现、实验性 | 默认无隔离，允许命令不是强沙箱 |
@@ -60,7 +63,7 @@
 ## 验证记录
 
 - 日期：2026-07-15。
-- 版本：`0.6.0-beta.31`（测试版）。
+- 版本：`0.7.0-beta.0`（测试版）。
 - 更名前基准提交：`9f7dc8497b4782878d6fa7ac3b63eba5bde507df`。
 - 命令：`node packages/cli/scripts/release-preflight.js check-licenses`（许可证元数据与权利说明一致性检查）；`rg -n -m 1 "COPYRIGHT|LICENSE|files" packages/cli/package.json packages/core/package.json packages/cli/scripts/release-preflight.js`（打包权利文件核对）。
 - 结果：项目和两个包的 `SPDX`（许可证标识）均为 `AGPL-3.0-or-later`（AGPL 第 3 版或任何后续版本）；两个包均声明 `LICENSE`（许可证）和 `COPYRIGHT`（版权声明），发布预检也将其列为必需文件。

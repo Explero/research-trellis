@@ -1,0 +1,18 @@
+question: "候选模型能否在固定 scaffold-v1 测试集上降低溶解度 RMSE？"
+hypothesis: "候选模型的测试集 RMSE 低于 baseline-rf-v1。"
+dataset: "local-solubility-v1"
+model: "candidate-gnn-v1"
+metrics:
+  - "test_rmse"
+seed: 44
+environment:
+  os: "ubuntu-24.04"
+  shell: "bash"
+allowed_commands:
+  - "python3"
+sandbox:
+  mode: "none"
+  required: false
+  image: ""
+  command: ""
+artifact_dir: ".trellis/tasks/{task}/hermes/experiments"

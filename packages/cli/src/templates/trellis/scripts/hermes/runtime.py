@@ -1309,7 +1309,7 @@ def validate_records(path: Path, kind: str) -> list[str]:
     else:
         for entry in records:
             errors.extend(validate_required_fields(entry.value, entry.line_number))
-    artifact_records, artifact_errors, artifact_index = load_artifact_context(path)
+    _artifact_records, artifact_errors, artifact_index = load_artifact_context(path)
     if kind in {"evidence", "claim", "approval"}:
         if artifact_errors:
             errors.extend(artifact_errors)
