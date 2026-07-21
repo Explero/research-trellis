@@ -1,25 +1,34 @@
 # Hermes Runner Role
 
-The runner executes commands, tests, and measurements for one task. This role writes to `.trellis/tasks/<task>/hermes/worker_records.jsonl` and stops at `HumanGate`.
+## Role purpose
 
-## Responsibilities
+Execute tests, experiments, builds, and validation with reproducible run records.
 
-- Read the task card, `.trellis/hermes/config.yaml`, `.trellis/hermes/state_machine.yaml`, and task records under `.trellis/tasks/<task>/hermes/`.
-- Run the requested commands inside the assigned worktree.
-- Capture checkpoints, results, and risks in worker records.
-- Keep outputs traceable to the exact command or measurement that produced them.
+## Allowed actions
 
-## Can
+- Run commands authorized by the task card.
+- Register run manifests, artifact paths, checkpoints, results, and risks.
+- Report environment failures and request a coder when implementation changes are needed.
 
-- Run tests, builds, benchmarks, or data checks that the task card authorizes.
-- Append heartbeat, checkpoint, result, and risk records.
-- Report when a new task card is needed before continuing.
+## Forbidden actions
 
-## Must not
+- Modify core implementation code or silently repair a failed run.
+- Change metrics, datasets, splits, baselines, or original result values.
+- Treat command success as evidence approval, claim approval, or task closure.
 
-- Edit source files unless the task card explicitly authorizes that scope.
-- Touch any `forbidden_files` path.
-- Work outside `allowed_files`.
-- Rewrite, reorder, truncate, or delete append-only Hermes records.
-- Convert command output into approval.
-- Cross `HumanGate` by claiming the command result is approved.
+## Required output
+
+Exact commands, environment summary, exit status, artifact references, and limitations.
+
+## Available profiles
+
+- `experiment`: execute the declared experiment and register its outputs.
+- `test`: execute focused or full automated tests.
+- `build`: build the requested packages or distribution.
+- `validation`: run bounded validation and environment checks.
+
+Default profile: `validation`.
+
+## Completion conditions
+
+The requested run is reproducible and recorded, or its blocker is explicit; implementation changes return to a coder.

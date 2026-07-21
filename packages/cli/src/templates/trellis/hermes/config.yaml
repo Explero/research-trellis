@@ -23,6 +23,8 @@ records:
   metrics_schema: ".trellis/tasks/{task}/hermes/metrics_schema.yaml"
   compare_records: ".trellis/tasks/{task}/hermes/compare.jsonl"
   report: ".trellis/tasks/{task}/hermes/report.md"
+  dispatches: ".trellis/tasks/{task}/hermes/dispatches"
+  dispatch_audit: ".trellis/tasks/{task}/hermes/dispatch_audit.jsonl"
 
 global_templates:
   records_readme: ".trellis/hermes/records/README.md"
@@ -53,6 +55,19 @@ recordbus:
   chat_is_fact_source: false
   completion_requires_record: true
 
+context_firewall:
+  schema: "hermes-dispatch/v1"
+  result_schema: ".trellis/hermes/schemas/result-envelope.schema.json"
+  formal_platforms: ["claude", "codex"]
+  max_refs: 3
+  max_dispatch_chars: 2000
+  max_conclusion_chars: 1200
+  raw_trace_dir: ".trellis/.runtime/hermes-traces"
+  raw_trace_publish: false
+  claude_mode: "hooks-enforced"
+  codex_native: "advisory"
+  codex_strict: "codex exec --output-schema --json -o"
+
 async_workers:
   heartbeat_interval: "5m"
   timeout_policy: "mark stalled, resume from the latest checkpoint, or dispatch a replacement worker"
@@ -68,6 +83,11 @@ runtime:
     note: "Local fail-closed checks only; not an OS sandbox."
   commands:
     append_record: "python3 ./.trellis/scripts/hermes/record.py append --task {task} --record-type worker --json '{json}'"
+    dispatch_create: "python3 ./.trellis/scripts/hermes/dispatch.py create --task {task} --role {role} --profile {profile} --objective {objective}"
+    dispatch_validate: "python3 ./.trellis/scripts/hermes/dispatch.py validate --task {task} --job-id {job_id}"
+    dispatch_show: "python3 ./.trellis/scripts/hermes/dispatch.py show --task {task} --job-id {job_id}"
+    dispatch_run_codex_strict: "python3 ./.trellis/scripts/hermes/dispatch.py run --task {task} --job-id {job_id} --platform codex --mode strict"
+    dispatch_list: "python3 ./.trellis/scripts/hermes/dispatch.py list --task {task}"
     validate_worker: "python3 ./.trellis/scripts/hermes/validate.py --task {task} --kind worker"
     init_experiment: "python3 ./.trellis/scripts/hermes/experiment.py init --task {task}"
     validate_experiment: "python3 ./.trellis/scripts/hermes/experiment.py validate --task {task}"
@@ -80,6 +100,9 @@ runtime:
     runner_run: "python3 ./.trellis/scripts/hermes/runner.py run --task {task} --job-id {job_id} --checkpoint {checkpoint} --summary {summary} --resume-from {resume_from} -- {command}"
     runner_replay: "python3 ./.trellis/scripts/hermes/runner.py replay --task {task} --run-id {run_id}"
     validate_run_manifest: "python3 ./.trellis/scripts/hermes/validate.py --task {task} --kind run_manifest"
+    evidence_collect: "python3 ./.trellis/scripts/hermes/evidence.py collect --task {task}"
+    evidence_validate: "python3 ./.trellis/scripts/hermes/evidence.py validate --task {task}"
+    evidence_summary: "python3 ./.trellis/scripts/hermes/evidence.py summary --task {task}"
     aggregate: "python3 ./.trellis/scripts/hermes/report.py aggregate --task {task} --output .trellis/tasks/{task}/hermes/aggregate.json"
     compare: "python3 ./.trellis/scripts/hermes/report.py compare --task {task} --metric {metric} --baseline {baseline} --new {new} --threshold {threshold} --direction {direction}"
     report: "python3 ./.trellis/scripts/hermes/report.py report --task {task} --question {question} --method {method} --data {data} --metrics {metrics} --limitations {limitations} --risks {risks}"

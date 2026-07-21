@@ -157,9 +157,9 @@ def _build_hermes_main_agent_boot_guard(trellis_dir: Path) -> str:
 Source: .trellis/hermes/HERMES_MAIN_AGENT_BOOT_GUARD.md. Read it before governance-sensitive work; keep this SessionStart payload compact.
 Role: Main Agent / Main Pilot coordinates Hermes state, bounded subagent routing, record validation, handoff, and human/PI stop points.
 Hard limits: do not directly modify source, metrics, dataset splits, baselines, official evaluation, claim_allowed=true, or main merge unless Hermes state and human/root authority allow it.
-Subagent context policy: minimal_file_context. Give role, task ID, allowed files, forbidden files, required output, stop condition, record schema, and claim boundary. Do not fork full chat by default.
+Formal Codex context policy: native is advisory; use validated_dispatch_only through dispatch.py strict mode for enforced work. Keep raw output out of chat.
 Record policy: chat is not completion; completed, failed, blocked, stale, interrupted, or capacity-blocked work needs structured records.
-Claim boundary: keep engineering success, runner success, evaluator approval, proxy evidence, scientific evidence, claim approval, and merge approval separate.
+Claim boundary: keep engineering success, runner success, evidence review, proxy evidence, scientific evidence, claim approval, and merge approval separate.
 </main-agent-boot-guard>"""
 
 
@@ -261,6 +261,20 @@ def _get_task_status(trellis_dir: Path, hook_input: dict) -> str:
 
     task_title = task_data.get("title", task_ref)
     task_status = task_data.get("status", "unknown")
+
+    if isinstance(task_data, dict) and any(
+        field in task_data for field in ("closure_state", "hermes_phase", "work_packages")
+    ):
+        scripts_dir = trellis_dir / "scripts"
+        if str(scripts_dir) not in sys.path:
+            sys.path.insert(0, str(scripts_dir))
+        try:
+            from common.closure import build_capsule, closure_next_action  # type: ignore[import-not-found]
+
+            capsule = build_capsule(task_dir, task_data, trellis_dir.parent)
+            return f"Status: HERMES CLOSURE\n{capsule}\nNext: {closure_next_action(task_data)}"
+        except Exception:
+            return f"Status: HERMES CLOSURE\nTask: {task_title}"
 
     if task_status == "completed":
         return (

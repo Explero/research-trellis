@@ -36,6 +36,11 @@ import {
   type ProjectType,
   type DetectedPackage,
 } from "../utils/project-detector.js";
+import {
+  collectProjectFactIndex,
+  renderProjectFactIndex,
+  type ProjectFactIndex,
+} from "../utils/project-context.js";
 import { initializeHashes, removeHash } from "../utils/template-hash.js";
 import {
   NATIVE_WORKFLOW_ID,
@@ -375,9 +380,13 @@ function ensureInitialTrellisSwitch(cwd: string, developerName: string): void {
  * task_store.py).
  */
 function getBootstrapChecklistItems(
+  initializationKind: ProjectFactIndex["kind"],
   projectType: ProjectType,
   packages?: DetectedPackage[],
 ): string[] {
+  if (initializationKind === "blank") {
+    return ["完成一次项目级研究合同讨论", "创建一个可验证的首个研究任务"];
+  }
   if (packages && packages.length > 0) {
     const items = packages.map((pkg) => `补充 ${pkg.name} 的开发规范`);
     items.push("补充代码示例");
@@ -393,27 +402,46 @@ function getBootstrapChecklistItems(
 }
 
 function getBootstrapRelatedFiles(
+  initializationKind: ProjectFactIndex["kind"],
   projectType: ProjectType,
   packages?: DetectedPackage[],
 ): string[] {
+  const projectFiles = [
+    ".trellis/project/PROJECT_INDEX.md",
+    ".trellis/project/BACKGROUND.md",
+    ".trellis/project/RESEARCH_PLAN.md",
+    ".trellis/project/CONSTRAINTS.md",
+  ];
   if (packages && packages.length > 0) {
-    return packages.map((pkg) => `.trellis/spec/${sanitizePkgName(pkg.name)}/`);
+    return [
+      ...projectFiles,
+      ...packages.map((pkg) => `.trellis/spec/${sanitizePkgName(pkg.name)}/`),
+    ];
   }
   if (projectType === "frontend") {
-    return [".trellis/spec/frontend/"];
+    return [...projectFiles, ".trellis/spec/frontend/"];
   }
   if (projectType === "backend") {
-    return [".trellis/spec/backend/"];
+    return [...projectFiles, ".trellis/spec/backend/"];
   }
-  return [".trellis/spec/backend/", ".trellis/spec/frontend/"];
+  return [...projectFiles, ".trellis/spec/backend/", ".trellis/spec/frontend/"];
 }
 
 function getBootstrapPrdContent(
+  initializationKind: ProjectFactIndex["kind"],
   projectType: ProjectType,
   pythonCmd: string,
   packages?: DetectedPackage[],
 ): string {
-  const checklistItems = getBootstrapChecklistItems(projectType, packages);
+  if (initializationKind === "blank") {
+    return getBlankProjectBootstrapPrd(pythonCmd);
+  }
+
+  const checklistItems = getBootstrapChecklistItems(
+    initializationKind,
+    projectType,
+    packages,
+  );
   const checklistMarkdown = checklistItems
     .map((item) => `- [ ] ${item}`)
     .join("\n");
@@ -427,13 +455,16 @@ function getBootstrapPrdContent(
 出现在 \`.trellis/tasks/\` 下。当他们准备处理它时，应当在提供 Trellis 会话身份
 的会话里启动这个任务。
 
-**你的目标**：帮助他们把团队真实的编码规范补充进 \`.trellis/spec/\`。
+**你的目标**：先根据已有项目事实建立项目资料，再帮助他们把团队真实的编码规范补充进 \`.trellis/spec/\`。
 未来这个项目里的每次 AI 会话——包括 \`trellis-implement\` 和 \`trellis-check\`
 子代理——都会自动加载每个任务 jsonl 清单里列出的 spec 文件。spec 为空，
 子代理就会写出泛化代码；spec 真实完整，子代理才会贴近团队现有风格。
 
-不要一上来倾倒说明。先用一句简短欢迎语开场，确认仓库里是否已有约定文档
-（如 CLAUDE.md、.cursorrules 等），再以对话方式推进。
+先读取 \`.trellis/project/PROJECT_INDEX.md\`。它只列出初始化时发现的文件和目录，不是摘要。
+再按需读取其中的原始资料，把已确认事实写入 \`BACKGROUND.md\`（项目背景）、\`RESEARCH_PLAN.md\`
+（研究方案）和 \`CONSTRAINTS.md\`（项目约束）。不确定的信息保留为空或标记待确认，不要推测。
+
+不要一上来倾倒说明。先用一句简短欢迎语开场，再以对话方式推进。
 
 ---
 
@@ -583,13 +614,81 @@ ${pythonCmd} ./.trellis/scripts/task.py archive 00-bootstrap-guidelines
   return content;
 }
 
+function getBlankProjectBootstrapPrd(pythonCmd: string): string {
+  return `# 启动任务：建立研究合同
+
+**你（AI）正在执行这个任务，开发者不会直接阅读这个文件。**
+
+这是一个没有既有项目事实的空仓库。先进行一次聚焦的项目级讨论，不要直接开始写框架、创建大量子任务或猜测研究方向。
+
+## 本任务的唯一目标
+
+把已确认的信息写入 \`.trellis/project/\`，再创建一个范围小、可验证的首个研究任务。
+
+讨论只需要确认六项：
+
+1. 研究问题或工程目标；
+2. 首个可观察、可验证的结果；
+3. 数据、输入或最小样例；
+4. 指标、比较方式或验收条件；
+5. 可用资源、隐私、安全和时间约束；
+6. 本轮明确不做的内容。
+
+把确认结果分别记录到 \`BACKGROUND.md\`（背景和目标）、\`RESEARCH_PLAN.md\`（问题、方法和证据要求）和 \`CONSTRAINTS.md\`（边界与限制）。不要把未经讨论的假设写成事实。
+
+## 工作方式
+
+- 这是一次需要方案讨论的启动任务。先完成聚焦讨论，再记录 \`closure.py grill --complete\`。
+- 讨论完成后，创建一个新的普通任务；它应有明确的 \`intent\`（目标）、\`definition_of_done\`（完成定义）和 1–4 个以结果为单位的工作包。
+- 首个任务应验证一个最小结果，例如固定样例上的可重复输出、基线比较或数据读取链路；不要把“搭完整平台”作为首个任务。
+- 启动任务只负责建立项目合同和首个任务，不负责实现该任务。
+
+## 完成条件
+
+- \`.trellis/project/\` 三份项目资料已填写已确认事实；
+- 已创建一个可验证的首个任务，并完成其 \`closure.py plan\`；
+- 不确定项和暂不处理范围已写入项目约束或新任务；
+- 本任务的两个工作包都已登记完成或合理延期。
+
+## 完成方式
+
+\`\`\`bash
+${pythonCmd} ./.trellis/scripts/closure.py grill --task 00-bootstrap-guidelines --complete
+${pythonCmd} ./.trellis/scripts/closure.py validate --task 00-bootstrap-guidelines
+${pythonCmd} ./.trellis/scripts/closure.py package-start --task 00-bootstrap-guidelines --package-id WP1
+${pythonCmd} ./.trellis/scripts/closure.py package-check --task 00-bootstrap-guidelines --package-id WP1
+${pythonCmd} ./.trellis/scripts/closure.py package-done --task 00-bootstrap-guidelines --package-id WP1 \\
+  --evidence .trellis/project/BACKGROUND.md \\
+  --evidence .trellis/project/RESEARCH_PLAN.md \\
+  --evidence .trellis/project/CONSTRAINTS.md
+FIRST_TASK="$(${pythonCmd} ./.trellis/scripts/task.py create "Verify the first sample" --slug first-sample)"
+${pythonCmd} ./.trellis/scripts/closure.py plan --task "$FIRST_TASK" \\
+  --intent "Verify one agreed minimal result" \\
+  --done-when "The agreed sample has a reproducible result"
+${pythonCmd} ./.trellis/scripts/closure.py package-start --task 00-bootstrap-guidelines --package-id WP2
+${pythonCmd} ./.trellis/scripts/closure.py package-check --task 00-bootstrap-guidelines --package-id WP2
+${pythonCmd} ./.trellis/scripts/closure.py package-done --task 00-bootstrap-guidelines --package-id WP2 \\
+  --evidence "$FIRST_TASK/task.json"
+${pythonCmd} ./.trellis/scripts/closure.py audit --task 00-bootstrap-guidelines
+${pythonCmd} ./.trellis/scripts/closure.py close --task 00-bootstrap-guidelines
+${pythonCmd} ./.trellis/scripts/task.py archive 00-bootstrap-guidelines
+\`\`\`
+`;
+}
+
 function getBootstrapTaskJson(
   developer: string,
+  initializationKind: ProjectFactIndex["kind"],
   projectType: ProjectType,
   packages?: DetectedPackage[],
 ): TaskJson {
   const today = new Date().toISOString().split("T")[0];
-  const relatedFiles = getBootstrapRelatedFiles(projectType, packages);
+  const relatedFiles = getBootstrapRelatedFiles(
+    initializationKind,
+    projectType,
+    packages,
+  );
+  const isBlank = initializationKind === "blank";
 
   // Canonical 24-field shape via emptyTaskJson factory.
   // Checklist items (previously stored as structured `subtasks`) are now
@@ -598,16 +697,122 @@ function getBootstrapTaskJson(
   return emptyTaskJson({
     id: BOOTSTRAP_TASK_NAME,
     name: BOOTSTRAP_TASK_NAME,
-    title: "Bootstrap Guidelines",
-    description: "Fill in project development guidelines for AI agents",
-    status: "in_progress",
+    title: isBlank
+      ? "Establish Research Contract"
+      : "Establish Project Facts And Guidelines",
+    description: isBlank
+      ? "Discuss and record the project research contract, then create one verifiable first task"
+      : "Record project facts from existing sources and fill in development guidelines for AI agents",
+    status: "planning",
     dev_type: "docs",
     priority: "P1",
     creator: developer,
     assignee: developer,
     createdAt: today,
     relatedFiles,
-    notes: `First-time setup task created by research-trellis init (${projectType} project)`,
+    notes: `First-time ${initializationKind} project setup created by research-trellis init (${projectType} project)`,
+    intent: isBlank
+      ? "Establish the research contract and create a first verifiable task"
+      : "Establish factual project context and usable engineering guidelines",
+    in_scope: isBlank
+      ? [
+          "Project background, research plan, constraints, first verifiable task",
+        ]
+      : ["Fact index, project context, existing engineering conventions"],
+    out_of_scope: isBlank
+      ? ["Full product implementation", "Unagreed research claims"]
+      : ["Inventing project facts", "Unrelated refactors"],
+    definition_of_done: isBlank
+      ? [
+          "Confirmed project background, research plan, and constraints are recorded",
+          "A first verifiable task is created and planned",
+        ]
+      : [
+          "Project context records cite facts from existing materials",
+          "Relevant engineering conventions are recorded with real examples",
+        ],
+    context_pins: [".trellis/project/PROJECT_INDEX.md"],
+    research_route: isBlank ? "exploration" : "delivery",
+    research_change_fields: isBlank ? ["hypothesis"] : [],
+    grill_completed: false,
+    work_packages: isBlank
+      ? [
+          {
+            id: "WP1",
+            title: "Agree the project research contract",
+            outcome:
+              "Confirmed background, research plan, and constraints are recorded without invented facts.",
+            done_when: [
+              "The six contract questions are answered or explicitly deferred",
+              "Confirmed project background, research plan, and constraints are recorded",
+            ],
+            evidence_required: [
+              ".trellis/project/BACKGROUND.md",
+              ".trellis/project/RESEARCH_PLAN.md",
+              ".trellis/project/CONSTRAINTS.md",
+            ],
+            depends_on: [],
+            status: "pending",
+            evidence_refs: [],
+            blocker: null,
+          },
+          {
+            id: "WP2",
+            title: "Create the first verifiable task",
+            outcome:
+              "One small task has a clear result and completion definition.",
+            done_when: [
+              "A new task has intent and definition_of_done",
+              "A first verifiable task is created and planned",
+            ],
+            evidence_required: [".trellis/tasks/<first-task>/task.json"],
+            depends_on: ["WP1"],
+            status: "pending",
+            evidence_refs: [],
+            blocker: null,
+          },
+        ]
+      : [
+          {
+            id: "WP1",
+            title: "Record factual project context",
+            outcome:
+              "Project background, plan, and constraints are grounded in indexed source materials.",
+            done_when: [
+              "PROJECT_INDEX.md has been read",
+              "Project context files contain only confirmed facts or explicit unknowns",
+            ],
+            evidence_required: [
+              ".trellis/project/PROJECT_INDEX.md",
+              ".trellis/project/BACKGROUND.md",
+              ".trellis/project/RESEARCH_PLAN.md",
+              ".trellis/project/CONSTRAINTS.md",
+            ],
+            depends_on: [],
+            status: "pending",
+            evidence_refs: [],
+            blocker: null,
+          },
+          {
+            id: "WP2",
+            title: "Record usable engineering conventions",
+            outcome:
+              "Relevant specs reflect current repository patterns with real examples.",
+            done_when: [
+              "Relevant project conventions are referenced",
+              "Specs distinguish current practice from future improvements",
+            ],
+            evidence_required: [".trellis/spec/"],
+            depends_on: ["WP1"],
+            status: "pending",
+            evidence_refs: [],
+            blocker: null,
+          },
+        ],
+    next_action: isBlank
+      ? "Hold one focused research-contract discussion, then record the completed grill."
+      : "Read PROJECT_INDEX.md and record only confirmed project facts.",
+    meta: { hermes_bootstrap_kind: initializationKind },
   });
 }
 
@@ -618,11 +823,22 @@ function createBootstrapTask(
   cwd: string,
   developer: string,
   pythonCmd: string,
+  factIndex: ProjectFactIndex,
   projectType: ProjectType,
   packages?: DetectedPackage[],
 ): boolean {
-  const taskJson = getBootstrapTaskJson(developer, projectType, packages);
-  const prdContent = getBootstrapPrdContent(projectType, pythonCmd, packages);
+  const taskJson = getBootstrapTaskJson(
+    developer,
+    factIndex.kind,
+    projectType,
+    packages,
+  );
+  const prdContent = getBootstrapPrdContent(
+    factIndex.kind,
+    projectType,
+    pythonCmd,
+    packages,
+  );
   return writeTaskSkeleton(cwd, BOOTSTRAP_TASK_NAME, taskJson, prdContent);
 }
 
@@ -1073,6 +1289,9 @@ export async function init(options: InitOptions): Promise<void> {
 
   const cwd = process.cwd();
   const isFirstInit = !fs.existsSync(path.join(cwd, DIR_NAMES.WORKFLOW));
+  // Capture repository facts before .trellis/ and platform templates exist.
+  // The result is later saved as a reading map, never an inferred summary.
+  const projectFactIndex = collectProjectFactIndex(cwd);
   // Captured here (before createWorkflowStructure + init_developer run) so
   // the three-branch dispatch at the bottom can tell "fresh clone joiner"
   // (.trellis/ exists, .developer missing) apart from "creator first init".
@@ -1840,6 +2059,11 @@ export async function init(options: InitOptions): Promise<void> {
       workflowMdOverride,
     });
 
+    await writeFile(
+      path.join(cwd, PATHS.PROJECT, "PROJECT_INDEX.md"),
+      renderProjectFactIndex(projectFactIndex),
+    );
+
     // Write monorepo packages to config.yaml (non-destructive patch)
     if (monorepoPackages) {
       writeMonorepoConfig(cwd, monorepoPackages);
@@ -1940,6 +2164,7 @@ export async function init(options: InitOptions): Promise<void> {
         cwd,
         developerName,
         pythonCmd,
+        projectFactIndex,
         projectType,
         monorepoPackages,
       );

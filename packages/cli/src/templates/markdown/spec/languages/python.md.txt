@@ -1,0 +1,24 @@
+# Python 书写规范
+
+## 默认规则
+
+- 遵从项目已有的 `pyproject.toml`（Python 项目配置）、格式化和检查配置；没有项目约定时，以 `PEP 8`（Python 代码风格）和 `PEP 257`（文档字符串规范）为基线；
+- 为公开函数、复杂数据结构和外部边界补充类型标注；不要为了消除类型错误滥用 `Any`（任意类型）或忽略检查；
+- 使用 `pathlib`（路径库）处理文件路径，使用显式配置传入数据路径、输出路径和参数；不要硬编码个人目录或隐式依赖当前工作目录；
+- 异常只捕获能够处理的类型，并保留上下文。禁止空的 `except`（异常捕获）和无说明的宽泛吞错；
+- 函数保持单一、可测试的职责。可变默认参数、隐藏全局状态和导入时执行昂贵计算应避免；
+- 公开模块和研究关键步骤说明输入、输出、单位、随机性和副作用。
+
+## 科研与测试
+
+- 训练、评估和数据处理入口应接收显式配置，并记录随机种子、版本和产物位置；
+- 优先运行项目已有的 `Ruff`（Python 检查与格式化）、`Black`（格式化）、类型检查和 `pytest`（测试框架）命令；未配置时不要强制新增工具；
+- 测试避免依赖本机路径、网络和随机顺序；需要随机性时固定或记录种子。
+
+## 公开基线
+
+- `PEP 8`（Python 代码风格）：https://peps.python.org/pep-0008/
+- `PEP 257`（文档字符串规范）：https://peps.python.org/pep-0257/
+- `Ruff`（Python 检查与格式化）：https://docs.astral.sh/ruff/
+- `Black`（Python 格式化风格）：https://black.readthedocs.io/en/stable/the_black_code_style/
+- `pytest Good Integration Practices`（pytest 集成实践）：https://docs.pytest.org/en/stable/explanation/goodpractices.html

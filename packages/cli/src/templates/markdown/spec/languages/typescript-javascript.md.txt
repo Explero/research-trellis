@@ -1,0 +1,24 @@
+# TypeScript / JavaScript 书写规范
+
+## 默认规则
+
+- 优先使用项目已有的 `tsconfig`（TypeScript 配置）、`ESLint`（静态检查）和 `Prettier`（格式化）配置；没有项目约定时，新增 TypeScript 代码优先保持 `strict`（严格类型）兼容；
+- 对外部数据、JSON、环境变量和命令输出先按 `unknown`（未知类型）处理，再校验并转换；不要用 `any`（任意类型）绕过边界问题；
+- 类型、常量和错误处理应靠近其领域所有者。跨模块复用的类型放在稳定入口，避免每个调用点重复断言；
+- 函数、文件和导出名称表达行为或领域含义。布尔值使用可读的肯定或疑问式名称；
+- 异步操作必须处理失败路径、取消或超时语义；不要悄悄吞掉 `Promise`（异步结果）拒绝；
+- 除非已有约定，不进行全仓库格式化、导入重排或从 JavaScript 批量迁移到 TypeScript。
+
+## 测试与检查
+
+- 改动公开接口、解析逻辑或运行时分支时，覆盖成功、无效输入和失败路径；
+- 优先运行项目已有的格式化、`ESLint`（静态检查）、`tsc --noEmit`（类型检查）和目标测试；
+- 类型断言只能缩小已经验证过的值，不能替代测试或运行时校验。
+
+## 公开基线
+
+- `Google TypeScript Style Guide`（谷歌 TypeScript 规范）：https://google.github.io/styleguide/tsguide.html
+- `Google JavaScript Style Guide`（谷歌 JavaScript 规范）：https://google.github.io/styleguide/jsguide.html
+- `typescript-eslint`（TypeScript 静态检查规则）：https://typescript-eslint.io/
+- `ESLint`（JavaScript 静态检查）：https://eslint.org/docs/latest/use/core-concepts/
+- `Prettier`（代码格式化）：https://prettier.io/docs/

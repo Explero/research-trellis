@@ -32,6 +32,14 @@ import {
   guidesIndexContent,
   guidesCrossLayerThinkingGuideContent,
   guidesCodeReuseThinkingGuideContent,
+  guidesGeneralCodeGuidelinesContent,
+  languageGuidesIndexContent,
+  languageTypeScriptJavaScriptContent,
+  languagePythonContent,
+  languageGoContent,
+  languageRustContent,
+  languageCppContent,
+  languageShellContent,
 } from "../templates/markdown/index.js";
 
 import { writeFile, ensureDir } from "../utils/file-writer.js";
@@ -77,7 +85,8 @@ export interface WorkflowOptions {
  * 2. Copying workflow.md and .gitignore (dogfooding)
  * 3. Creating workspace/ with index.md
  * 4. Creating tasks/ directory
- * 5. Creating spec/ with templates (not dogfooded - generic templates)
+ * 5. Creating project/ context references
+ * 6. Creating spec/ with templates (not dogfooded - generic templates)
  *
  * @param cwd - Current working directory
  * @param options - Workflow options including project type
@@ -130,6 +139,10 @@ export async function createWorkflowStructure(
 
   // Create tasks/ directory
   ensureDir(path.join(cwd, PATHS.TASKS));
+
+  // Project context stays user-managed. SessionStart lists these references
+  // for the main agent without loading their full content.
+  await copyTrellisDir("project", path.join(cwd, PATHS.PROJECT));
 
   // Create spec templates based on project type
   // These are NOT dogfooded - they are generic templates for new projects
@@ -226,6 +239,10 @@ async function createSpecTemplates(
   const guidesDocs: DocDefinition[] = [
     { name: "index.md", content: guidesIndexContent },
     {
+      name: "general-code-guidelines.md",
+      content: guidesGeneralCodeGuidelinesContent,
+    },
+    {
       name: "cross-layer-thinking-guide.md",
       content: guidesCrossLayerThinkingGuideContent,
     },
@@ -237,6 +254,8 @@ async function createSpecTemplates(
   for (const doc of guidesDocs) {
     await writeFile(path.join(guidesDir, doc.name), doc.content);
   }
+
+  await writeLanguageGuides(cwd);
 
   if (packages && packages.length > 0) {
     // Monorepo mode: create spec/<name>/ for each package
@@ -251,5 +270,26 @@ async function createSpecTemplates(
   } else {
     // Single-repo mode
     await writeSpecForType(path.join(cwd, PATHS.SPEC), projectType);
+  }
+}
+
+/** Write compact language guides; callers select only the relevant one. */
+async function writeLanguageGuides(cwd: string): Promise<void> {
+  const languagesDir = path.join(cwd, PATHS.SPEC, "languages");
+  ensureDir(languagesDir);
+  const docs: DocDefinition[] = [
+    { name: "index.md", content: languageGuidesIndexContent },
+    {
+      name: "typescript-javascript.md",
+      content: languageTypeScriptJavaScriptContent,
+    },
+    { name: "python.md", content: languagePythonContent },
+    { name: "go.md", content: languageGoContent },
+    { name: "rust.md", content: languageRustContent },
+    { name: "cpp.md", content: languageCppContent },
+    { name: "shell.md", content: languageShellContent },
+  ];
+  for (const doc of docs) {
+    await writeFile(path.join(languagesDir, doc.name), doc.content);
   }
 }

@@ -2,7 +2,7 @@
  * Canonical task.json shape — single source of truth for Trellis tasks.
  *
  * The runtime Python writer is `.trellis/scripts/common/task_store.py`
- * (`cmd_create`). The 24-field shape and field order below mirror that
+ * (`cmd_create`). The field shape and field order below mirror that
  * writer exactly so every TS and Python entry point produces structurally
  * identical task.json files.
  *
@@ -11,6 +11,7 @@
  * task.json shape.
  */
 export type ClosureMode = "lean" | "standard" | "publication";
+export type ResearchRoute = "delivery" | "execution" | "exploration";
 export type HermesPhase =
   | "planning"
   | "ready"
@@ -38,6 +39,15 @@ export interface ClosureWorkPackage {
   status: ClosureWorkPackageStatus;
   evidence_refs: string[];
   blocker: string | null;
+  confirmed_dispatches?: string[];
+  dispatch_blockers?: string[];
+  dispatch_blocked_from_status?: "running" | "review";
+}
+
+export interface ClosureConstraints {
+  excluded_platforms: string[];
+  excluded_paths: string[];
+  validation_level: "targeted" | "basic" | "standard";
 }
 
 export interface TrellisTaskRecord {
@@ -72,12 +82,19 @@ export interface TrellisTaskRecord {
   in_scope?: string[];
   out_of_scope?: string[];
   definition_of_done?: string[];
+  context_pins?: string[];
+  research_route?: ResearchRoute;
+  research_change_fields?: string[];
+  grill_completed?: boolean;
+  constraints?: ClosureConstraints;
   work_packages?: ClosureWorkPackage[];
   current_work_package?: string | null;
   next_action?: string | null;
   blockers?: string[];
   repair_count?: number;
   max_repair_count?: number;
+  hermes_revision?: number;
+  confirmed_dispatches?: string[];
 }
 
 /**
@@ -116,12 +133,19 @@ export const TASK_RECORD_FIELD_ORDER = [
   "in_scope",
   "out_of_scope",
   "definition_of_done",
+  "context_pins",
+  "research_route",
+  "research_change_fields",
+  "grill_completed",
+  "constraints",
   "work_packages",
   "current_work_package",
   "next_action",
   "blockers",
   "repair_count",
   "max_repair_count",
+  "hermes_revision",
+  "confirmed_dispatches",
 ] as const satisfies readonly (keyof TrellisTaskRecord)[];
 
 export type TaskRecordField = (typeof TASK_RECORD_FIELD_ORDER)[number];
@@ -141,6 +165,7 @@ const STRING_FIELDS: ReadonlySet<TaskRecordField> = new Set([
   "closure_state",
   "closure_mode",
   "intent",
+  "research_route",
 ]);
 
 const NULLABLE_STRING_FIELDS: ReadonlySet<TaskRecordField> = new Set([
@@ -165,7 +190,10 @@ const STRING_ARRAY_FIELDS: ReadonlySet<TaskRecordField> = new Set([
   "in_scope",
   "out_of_scope",
   "definition_of_done",
+  "context_pins",
+  "research_change_fields",
   "blockers",
+  "confirmed_dispatches",
 ]);
 
 const OPTIONAL_CLOSURE_FIELDS: ReadonlySet<TaskRecordField> = new Set([
@@ -176,12 +204,19 @@ const OPTIONAL_CLOSURE_FIELDS: ReadonlySet<TaskRecordField> = new Set([
   "in_scope",
   "out_of_scope",
   "definition_of_done",
+  "context_pins",
+  "research_route",
+  "research_change_fields",
+  "grill_completed",
+  "constraints",
   "work_packages",
   "current_work_package",
   "next_action",
   "blockers",
   "repair_count",
   "max_repair_count",
+  "hermes_revision",
+  "confirmed_dispatches",
 ]);
 
 const CLOSURE_MODES: ReadonlySet<string> = new Set([
@@ -198,6 +233,11 @@ const HERMES_PHASES: ReadonlySet<string> = new Set([
   "closed",
 ]);
 const CLOSURE_STATES: ReadonlySet<string> = new Set(["open", "closed"]);
+const RESEARCH_ROUTES: ReadonlySet<string> = new Set([
+  "delivery",
+  "execution",
+  "exploration",
+]);
 
 /**
  * Lightweight runtime schema for {@link TrellisTaskRecord}. Zero-dep on
@@ -268,6 +308,9 @@ function assignField(
     if (field === "closure_state" && !CLOSURE_STATES.has(value)) {
       throw new Error("task.closure_state is invalid");
     }
+    if (field === "research_route" && !RESEARCH_ROUTES.has(value)) {
+      throw new Error("task.research_route is invalid");
+    }
     bag[field] = value;
     return;
   }
@@ -292,6 +335,36 @@ function assignField(
     record.meta = cloneJsonObject(value, "task.meta");
     return;
   }
+  if (field === "grill_completed") {
+    if (typeof value !== "boolean") {
+      throw new Error("task.grill_completed must be a boolean");
+    }
+    record.grill_completed = value;
+    return;
+  }
+  if (field === "constraints") {
+    if (!isPlainObject(value)) {
+      throw new Error("task.constraints must be a JSON object");
+    }
+    const platforms = value.excluded_platforms;
+    const paths = value.excluded_paths;
+    const level = value.validation_level;
+    if (
+      !Array.isArray(platforms) ||
+      platforms.some((item) => typeof item !== "string") ||
+      !Array.isArray(paths) ||
+      paths.some((item) => typeof item !== "string") ||
+      !["targeted", "basic", "standard"].includes(String(level))
+    ) {
+      throw new Error("task.constraints is invalid");
+    }
+    record.constraints = {
+      excluded_platforms: [...platforms] as string[],
+      excluded_paths: [...paths] as string[],
+      validation_level: level as ClosureConstraints["validation_level"],
+    };
+    return;
+  }
   if (field === "work_packages") {
     if (!Array.isArray(value)) {
       throw new Error("task.work_packages must be an array");
@@ -301,7 +374,11 @@ function assignField(
     );
     return;
   }
-  if (field === "repair_count" || field === "max_repair_count") {
+  if (
+    field === "repair_count" ||
+    field === "max_repair_count" ||
+    field === "hermes_revision"
+  ) {
     if (!Number.isInteger(value) || (value as number) < 0) {
       throw new Error(`task.${field} must be a non-negative integer`);
     }
@@ -357,12 +434,23 @@ export function emptyTaskRecord(
     in_scope: [],
     out_of_scope: [],
     definition_of_done: [],
+    context_pins: [],
+    research_route: "delivery",
+    research_change_fields: [],
+    grill_completed: false,
+    constraints: {
+      excluded_platforms: [],
+      excluded_paths: [],
+      validation_level: "targeted",
+    },
     work_packages: [],
     current_work_package: null,
     next_action: null,
     blockers: [],
     repair_count: 0,
     max_repair_count: 1,
+    hermes_revision: 0,
+    confirmed_dispatches: [],
   };
   const record = { ...base, ...overrides };
   if (overrides.subtasks !== undefined) {
@@ -383,8 +471,24 @@ export function emptyTaskRecord(
   if (overrides.definition_of_done !== undefined) {
     record.definition_of_done = [...overrides.definition_of_done];
   }
+  if (overrides.context_pins !== undefined) {
+    record.context_pins = [...overrides.context_pins];
+  }
+  if (overrides.research_change_fields !== undefined) {
+    record.research_change_fields = [...overrides.research_change_fields];
+  }
+  if (overrides.constraints !== undefined) {
+    record.constraints = {
+      excluded_platforms: [...overrides.constraints.excluded_platforms],
+      excluded_paths: [...overrides.constraints.excluded_paths],
+      validation_level: overrides.constraints.validation_level,
+    };
+  }
   if (overrides.blockers !== undefined) {
     record.blockers = [...overrides.blockers];
+  }
+  if (overrides.confirmed_dispatches !== undefined) {
+    record.confirmed_dispatches = [...overrides.confirmed_dispatches];
   }
   if (overrides.work_packages !== undefined) {
     record.work_packages = overrides.work_packages.map((item) => ({
@@ -393,6 +497,12 @@ export function emptyTaskRecord(
       evidence_required: [...item.evidence_required],
       depends_on: [...item.depends_on],
       evidence_refs: [...item.evidence_refs],
+      ...(item.confirmed_dispatches !== undefined
+        ? { confirmed_dispatches: [...item.confirmed_dispatches] }
+        : {}),
+      ...(item.dispatch_blockers !== undefined
+        ? { dispatch_blockers: [...item.dispatch_blockers] }
+        : {}),
     }));
   }
   if (overrides.meta !== undefined) {
@@ -427,7 +537,13 @@ function parseClosureWorkPackage(
     return value;
   };
   const readStringArray = (
-    field: "done_when" | "evidence_required" | "depends_on" | "evidence_refs",
+    field:
+      | "done_when"
+      | "evidence_required"
+      | "depends_on"
+      | "evidence_refs"
+      | "confirmed_dispatches"
+      | "dispatch_blockers",
   ): string[] => {
     const value = input[field];
     if (
@@ -451,6 +567,18 @@ function parseClosureWorkPackage(
       `task.work_packages[${index}].blocker must be a string or null`,
     );
   }
+  const hasOptionalField = (field: string): boolean =>
+    Object.prototype.hasOwnProperty.call(input, field);
+  const dispatchState = input.dispatch_blocked_from_status;
+  if (
+    hasOptionalField("dispatch_blocked_from_status") &&
+    dispatchState !== "running" &&
+    dispatchState !== "review"
+  ) {
+    throw new Error(
+      `task.work_packages[${index}].dispatch_blocked_from_status must be running or review`,
+    );
+  }
   return {
     id: readString("id"),
     title: readString("title"),
@@ -461,6 +589,16 @@ function parseClosureWorkPackage(
     status: status as ClosureWorkPackageStatus,
     evidence_refs: readStringArray("evidence_refs"),
     blocker,
+    confirmed_dispatches: hasOptionalField("confirmed_dispatches")
+      ? readStringArray("confirmed_dispatches")
+      : undefined,
+    dispatch_blockers: hasOptionalField("dispatch_blockers")
+      ? readStringArray("dispatch_blockers")
+      : undefined,
+    dispatch_blocked_from_status: dispatchState as
+      | "running"
+      | "review"
+      | undefined,
   };
 }
 

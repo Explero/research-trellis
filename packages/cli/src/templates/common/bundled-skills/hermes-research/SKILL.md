@@ -9,27 +9,26 @@ Use this skill when a task asks for Hermes research discipline, evidence ledgers
 
 ## Read First
 
-1. Resolve the active task from the prompt or `python3 ./.trellis/scripts/task.py current --source`.
-2. Read `.trellis/hermes/config.yaml`.
-3. Read `.trellis/hermes/state_machine.yaml`.
-4. Read `.trellis/hermes/records/recordbus.md`.
-5. Read `.trellis/hermes/records/subagent_protocol.md`.
-6. Read the relevant role file from `.trellis/hermes/roles/`.
-7. Read existing task records under `.trellis/tasks/<task>/hermes/`.
-8. Read task artifacts such as `prd.md`, `design.md`, `implement.md`, and `check.jsonl` when present.
+1. Resolve the active Hermes task.
+2. Create a validated dispatch bound to the current `hermes_revision`.
+3. Pass only its `job_id` to Claude Agent, or use Codex strict `dispatch.py run`.
+4. Read at most three direct references named by the canonical dispatch.
+5. Accept only the validated Result Envelope; raw traces never enter chat.
 
 ## Role Selection
 
 Choose the worker role from the task shape before dispatching:
 
-- `scientist` for framing the question, evidence standard, and claim scope
-- `coder` for source edits inside `allowed_files`
-- `runner` for commands, tests, benchmarks, and measurements
-- `evaluator` for result checks against a stated standard
-- `reviewer` for diff and record review before handoff
-- `literature` for papers, citations, and source trail work
+- `planner` for research design, task planning, root-cause analysis, or method selection
+- `researcher` for literature, codebase, official documentation, or prior art
+- `coder` for implementation, tests, configuration, or repair inside `allowed_files`
+- `runner` for experiments, tests, builds, or validation
+- `reviewer` for quality, evidence, claims, safety, closure, or statistics
 
-Do not dispatch a subagent without a task card. A result without a task card is
+Set the matching `profile` in the task card. A profile is not a separate role
+or agent template.
+
+Do not dispatch a subagent without a validated dispatch and task card. A result without them is
 not accepted, even if the text looks useful.
 
 ## Record Location
@@ -56,10 +55,18 @@ Every task card should include `allowed_files`, `forbidden_files`, `record_uri`,
 and a clear `HumanGate` boundary. `worker_records.jsonl` is the acceptance trail
 for worker dispatch, not a chat-side summary.
 
-The main agent should not receive long logs or long diffs in chat. Keep raw outputs in files and pass only structured summaries, evidence refs, risk flags, and decision requests.
+The main agent should not receive long logs or long diffs in chat. Raw output
+stays under `.trellis/.runtime/hermes-traces/`; pass only the sanitized
+conclusion, uncertainties, refs, risks, and decision requests.
 
 Runtime helpers are available under `.trellis/scripts/hermes/`:
 
+- `python3 ./.trellis/scripts/hermes/dispatch.py create --task <task> --role <role> --profile <profile> --objective <text>`
+- `python3 ./.trellis/scripts/hermes/dispatch.py validate --task <task> --job-id <job>`
+- `python3 ./.trellis/scripts/hermes/dispatch.py show --task <task> --job-id <job> --prompt`
+- `python3 ./.trellis/scripts/hermes/dispatch.py run --task <task> --job-id <job> --platform codex --mode strict`
+- `python3 ./.trellis/scripts/hermes/dispatch.py apply --task <task> --job-id <job> --result <file>`
+- `python3 ./.trellis/scripts/hermes/dispatch.py list --task <task>`
 - `python3 ./.trellis/scripts/hermes/record.py append --task <task> --record-type worker --json '<json>'`
 - `python3 ./.trellis/scripts/hermes/validate.py --task <task> --kind worker`
 - `python3 ./.trellis/scripts/hermes/record.py append --task <task> --record-type plan_change --json '<json>'`
@@ -76,8 +83,8 @@ Use `.trellis/hermes/records/subagent_protocol.md` for long-running worker behav
 Long-running subagents must leave heartbeat and checkpoint records. If heartbeat records stop arriving, the main agent should mark the job stalled and resume from the latest checkpoint or dispatch a replacement worker.
 
 Maker and checker roles are separate. A checker reviews records, diffs, test output, and evidence; it does not replace human approval when HumanGate is required.
-Reviewers and evaluators should get task-card context, evidence refs, and the
-exact check to perform, not the coder or runner long chat.
+Reviewers should get only the compact dispatch context and exact check to
+perform, not the coder or runner long chat.
 
 ## Append Worker Records
 
@@ -86,7 +93,7 @@ Append one JSON object per line to `worker_records.jsonl`.
 Task card:
 
 ```json
-{"type":"task_card","id":"tc-YYYYMMDD-HHMMSS-slug","timestamp":"YYYY-MM-DDTHH:MM:SSZ","job_id":"job-YYYYMMDD-HHMMSS-slug","role":"coder","worktree_id":"main","status":"queued","allowed_files":["path/**"],"forbidden_files":["path/**"],"heartbeat_interval":"5m","timeout_at":"YYYY-MM-DDTHH:MM:SSZ","checkpoint":"not-started","resume_from":"task_card","record_uri":".trellis/tasks/<task>/hermes/worker_records.jsonl","evidence_refs":[],"risk_flags":[]}
+{"type":"task_card","id":"tc-YYYYMMDD-HHMMSS-slug","timestamp":"YYYY-MM-DDTHH:MM:SSZ","job_id":"job-YYYYMMDD-HHMMSS-slug","role":"coder","profile":"implementation","worktree_id":"main","status":"queued","allowed_files":["path/**"],"forbidden_files":["path/**"],"heartbeat_interval":"5m","timeout_at":"YYYY-MM-DDTHH:MM:SSZ","checkpoint":"not-started","resume_from":"task_card","record_uri":".trellis/tasks/<task>/hermes/worker_records.jsonl","evidence_refs":[],"risk_flags":[]}
 ```
 
 Heartbeat:

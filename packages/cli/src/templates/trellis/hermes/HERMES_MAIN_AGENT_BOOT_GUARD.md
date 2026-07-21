@@ -30,6 +30,25 @@ current routing budget is up to 5 files. After the relevant implementation,
 execution, review, research, or analysis surface is identified, dispatch the
 work instead of continuing directly.
 
+Every task still requires a short main-agent analysis before planning or
+dispatch: identify the intent, scope, completion conditions, route, risks, and
+the smallest useful work-package split. This is evidence-based planning, not a
+default interview. Start a grill only when an important solution, architecture,
+research-design, or scope decision remains unresolved, or when the user
+explicitly asks for one. Task size, task age, and the mere presence of multiple
+work packages are not reasons to start a grill.
+
+At session start, use the project-context index for `.trellis/project/` before
+accepting or splitting a request. Read the relevant background, research-plan,
+and constraint document on demand; their contents must not be copied into the
+startup prompt or sent to a subagent unless a validated dispatch explicitly
+needs one of them.
+
+When creating a dispatch, the firewall adds the smallest matching project
+context for its role and profile only after explicit task refs and context pins.
+Use the remaining refs for the task-specific spec or evidence that the worker
+needs. Do not add all project documents merely because they exist.
+
 ## 2. Main Agent Hard Limits
 
 As Main Agent, you must not directly:
@@ -62,12 +81,13 @@ If code has been changed, route review to an independent **reviewer subagent** b
 
 If commands must be run, route execution to a **runner subagent**.
 
-If evidence quality must be judged, route judgment to an **evaluator subagent**.
+If evidence quality must be judged, route judgment to a **reviewer subagent** with profile `evidence`.
 
-If literature, novelty, or codebase exploration is needed, route it to a **research/scout subagent**.
+If literature, novelty, official documentation, or codebase exploration is needed, route it to a **researcher subagent** with the matching profile.
 
 If root-cause analysis, architecture tradeoffs, or failure explanation is
-needed, route it to an **analyst subagent**.
+needed, route it to a **planner subagent** with profile `root_cause` or
+`method_selection`.
 
 ## 3. Subagent Governance
 
@@ -75,8 +95,12 @@ Subagents are bounded workers, not independent project owners.
 
 Each subagent must have:
 
+* a validated `job_id` dispatch;
 * a role;
+* a profile;
 * a task ID;
+* a bound `hermes_revision`;
+* the current work package for execution roles;
 * explicit input files;
 * explicit allowed files;
 * explicit forbidden files;
@@ -90,28 +114,43 @@ Subagents must not receive the full old chat history by default.
 Default policy:
 
 ```text
-subagent_context_policy = minimal_file_context
+subagent_context_policy = validated_dispatch_only
 ```
 
-Subagents should read only the files they need:
+The main agent creates a validated dispatch and passes only its `job_id` to
+Claude Agent. Codex native dispatch is advisory; enforced Codex work uses the
+strict `dispatch.py run` wrapper. The canonical body contains role/profile,
+revision, package, objective, and at most three refs within 2000 characters.
 
-* task spec;
-* role policy;
-* current state;
-* relevant records;
-* relevant evidence;
-* allowed / forbidden file lists;
-* required output schema.
+The subagent reads a referenced file only when the assignment needs it. Full
+PRDs, all historical reports, all events, all ledgers, and all specifications
+are not default dispatch context.
 
 Do not default to `fork_turns=all`.
 
-Full-context transfer is allowed only for context-compression or handoff-generation tasks, not for coder, reviewer, runner, evaluator, or research work.
+Full-context transfer is allowed only for context-compression or handoff-generation tasks, not for planner, researcher, coder, runner, or reviewer work.
+
+Each dispatch is single-purpose. Once its Result Envelope and required records
+are accepted, close the subagent immediately. Do not keep an idle subagent for
+the next work package, assign it a second job, or reuse its chat context; create
+a new dispatch and a new subagent when more work is needed.
 
 ## 4. Separation of Roles
 
 Maintain strict maker-checker separation.
 
-### Builder / coder subagent
+### Planner subagent
+
+Owns research design, task planning, root-cause analysis, and method selection.
+It proposes bounded changes but does not approve high-risk research changes,
+complete packages, or close tasks.
+
+### Researcher subagent
+
+Owns literature, codebase, official documentation, and prior-art searches. It
+does not modify code, results, claims, approvals, or closure state.
+
+### Coder subagent
 
 Owns code mutation. In current RecordBus task cards this role is recorded as
 `coder`; host-level `builder` is treated as the same mutation owner. It may
@@ -156,34 +195,17 @@ Must not modify source code.
 
 Runner output is execution evidence, not scientific approval.
 
-### Evaluator subagent
-
-May judge evidence quality and state-transition readiness.
-
-Must not patch code.
-
-Must not set `claim_allowed=true`.
-
-Must not convert proxy evidence into scientific claims.
-
-### Research / scout subagent
-
-Owns external/source reading. It may inspect code, papers, docs, and novelty risks.
-
-Must be read-only unless explicitly scoped otherwise.
-
-### Analyst subagent
-
-Owns root-cause analysis, tradeoffs, and decision framing.
-
-Must be read-only unless explicitly scoped otherwise.
+Reviewer profiles determine whether it checks quality, evidence, claims,
+safety, closure, or statistics. Evidence judgment must not patch code, set
+`claim_allowed=true`, or convert proxy evidence into a scientific claim.
 
 ## 5. Hook Enforcement
 
-`PreToolUse` is the role firewall. It denies main-agent mutation, execution,
-package/test commands, git mutation, and removal commands, then points to the
-right subagent. Explicit subagents still pass through the existing `task_card`
-and `allowed_files` / `forbidden_files` checks.
+`PreToolUse` is the role firewall. For Claude Agent it accepts only a validated
+`job_id`, rejects async dispatch, and replaces the original prompt with the
+canonical body. `SubagentStop` validates the Result Envelope; `PostToolUse`
+returns only its sanitized summary. Explicit writers still pass through
+`task_card` and file-boundary checks.
 
 `Stop` is read-only. It reads RecordBus, git diff, and `run_manifest.jsonl`.
 It must not write records or run tests.
@@ -195,6 +217,11 @@ A subagent's chat message is not enough.
 Every completed, failed, blocked, stale, interrupted, or capacity-blocked task must leave a structured record.
 
 No record means no completion.
+
+After recording a completed, failed, blocked, stale, interrupted, or
+capacity-blocked result, close the subagent. A missing or invalid record may be
+rewritten within the dispatch limit, but it does not justify leaving the worker
+open after that limit is reached.
 
 Records should include:
 
@@ -212,6 +239,7 @@ Records should include:
 * risk flags;
 * next recommendation;
 * claim boundary.
+* uncertainties.
 
 You may summarize records, but you must not replace them with informal chat.
 
@@ -249,7 +277,7 @@ Hermes distinguishes:
 
 * engineering success;
 * runner success;
-* evaluator approval;
+* evidence review;
 * proxy evidence;
 * scientific evidence;
 * claim approval;
@@ -260,8 +288,9 @@ Do not collapse these categories.
 Examples:
 
 * `template_only` is not evidence of small_proxy success.
-* runner command success is not evaluator approval.
-* evaluator approval is not `claim_allowed`.
+* runner command success is not evidence and must cite run manifests through `run_refs`.
+* evidence review is not `claim_allowed`.
+* evidence/claim reviewers propose judgments; they do not approve facts.
 * proxy success is not scientific improvement.
 * `claim_allowed=true` requires human / PI approval.
 * main merge requires human / PI approval.

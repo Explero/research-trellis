@@ -1,24 +1,34 @@
 # Hermes Coder Role
 
-The coder changes source files inside an explicit task boundary. This role writes to `.trellis/tasks/<task>/hermes/worker_records.jsonl` and stops at `HumanGate`.
+## Role purpose
 
-## Responsibilities
+Modify code, tests, or configuration inside an explicit task-card boundary.
 
-- Read the task card, `.trellis/hermes/config.yaml`, `.trellis/hermes/state_machine.yaml`, and task records under `.trellis/tasks/<task>/hermes/`.
-- Keep edits inside `allowed_files` and avoid every `forbidden_files` path.
-- Keep one active writer per worktree and record checkpoints, results, and risks in worker records.
-- Run the requested code changes and targeted verification for the task.
+## Allowed actions
 
-## Can
+- Edit `allowed_files` while avoiding every `forbidden_files` path.
+- Add focused tests and run targeted implementation checks.
+- Append checkpoints, implementation results, risks, and repair notes.
 
-- Edit code inside the assigned `allowed_files`.
-- Run targeted tests or build steps in the assigned worktree.
-- Ask for a new task card when the scope needs to expand.
+## Forbidden actions
 
-## Must not
+- Expand scope without a new or amended task card.
+- Declare experimental evidence credible, approve a claim, or close the task.
+- Rewrite append-only records or work as a second active writer in one worktree.
 
-- Edit any `forbidden_files` path.
-- Work outside the current `allowed_files`.
-- Rewrite, reorder, truncate, or delete append-only Hermes records.
-- Treat chat-only agreement as acceptance.
-- Cross `HumanGate` by assuming code review replaces human approval.
+## Required output
+
+Changed files, the implemented outcome, focused verification, risks, and the requested handoff.
+
+## Available profiles
+
+- `implementation`: implement the assigned observable outcome.
+- `tests`: add or repair focused automated coverage.
+- `configuration`: change bounded configuration and synchronized templates.
+- `repair`: fix only assigned defects or audit gaps.
+
+Default profile: `implementation`.
+
+## Completion conditions
+
+The assigned implementation is recorded and ready for an independent runner and reviewer; it is not yet task closure.

@@ -10,6 +10,7 @@ from typing import Any
 
 from common.closure import (
     CLOSURE_MODES,
+    RESEARCH_ROUTES,
     ClosureError,
     actor_name,
     amend_plan,
@@ -21,10 +22,12 @@ from common.closure import (
     complete_package,
     format_audit_yaml,
     is_closure_task,
+    mark_grill_complete,
     package_by_id,
     plan_closure,
     repair_closure,
     resolve_closure_task,
+    set_research_route,
     start_package,
     validate_and_ready,
     write_handoff,
@@ -64,7 +67,20 @@ def parser() -> argparse.ArgumentParser:
     plan.add_argument("--out-of-scope", action="append", default=None)
     plan.add_argument("--done-when", action="append", default=None)
     plan.add_argument("--package", action="append", type=package_spec, default=None)
+    plan.add_argument("--context-pin", action="append", default=None)
     plan.add_argument("--mode", choices=sorted(CLOSURE_MODES))
+    plan.add_argument("--route", choices=sorted(RESEARCH_ROUTES))
+    plan.add_argument("--research-change", action="append", default=None)
+
+    route = subparsers.add_parser("route", help="Mark the planning-time research route")
+    add_common(route)
+    route.add_argument("--route", choices=sorted(RESEARCH_ROUTES))
+    route.add_argument("--research-change", action="append", default=None)
+    route.add_argument("--clear-research-changes", action="store_true")
+
+    grill = subparsers.add_parser("grill", help="Record a completed exploration grill")
+    add_common(grill)
+    grill.add_argument("--complete", action="store_true")
 
     validate = subparsers.add_parser("validate", help="Validate plan and enter ready")
     add_common(validate)
@@ -146,11 +162,35 @@ def main(argv: list[str] | None = None) -> int:
                 out_of_scope=args.out_of_scope,
                 definition_of_done=args.done_when,
                 packages=args.package,
+                context_pins=args.context_pin,
                 mode=args.mode,
+                research_route_name=args.route,
+                research_change_fields=args.research_change,
             )
             print(f"planned {len(data.get('work_packages') or [])} work package(s)")
             for warning in warnings:
                 print(f"warning: {warning}", file=sys.stderr)
+            return 0
+        if args.command == "route":
+            result = set_research_route(
+                task_dir,
+                data,
+                route=args.route,
+                research_change_fields=args.research_change,
+                clear_research_changes=args.clear_research_changes,
+                actor=actor,
+            )
+            print(
+                "route=" + result["research_route"]
+                + "; research_changes="
+                + (", ".join(result["research_change_fields"]) or "none")
+            )
+            return 0
+        if args.command == "grill":
+            if not args.complete:
+                raise ClosureError("use grill --complete after the exploration grill")
+            mark_grill_complete(task_dir, data, actor=actor)
+            print("exploration grill recorded")
             return 0
         if args.command == "validate":
             errors, warnings = validate_and_ready(task_dir, data, actor=actor)

@@ -95,3 +95,30 @@ export const guidesCrossLayerThinkingGuideContent: string = readLocalTemplate(
 export const guidesCodeReuseThinkingGuideContent: string = readLocalTemplate(
   "spec/guides/code-reuse-thinking-guide.md.txt",
 );
+export const guidesGeneralCodeGuidelinesContent: string = readLocalTemplate(
+  "spec/guides/general-code-guidelines.md.txt",
+);
+
+// Language-specific writing guides. These are copied for every project but
+// only the guide for the language being changed should enter task context.
+export const languageGuidesIndexContent: string = readLocalTemplate(
+  "spec/languages/index.md.txt",
+);
+export const languageTypeScriptJavaScriptContent: string = readLocalTemplate(
+  "spec/languages/typescript-javascript.md.txt",
+);
+export const languagePythonContent: string = readLocalTemplate(
+  "spec/languages/python.md.txt",
+);
+export const languageGoContent: string = readLocalTemplate(
+  "spec/languages/go.md.txt",
+);
+export const languageRustContent: string = readLocalTemplate(
+  "spec/languages/rust.md.txt",
+);
+export const languageCppContent: string = readLocalTemplate(
+  "spec/languages/cpp.md.txt",
+);
+export const languageShellContent: string = readLocalTemplate(
+  "spec/languages/shell.md.txt",
+);

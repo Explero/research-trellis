@@ -65,13 +65,35 @@ CODEX_NO_TASK_BOOTSTRAP_NOTICE = """<trellis-bootstrap>
 If you have not already loaded Trellis context this session, read the `trellis-start` skill once.
 </trellis-bootstrap>"""
 
+PROJECT_CONTEXT_REFS = (
+    ("Project background", "BACKGROUND.md", "project origin and objective"),
+    ("Research plan", "RESEARCH_PLAN.md", "research approach and evidence limits"),
+    ("Project constraints", "CONSTRAINTS.md", "fixed boundaries and approvals"),
+)
+
+
+def _build_project_context_index(root: Path) -> str:
+    """List main-agent project inputs without loading the documents themselves."""
+    project_dir = root / ".trellis" / "project"
+    lines = [
+        "<project-context-index>",
+        "Main-agent planning input. Read a relevant document on demand before accepting or splitting a request; do not pass its full content to subagents by default.",
+    ]
+    for title, filename, purpose in PROJECT_CONTEXT_REFS:
+        state = "available" if (project_dir / filename).is_file() else "missing"
+        lines.append(
+            f"- {title}: .trellis/project/{filename} [{state}] - {purpose}."
+        )
+    lines.append("</project-context-index>")
+    return "\n".join(lines)
+
 
 def _build_codex_hermes_boot_guard_notice(root: Path) -> str:
     guard_path = root / ".trellis" / "hermes" / "HERMES_MAIN_AGENT_BOOT_GUARD.md"
     if not guard_path.is_file():
         return ""
     return """<main-agent-boot-guard>
-Hermes main-agent mode: coordinate state, route bounded work to subagents, require structured records, and stop at human/PI gates. Full rules: .trellis/hermes/HERMES_MAIN_AGENT_BOOT_GUARD.md. Context policy: minimal_file_context.
+Hermes main-agent mode: coordinate state, route bounded work through validated dispatches, require sanitized Result Envelopes, and stop at human/PI gates. Full rules: .trellis/hermes/HERMES_MAIN_AGENT_BOOT_GUARD.md. Formal Claude/Codex context policy: validated_dispatch_only.
 </main-agent-boot-guard>"""
 
 
@@ -177,28 +199,99 @@ def get_task_capsule(root: Path, input_data: dict) -> str | None:
     task_dir = Path(active.task_path)
     if not task_dir.is_absolute():
         task_dir = root / task_dir
-    task_json = task_dir / "task.json"
-    if not task_json.is_file():
-        return None
     try:
-        data = json.loads(task_json.read_text(encoding="utf-8"))
-    except (json.JSONDecodeError, OSError):
-        return None
-    if not isinstance(data, dict) or not any(
-        field in data for field in ("closure_state", "hermes_phase", "work_packages")
-    ):
+        task = json.loads((task_dir / "task.json").read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
         return None
     scripts_dir = root / ".trellis" / "scripts"
     if str(scripts_dir) not in sys.path:
         sys.path.insert(0, str(scripts_dir))
     try:
-        from common.closure import build_capsule  # type: ignore[import-not-found]
-
-        return build_capsule(task_dir, data, root)
+        from common.closure import build_capsule, is_closure_task  # type: ignore[import-not-found]
     except Exception:
         return None
+    if not isinstance(task, dict) or not is_closure_task(task):
+        return None
+    return build_capsule(task_dir, task, root)
 
 
+def _closure_turn_context(root: Path, input_data: dict) -> tuple[str, str | None] | None:
+    """Return closure-specific, revision-aware per-turn context."""
+    active = _resolve_active_task(root, input_data)
+    if not active.task_path or active.stale:
+        return None
+    task_dir = Path(active.task_path)
+    if not task_dir.is_absolute():
+        task_dir = root / task_dir
+    try:
+        data = json.loads((task_dir / "task.json").read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    scripts_dir = root / ".trellis" / "scripts"
+    if str(scripts_dir) not in sys.path:
+        sys.path.insert(0, str(scripts_dir))
+    try:
+        from common.closure import (  # type: ignore[import-not-found]
+            build_capsule,
+            closure_next_action,
+            is_closure_task,
+            research_route_rule,
+            research_route_summary,
+        )
+    except Exception:
+        return None
+    if not isinstance(data, dict) or not is_closure_task(data):
+        return None
+    task_id = str(data.get("id") or task_dir.name)
+    revision = data.get("hermes_revision", 0)
+    phase = str(data.get("hermes_phase") or "planning")
+    next_action = closure_next_action(data)
+    route_summary = research_route_summary(data)
+    route_rule = research_route_rule(data)
+    key = getattr(active, "context_key", None)
+    anchor_path = root / ".trellis" / ".runtime" / "sessions" / f"{key}.json" if isinstance(key, str) and key else None
+    anchor: dict = {}
+    if anchor_path and anchor_path.is_file():
+        try:
+            anchor = json.loads(anchor_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            anchor = {}
+    previous = anchor.get("closure_context_anchor") if isinstance(anchor, dict) else None
+    current = {
+        "task": task_id,
+        "revision": revision,
+        "phase": phase,
+        "next_action": next_action,
+        "route": route_summary,
+    }
+    if anchor_path:
+        try:
+            anchor_path.parent.mkdir(parents=True, exist_ok=True)
+            anchor["closure_context_anchor"] = current
+            anchor_path.write_text(json.dumps(anchor, ensure_ascii=False) + "\n", encoding="utf-8")
+        except OSError:
+            pass
+    if isinstance(previous, dict) and previous.get("task") == task_id and previous.get("revision") == revision:
+        return (
+            f"<workflow-state>\nHermes closure task: {task_id}; anchor revision {revision} remains active.\n{route_summary}\nRoute rule: {route_rule}\n</workflow-state>",
+            None,
+        )
+    if isinstance(previous, dict) and previous.get("task") == task_id:
+        changes = [f"Hermes closure update: {task_id}; revision {previous.get('revision')} -> {revision}."]
+        for field, label in (("phase", "Phase"), ("next_action", "Next")):
+            if previous.get(field) != current[field]:
+                changes.append(f"{label}: {current[field]}")
+        if previous.get("route") != current["route"]:
+            changes.append(route_summary)
+        changes.append("Route rule: " + route_rule)
+        return (
+            "<workflow-state>\n" + "\n".join(changes) + "\n</workflow-state>",
+            build_capsule(task_dir, data, root),
+        )
+    return (
+        f"<workflow-state>\nHermes closure task: {task_id}; phase={phase}.\n{route_summary}\nRoute rule: {route_rule}\nNext: {next_action}\n</workflow-state>",
+        build_capsule(task_dir, data, root),
+    )
 # ---------------------------------------------------------------------------
 # Breadcrumb loading: parse workflow.md, fall back to hardcoded defaults
 # ---------------------------------------------------------------------------
@@ -396,9 +489,12 @@ def main() -> int:
     templates = load_breadcrumbs(root)
     config = _read_trellis_config(root)
     platform = _detect_platform(data)
+    closure_context = _closure_turn_context(root, data)
     task = get_active_task(root, data)
-    capsule = get_task_capsule(root, data)
-    if task is None:
+    capsule = None
+    if closure_context is not None:
+        breadcrumb, capsule = closure_context
+    elif task is None:
         # No active task — still emit a breadcrumb nudging AI toward
         # trellis-brainstorm + task.py create when user describes real work.
         no_task_key = resolve_breadcrumb_key("no_task", platform, config)
@@ -419,6 +515,7 @@ def main() -> int:
         boot_guard_notice = _build_codex_hermes_boot_guard_notice(root)
         if boot_guard_notice:
             parts.append(boot_guard_notice)
+        parts.append(_build_project_context_index(root))
         if task is None:
             parts.append(CODEX_NO_TASK_BOOTSTRAP_NOTICE)
         parts.append(_codex_mode_banner(config))

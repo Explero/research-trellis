@@ -1,0 +1,23 @@
+# Rust 书写规范
+
+## 默认规则
+
+- 使用项目已有的 `rustfmt`（Rust 格式化）和 `Clippy`（Rust 静态检查）配置；不要为了通过检查而全局关闭 lint（静态规则）；
+- 让所有权、借用和生命周期表达真实资源关系。不要为了图省事无条件 `clone`（复制）或把短生命周期引用伪装成长生命周期；
+- 对可能失败的文件、网络、解析和外部命令操作返回 `Result`（成功或错误结果），在边界补充可诊断的错误上下文；
+- `unwrap`（强制取值）和 `expect`（带说明的强制取值）只用于测试或已被明确证明的不变量，不能替代错误处理；
+- `unsafe`（不安全代码）必须范围最小、说明所依赖的不变量，并有针对性测试；
+- 公共类型和函数说明所有权、错误、并发与副作用语义，避免暴露无意义的内部表示。
+
+## 测试与检查
+
+- 优先运行项目已有的 `cargo fmt --check`（格式检查）、`cargo clippy`（静态检查）和 `cargo test`（测试）；
+- 对解析、序列化、资源管理和并发边界补充失败路径测试；
+- 性能优化应保留基准、输入和比较条件，不能只凭单次运行判断。
+
+## 公开基线
+
+- `Rust API Guidelines`（Rust 接口规范）：https://rust-lang.github.io/api-guidelines/
+- `Rust Style Guide`（Rust 书写规范）：https://doc.rust-lang.org/stable/style-guide/
+- `Rustfmt`（Rust 格式化）：https://rust-lang.github.io/rustfmt/
+- `Clippy`（Rust 静态检查）：https://doc.rust-lang.org/stable/clippy/
