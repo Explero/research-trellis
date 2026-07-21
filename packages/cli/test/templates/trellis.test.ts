@@ -309,14 +309,14 @@ describe("trellis template constants", () => {
     );
   });
 
-  it("workflow.md planning breadcrumb keeps requirement clarification before strategy decisions on Claude Code path", () => {
+  it("workflow.md analyzes every task but limits grill to unresolved decisions", () => {
     const planning = workflowStateBreadcrumb("planning");
     expect(planning).toContain("trellis-grill-me");
     expect(planning).toContain("development strategy decision");
-    expect(planning).toContain(
-      "`trellis-grill-me` is a required planning gate",
-    );
-    expect(planning).toContain("Before `trellis-grill-me` is complete");
+    expect(planning).toContain("Before every plan or dispatch, the main agent must analyze");
+    expect(planning).toContain("Do not load `trellis-brainstorm` or `trellis-grill-me` by default");
+    expect(planning).toContain("only for an unresolved material decision");
+    expect(planning).toContain("When a grill is running");
     expect(planning).toContain("do not enter development strategy decisions");
     expect(planning).toContain(
       "do not create or complete `design.md` / `implement.md`",
@@ -325,6 +325,29 @@ describe("trellis template constants", () => {
     expect(planning).toContain(
       "Do not enter development strategy decisions until `prd.md` has been tightened",
     );
+  });
+
+  it("workflow.md separates protocol-changing research from ordinary work packages", () => {
+    expect(workflowMdTemplate).toContain("科研任务按研究协议是否改变分流");
+    expect(workflowMdTemplate).toContain("模型功能架构变化属于高风险探索");
+    expect(workflowMdTemplate).toContain("必须创建独立探索任务");
+  });
+
+  it("shared planning skills keep routine Lean Closure work free of a grill gate", () => {
+    const repoRoot = fs.existsSync(path.join(process.cwd(), "marketplace"))
+      ? process.cwd()
+      : path.resolve(process.cwd(), "../..");
+    const brainstorm = fs.readFileSync(
+      path.join(repoRoot, "packages/cli/src/templates/common/skills/brainstorm.md"),
+      "utf-8",
+    );
+    const start = fs.readFileSync(
+      path.join(repoRoot, "packages/cli/src/templates/common/commands/start.md"),
+      "utf-8",
+    );
+    expect(brainstorm).toContain("Do not enter `trellis-grill-me` only because a task is legacy or complex");
+    expect(start).toContain("For a Lean Research Closure task, read the Task Capsule first");
+    expect(start).toContain("legacy or explicitly complex Claude Code tasks");
   });
 
   it("workflow.md planning breadcrumb records Claude Code development strategy decisions before start", () => {
@@ -390,14 +413,11 @@ describe("trellis template constants", () => {
     const ledgersReadme = readTemplateFile("trellis/hermes/ledgers/README.md");
     const metricsSchema = readTemplateFile("trellis/hermes/metrics/metrics_schema.yaml");
     const roleFiles = [
-      "scientist.md",
+      "planner.md",
+      "researcher.md",
       "coder.md",
       "runner.md",
-      "evaluator.md",
       "reviewer.md",
-      "literature.md",
-      "evidence-curator.md",
-      "claim-reviewer.md",
     ];
 
     expect(config).toContain("hermes_version");
@@ -448,10 +468,13 @@ describe("trellis template constants", () => {
 
     for (const roleFile of roleFiles) {
       const role = readTemplateFile(`trellis/hermes/roles/${roleFile}`);
-      expect(role).toContain("Responsibilities");
-      expect(role).toContain("Must not");
-      expect(role).toContain("worker_records.jsonl");
-      expect(role).toContain("HumanGate");
+      expect(role).toContain("Role purpose");
+      expect(role).toContain("Allowed actions");
+      expect(role).toContain("Forbidden actions");
+      expect(role).toContain("Required output");
+      expect(role).toContain("Available profiles");
+      expect(role).toContain("Default profile");
+      expect(role).toContain("Completion conditions");
     }
 
     const ledgerFiles = fs.readdirSync(templateDir("trellis/hermes/ledgers"));
@@ -521,12 +544,9 @@ describe("trellis template constants", () => {
     expect(reportTemplate).toContain("evidence:");
     expect(reportTemplate).toContain("claim_ready");
 
-    const evaluator = readTemplateFile("trellis/hermes/roles/evaluator.md");
-    expect(evaluator).toContain("Must not modify source files");
-    expect(evaluator).toContain("Must not modify metrics, split, or baseline");
     const reviewer = readTemplateFile("trellis/hermes/roles/reviewer.md");
-    expect(reviewer).toContain("only read the current diff, records, evidence");
-    expect(reviewer).toContain("Must not inherit coder long conversation");
+    expect(reviewer).toContain("Read the current diff");
+    expect(reviewer).toContain("Use inherited coder or runner conversation as evidence");
 
     expect(subagentProtocol).toContain("main agent");
     expect(subagentProtocol).toContain("supervisor");
@@ -539,7 +559,7 @@ describe("trellis template constants", () => {
     expect(subagentProtocol).toContain("one active writer");
 
     expect(mainAgentBootGuard).toContain("Main Agent / Main Pilot");
-    expect(mainAgentBootGuard).toContain("minimal_file_context");
+    expect(mainAgentBootGuard).toContain("validated_dispatch_only");
     expect(mainAgentBootGuard).toContain("No record means no completion");
     expect(mainAgentBootGuard).toContain("claim_allowed=true");
     expect(mainAgentBootGuard).toContain("human / PI");
@@ -550,14 +570,12 @@ describe("trellis template constants", () => {
     const templateKeys = [
       "config.yaml",
       "state_machine.yaml",
-      "roles/scientist.md",
+      "roles/base.md",
+      "roles/planner.md",
+      "roles/researcher.md",
       "roles/coder.md",
       "roles/runner.md",
-      "roles/evaluator.md",
       "roles/reviewer.md",
-      "roles/literature.md",
-      "roles/evidence-curator.md",
-      "roles/claim-reviewer.md",
       "records/README.md",
       "records/recordbus.md",
       "records/subagent_protocol.md",
@@ -568,6 +586,7 @@ describe("trellis template constants", () => {
       "metrics/metrics_schema.yaml",
       "experiments/README.md",
       "experiments/experiment.yaml",
+      "schemas/result-envelope.schema.json",
     ];
 
     for (const key of templateKeys) {
@@ -582,6 +601,9 @@ describe("trellis template constants", () => {
     );
     expect(templates.get("metrics/metrics_schema.yaml")).toContain("HumanGate");
     expect(templates.get("reports/report.md")).toContain("Core Conclusions");
+    expect(templates.get("schemas/result-envelope.schema.json")).toContain(
+      "uncertainties",
+    );
   });
 });
 
@@ -761,11 +783,16 @@ describe("getAllScripts", () => {
     expect(scripts.has("common/__init__.py")).toBe(true);
     expect(scripts.has("common/paths.py")).toBe(true);
     expect(scripts.has("common/active_task.py")).toBe(true);
+    expect(scripts.has("common/roles.py")).toBe(true);
+    expect(scripts.has("common/dispatch.py")).toBe(true);
+    expect(scripts.has("common/firewall.py")).toBe(true);
     expect(scripts.has("common/worktree_sync.py")).toBe(true);
     expect(scripts.has("hermes/__init__.py")).toBe(true);
     expect(scripts.has("hermes/runtime.py")).toBe(true);
     expect(scripts.has("hermes/record.py")).toBe(true);
     expect(scripts.has("hermes/validate.py")).toBe(true);
+    expect(scripts.has("hermes/evidence.py")).toBe(true);
+    expect(scripts.has("hermes/dispatch.py")).toBe(true);
     expect(scripts.has("hermes/guard.py")).toBe(true);
     expect(scripts.has("hermes/jobs.py")).toBe(true);
     expect(scripts.has("hermes/heartbeat.py")).toBe(true);

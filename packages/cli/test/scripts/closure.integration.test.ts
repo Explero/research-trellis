@@ -27,6 +27,10 @@ interface TestTask {
   max_repair_count: number;
   blockers: string[];
   meta: { research_contract?: { dataset?: string } };
+  hermes_revision: number;
+  research_route?: string;
+  research_change_fields?: string[];
+  grill_completed?: boolean;
 }
 
 function hasPython(): boolean {
@@ -66,6 +70,7 @@ function baseTask(overrides: Record<string, unknown> = {}) {
     blockers: [],
     repair_count: 0,
     max_repair_count: 1,
+    hermes_revision: 0,
     ...overrides,
   };
 }
@@ -92,7 +97,15 @@ function run(root: string, ...args: string[]) {
   return spawnSync(
     PYTHON,
     [".trellis/scripts/closure.py", ...args, "--task", "demo"],
-    { cwd: root, encoding: "utf-8" },
+    {
+      cwd: root,
+      encoding: "utf-8",
+      env: {
+        ...process.env,
+        TRELLIS_HOOKS_ACTIVE: "1",
+        TRELLIS_PLATFORM: "claude",
+      },
+    },
   );
 }
 
@@ -102,6 +115,35 @@ function runTask(root: string, ...args: string[]) {
     encoding: "utf-8",
     env: { ...process.env, TRELLIS_CONTEXT_ID: "closure-test-session" },
   });
+}
+
+function recordHookHeartbeat(root: string, taskId = "demo"): void {
+  const result = spawnSync(
+    PYTHON,
+    [
+      "-c",
+      "import sys; from pathlib import Path; sys.path.insert(0, '.trellis/scripts'); from common.firewall import record_firewall_heartbeat; raise SystemExit(0 if record_firewall_heartbeat(Path('.').resolve(), 'claude', 'hooks', task_id=sys.argv[1], session_id='test-session') else 1)",
+      taskId,
+    ],
+    { cwd: root, encoding: "utf-8" },
+  );
+  expect(result.status, result.stderr).toBe(0);
+}
+
+function runDispatch(root: string, ...args: string[]) {
+  return spawnSync(
+    PYTHON,
+    [".trellis/scripts/hermes/dispatch.py", ...args, "--task", "demo"],
+    {
+      cwd: root,
+      encoding: "utf-8",
+      env: {
+        ...process.env,
+        TRELLIS_HOOKS_ACTIVE: "1",
+        TRELLIS_PLATFORM: "claude",
+      },
+    },
+  );
 }
 
 function readTask(taskDir: string): TestTask {
@@ -124,10 +166,29 @@ function plan(root: string, doneWhen: string[], extra: string[] = []) {
   return run(root, ...args);
 }
 
-function completeCurrent(root: string, evidence = "test:pass"): void {
+function planTwoExplicitPackages(root: string) {
+  return plan(root, ["Result A", "Result B"], [
+    "--package",
+    "Prepare result A::Result A::Result A",
+    "--package",
+    "Prepare result B::Result B::Result B",
+  ]);
+}
+
+function materializeEvidence(root: string, label: string): string {
+  const safeName = label.replace(/[^a-z0-9]+/gi, "-").replace(/^-|-$/g, "") || "result";
+  const relativePath = `artifacts/${safeName}.txt`;
+  const absolutePath = path.join(root, relativePath);
+  fs.mkdirSync(path.dirname(absolutePath), { recursive: true });
+  fs.writeFileSync(absolutePath, `validation evidence: ${label}\n`, "utf-8");
+  return relativePath;
+}
+
+function completeCurrent(root: string, evidence = "test-pass"): void {
+  const evidenceRef = materializeEvidence(root, evidence);
   expect(run(root, "package-start").status).toBe(0);
   expect(run(root, "package-check").status).toBe(0);
-  expect(run(root, "package-done", "--evidence", evidence).status).toBe(0);
+  expect(run(root, "package-done", "--evidence", evidenceRef).status).toBe(0);
 }
 
 function appendJsonl(
@@ -161,7 +222,149 @@ describe.skipIf(!hasPython())("Lean Research Closure CLI", () => {
     expect(readTask(taskDir).work_packages).toHaveLength(1);
   });
 
-  it("plans two to four packages for ordinary observable outcomes", () => {
+  it("requires a completed grill before an exploration task validates", () => {
+    expect(
+      plan(root, ["Research result is verified"], [
+        "--route",
+        "exploration",
+        "--research-change",
+        "model_architecture",
+      ]).status,
+    ).toBe(0);
+    const before = readTask(taskDir);
+    expect(before.research_route).toBe("exploration");
+    expect(before.research_change_fields).toEqual(["model_architecture"]);
+    expect(before.grill_completed).toBe(false);
+    const blocked = run(root, "validate");
+    expect(blocked.status).toBe(1);
+    expect(blocked.stderr).toContain("completed grill");
+
+    expect(run(root, "grill", "--complete").status).toBe(0);
+    expect(run(root, "validate").status).toBe(0);
+    const capsule = run(root, "capsule");
+    expect(capsule.stdout).toContain("Route: exploration");
+    expect(capsule.stdout).toContain("Research changes: model_architecture");
+    expect(capsule.stdout).toContain("Grill: complete");
+  });
+
+  it("automatically routes recorded research changes to exploration", () => {
+    expect(
+      plan(root, ["Research result is verified"], [
+        "--research-change",
+        "dataset",
+      ]).status,
+    ).toBe(0);
+    expect(readTask(taskDir).research_route).toBe("exploration");
+    expect(run(root, "validate").status).toBe(1);
+
+    const conflict = run(root, "route", "--route", "delivery");
+    expect(conflict.status).toBe(1);
+    expect(conflict.stderr).toContain("require the exploration route");
+  });
+
+  it("rejects an explicit delivery route with research protocol changes", () => {
+    const result = plan(root, ["Research result is verified"], [
+      "--route",
+      "delivery",
+      "--research-change",
+      "dataset",
+    ]);
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("require the exploration route");
+    expect(readTask(taskDir).research_route).toBeUndefined();
+  });
+
+  it("allows a deterministic delivery task to validate without a grill", () => {
+    expect(
+      plan(root, ["Delivery is verified"], ["--route", "delivery"]).status,
+    ).toBe(0);
+    expect(run(root, "validate").status).toBe(0);
+    expect(readTask(taskDir).research_route).toBe("delivery");
+  });
+
+  it("keeps older Hermes closure tasks compatible with the delivery default", () => {
+    writeTask(taskDir, baseTask({
+      intent: "Preserve an existing closure task",
+      definition_of_done: ["Existing result is verified"],
+      work_packages: [
+        {
+          id: "WP1",
+          title: "Existing result",
+          outcome: "Existing result is verified",
+          done_when: ["Existing result is verified"],
+          evidence_required: [],
+          depends_on: [],
+          status: "pending",
+          evidence_refs: [],
+          blocker: null,
+        },
+      ],
+    }));
+    expect(run(root, "validate").status).toBe(0);
+    const task = readTask(taskDir);
+    expect(task.research_route).toBe("delivery");
+    expect(task.grill_completed).toBe(false);
+  });
+
+  it("increments hermes_revision on every Closure semantic write", () => {
+    expect(readTask(taskDir).hermes_revision).toBe(0);
+    expect(plan(root, ["CLI prints a verified result"]).status).toBe(0);
+    expect(readTask(taskDir).hermes_revision).toBe(1);
+    expect(run(root, "validate").status).toBe(0);
+    expect(readTask(taskDir).hermes_revision).toBe(2);
+    expect(run(root, "package-start").status).toBe(0);
+    expect(readTask(taskDir).hermes_revision).toBe(3);
+    expect(run(root, "package-check").status).toBe(0);
+    expect(readTask(taskDir).hermes_revision).toBe(4);
+    const evidence = materializeEvidence(root, "revision");
+    expect(run(root, "package-done", "--evidence", evidence).status).toBe(0);
+    expect(readTask(taskDir).hermes_revision).toBe(5);
+  });
+
+  it("rejects a stale task writer with compare-and-swap semantics", () => {
+    const script = [
+      "import copy, sys",
+      "from pathlib import Path",
+      "sys.path.insert(0, str(Path(sys.argv[1]).resolve()))",
+      "from common.closure import ClosureError, save_task",
+      "from common.io import read_json",
+      "task_dir = Path(sys.argv[2])",
+      "first = read_json(task_dir / 'task.json')",
+      "second = copy.deepcopy(first)",
+      "save_task(task_dir, first)",
+      "try:",
+      "    save_task(task_dir, second)",
+      "except ClosureError as exc:",
+      "    raise SystemExit(0 if 'stale task revision' in str(exc) else 2)",
+      "raise SystemExit(1)",
+    ].join("\n");
+    const result = spawnSync(
+      PYTHON,
+      ["-c", script, path.join(root, ".trellis", "scripts"), taskDir],
+      { cwd: root, encoding: "utf-8" },
+    );
+    expect(result.status, result.stderr).toBe(0);
+  });
+
+  it("plans explicit work packages from implementation units", () => {
+    fs.writeFileSync(
+      path.join(taskDir, "implement.md"),
+      [
+        "# Implementation",
+        "",
+        "## Work Packages",
+        "### WP1: Prepare dataset",
+        "Outcome: Dataset is prepared",
+        "Done when: Dataset is prepared",
+        "### WP2: Evaluate model",
+        "Outcome: Model is evaluated",
+        "Done when: Model is evaluated",
+        "### WP3: Review report",
+        "Outcome: Report is reviewed",
+        "Done when: Report is reviewed",
+        "",
+      ].join("\n"),
+    );
     expect(
       plan(root, [
         "Dataset is prepared",
@@ -170,6 +373,23 @@ describe.skipIf(!hasPython())("Lean Research Closure CLI", () => {
       ]).status,
     ).toBe(0);
     expect(readTask(taskDir).work_packages).toHaveLength(3);
+  });
+
+  it("uses one safe package when implementation units are absent", () => {
+    const result = plan(root, ["Dataset is prepared", "Model is evaluated"]);
+    expect(result.status).toBe(0);
+    expect(result.stderr).toContain("one safe work package");
+    expect(readTask(taskDir).work_packages).toHaveLength(1);
+  });
+
+  it("keeps context pins first in the compact capsule", () => {
+    expect(
+      plan(root, ["Artifact exists"], ["--context-pin", ".trellis/spec/guides/index.md"])
+        .status,
+    ).toBe(0);
+    const capsule = run(root, "capsule");
+    expect(capsule.status).toBe(0);
+    expect(capsule.stdout).toContain("Refs: .trellis/spec/guides/index.md");
   });
 
   it("keeps command and file microsteps inside done_when", () => {
@@ -280,8 +500,30 @@ describe.skipIf(!hasPython())("Lean Research Closure CLI", () => {
     expect(result.stderr).toContain("requires validation evidence");
   });
 
+  it("rejects unresolvable evidence refs and catches forged refs during audit", () => {
+    expect(plan(root, ["Artifact exists"]).status).toBe(0);
+    expect(run(root, "validate").status).toBe(0);
+    expect(run(root, "package-start").status).toBe(0);
+    expect(run(root, "package-check").status).toBe(0);
+    const rejected = run(root, "package-done", "--evidence", "test:pass");
+    expect(rejected.status).toBe(1);
+    expect(rejected.stderr).toContain("existing repository files or evidence ledger ids");
+
+    const task = readTask(taskDir) as TestTask & {
+      work_packages: (TestWorkPackage & { evidence_refs: string[] })[];
+    };
+    task.work_packages[0].status = "done";
+    task.work_packages[0].evidence_refs = ["forged:reference"];
+    task.current_work_package = null;
+    task.hermes_phase = "review";
+    writeTask(taskDir, task);
+    const audit = run(root, "audit", "--no-report");
+    expect(audit.status).toBe(1);
+    expect(audit.stdout).toContain("invalid evidence refs");
+  });
+
   it("does not dispose another package while one is current", () => {
-    expect(plan(root, ["Result A", "Result B"]).status).toBe(0);
+    expect(planTwoExplicitPackages(root).status).toBe(0);
     expect(run(root, "validate").status).toBe(0);
     expect(run(root, "package-start").status).toBe(0);
     const result = run(
@@ -299,7 +541,7 @@ describe.skipIf(!hasPython())("Lean Research Closure CLI", () => {
   });
 
   it("starts the next package after completing the previous package", () => {
-    expect(plan(root, ["Result A", "Result B"]).status).toBe(0);
+    expect(planTwoExplicitPackages(root).status).toBe(0);
     expect(run(root, "validate").status).toBe(0);
     completeCurrent(root, "test:a");
 
@@ -316,7 +558,7 @@ describe.skipIf(!hasPython())("Lean Research Closure CLI", () => {
   });
 
   it("refuses close while part of the plan is unfinished", () => {
-    expect(plan(root, ["Result A", "Result B"]).status).toBe(0);
+    expect(planTwoExplicitPackages(root).status).toBe(0);
     expect(run(root, "validate").status).toBe(0);
     completeCurrent(root);
     const result = run(root, "close");
@@ -332,6 +574,30 @@ describe.skipIf(!hasPython())("Lean Research Closure CLI", () => {
       "utf-8",
     );
     expect(events).not.toContain('"event_type":"task_closed"');
+  });
+
+  it("refuses close while a dispatch result is still unconfirmed", () => {
+    expect(plan(root, ["Result A"]).status).toBe(0);
+    expect(run(root, "validate").status).toBe(0);
+    completeCurrent(root);
+    expect(
+      runDispatch(
+        root,
+        "create",
+        "--job-id",
+        "job-unconfirmed",
+        "--role",
+        "reviewer",
+        "--profile",
+        "closure",
+        "--objective",
+        "Review closure readiness",
+      ).status,
+    ).toBe(0);
+    const result = run(root, "close");
+    expect(result.status).toBe(1);
+    expect(result.stdout).toContain("unconfirmed dispatch job-unconfirmed");
+    expect(readTask(taskDir).closure_state).toBe("open");
   });
 
   it("refuses archive before closure", () => {
@@ -368,8 +634,24 @@ describe.skipIf(!hasPython())("Lean Research Closure CLI", () => {
     expect(result.stdout.length).toBeLessThan(800);
   });
 
+  it("strongly warns when lean closure runs without hooks or strict heartbeat", () => {
+    expect(plan(root, ["Result A"]).status).toBe(0);
+    expect(run(root, "validate").status).toBe(0);
+    const result = spawnSync(
+      PYTHON,
+      [".trellis/scripts/closure.py", "audit", "--task", "demo", "--no-report"],
+      {
+        cwd: root,
+        encoding: "utf-8",
+        env: { ...process.env, TRELLIS_HOOKS: "0" },
+      },
+    );
+    expect(result.stdout).toContain("warnings:");
+    expect(result.stdout).toContain("advisory");
+  });
+
   it("repairs only the first gap and preserves completed packages", () => {
-    expect(plan(root, ["Result A", "Result B"]).status).toBe(0);
+    expect(planTwoExplicitPackages(root).status).toBe(0);
     expect(run(root, "validate").status).toBe(0);
     completeCurrent(root, "test:a");
     const before = structuredClone(readTask(taskDir).work_packages[0]);
@@ -383,13 +665,13 @@ describe.skipIf(!hasPython())("Lean Research Closure CLI", () => {
   });
 
   it("runs audit gap, one repair, and final close end to end", () => {
-    expect(plan(root, ["Result A", "Result B"]).status).toBe(0);
+    expect(planTwoExplicitPackages(root).status).toBe(0);
     expect(run(root, "validate").status).toBe(0);
     completeCurrent(root, "test:a");
     expect(run(root, "audit", "--no-report").status).toBe(1);
     expect(run(root, "repair").status).toBe(1);
     expect(run(root, "package-check").status).toBe(0);
-    expect(run(root, "package-done", "--evidence", "test:b").status).toBe(0);
+    expect(run(root, "package-done", "--evidence", materializeEvidence(root, "test-b")).status).toBe(0);
     expect(run(root, "audit").status).toBe(0);
     expect(run(root, "close").status).toBe(0);
     expect(readTask(taskDir).closure_state).toBe("closed");
@@ -479,6 +761,61 @@ describe.skipIf(!hasPython())("Lean Research Closure CLI", () => {
     expect(task.meta.research_contract.dataset).toBe("dataset-v2");
     expect(task.hermes_phase).toBe("planning");
     expect(task.blockers).toEqual([]);
+    expect(task.research_route).toBe("exploration");
+    expect(task.research_change_fields).toEqual(["dataset"]);
+    expect(task.grill_completed).toBe(false);
+    expect(run(root, "validate").status).toBe(1);
+    expect(run(root, "grill", "--complete").status).toBe(0);
+    expect(run(root, "validate").status).toBe(0);
+  });
+
+  it("treats functional model architecture changes as high risk", () => {
+    expect(plan(root, ["Result A"]).status).toBe(0);
+    expect(run(root, "validate").status).toBe(0);
+    const denied = run(
+      root,
+      "amend",
+      "--field",
+      "model_architecture",
+      "--value",
+      "new functional encoder",
+      "--reason",
+      "new model behavior",
+    );
+    expect(denied.status).toBe(1);
+    expect(denied.stderr).toContain(
+      "high-risk change model_architecture requires --approved-by human/root",
+    );
+    expect(readTask(taskDir).hermes_phase).toBe("blocked");
+  });
+
+  it("blocks an approved model architecture amendment and requires a new exploration task", () => {
+    expect(plan(root, ["Result A"]).status).toBe(0);
+    expect(run(root, "validate").status).toBe(0);
+    const result = run(
+      root,
+      "amend",
+      "--field",
+      "model_architecture",
+      "--value",
+      "new functional encoder",
+      "--reason",
+      "new model behavior",
+      "--approved-by",
+      "human/root",
+    );
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("independent exploration task");
+    const task = readTask(taskDir);
+    expect(task.hermes_phase).toBe("blocked");
+    expect(task.status).toBe("in_progress");
+    expect(task.research_route).toBe("exploration");
+    expect(task.research_change_fields).toEqual(["model_architecture"]);
+    expect(task.grill_completed).toBe(false);
+    expect(
+      (task.meta.research_contract as Record<string, unknown> | undefined)
+        ?.model_architecture,
+    ).toBeUndefined();
   });
 
   it("does not allow amend to bypass task state commands", () => {
@@ -524,6 +861,48 @@ describe.skipIf(!hasPython())("Lean Research Closure CLI", () => {
     ).toBe(true);
   });
 
+  it("refuses archive when closure fields are forged without a close event", () => {
+    expect(plan(root, ["Lean result verified"]).status).toBe(0);
+    const evidence = materializeEvidence(root, "forged-archive");
+    const forged = readTask(taskDir) as TestTask & {
+      work_packages: (TestWorkPackage & { evidence_refs: string[] })[];
+    };
+    forged.status = "completed";
+    forged.hermes_phase = "closed";
+    forged.closure_state = "closed";
+    forged.current_work_package = null;
+    forged.work_packages[0].status = "done";
+    forged.work_packages[0].evidence_refs = [evidence];
+    writeTask(taskDir, forged);
+
+    const archive = runTask(root, "archive", "demo", "--no-commit");
+    expect(archive.status).toBe(1);
+    expect(archive.stderr).toContain("task_closed event is missing");
+    expect(fs.existsSync(taskDir)).toBe(true);
+  });
+
+  it("rolls back task state when recording the close event fails", () => {
+    expect(plan(root, ["Lean result verified"]).status).toBe(0);
+    expect(run(root, "validate").status).toBe(0);
+    completeCurrent(root, "pnpm test:pass");
+
+    const beforeClose = readTask(taskDir);
+    const eventPath = path.join(taskDir, "hermes", "task-events.jsonl");
+    fs.rmSync(eventPath);
+    fs.mkdirSync(eventPath);
+
+    const result = run(root, "close");
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("failed to read task event log");
+
+    const afterFailure = readTask(taskDir);
+    expect(afterFailure.status).toBe(beforeClose.status);
+    expect(afterFailure.hermes_phase).toBe(beforeClose.hermes_phase);
+    expect(afterFailure.closure_state).toBe(beforeClose.closure_state);
+    expect(afterFailure.current_work_package).toBe(beforeClose.current_work_package);
+    expect(afterFailure.hermes_revision).toBe(beforeClose.hermes_revision);
+  });
+
   it("closes standard mode when run, artifact, metrics, and evidence exist", () => {
     expect(
       plan(root, ["Standard result verified"], ["--mode", "standard"]).status,
@@ -540,6 +919,7 @@ describe.skipIf(!hasPython())("Lean Research Closure CLI", () => {
     appendJsonl(taskDir, "claim_ledger.jsonl", [
       { id: "cl-standard", limits: "fixed fixture only" },
     ]);
+    recordHookHeartbeat(root);
     expect(run(root, "close").status).toBe(0);
     expect(readTask(taskDir).closure_state).toBe("closed");
   });
@@ -576,6 +956,34 @@ describe.skipIf(!hasPython())("Lean Research Closure CLI", () => {
     expect(result.status).toBe(1);
     expect(result.stdout).toContain("claim cl-1 human approval");
     expect(readTask(taskDir).closure_state).toBe("open");
+  });
+
+  it("does not close publication mode when hooks are explicitly disabled", () => {
+    expect(
+      plan(root, ["Publication result verified"], ["--mode", "publication"])
+        .status,
+    ).toBe(0);
+    expect(run(root, "validate").status).toBe(0);
+    completeCurrent(root, "ev-1");
+    const result = spawnSync(
+      PYTHON,
+      [".trellis/scripts/closure.py", "close", "--task", "demo"],
+      {
+        cwd: root,
+        encoding: "utf-8",
+        env: {
+          ...process.env,
+          TRELLIS_HOOKS: "0",
+          TRELLIS_HOOKS_ACTIVE: "1",
+        },
+      },
+    );
+    expect(result.status).toBe(1);
+    expect(result.stdout).toContain("context firewall");
+    const task = readTask(taskDir);
+    expect(task.status).toBe("in_progress");
+    expect(task.closure_state).toBe("open");
+    expect(task.hermes_phase).not.toBe("closed");
   });
 
   it("keeps legacy non-Hermes archive behavior", () => {

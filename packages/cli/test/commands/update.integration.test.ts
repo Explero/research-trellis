@@ -263,6 +263,46 @@ describe("update() integration", () => {
     expect(entries.filter((e) => e.startsWith(".backup-")).length).toBe(0);
   });
 
+  it("adds missing project context and language guides when upgrading a pre-v0.7.1 project", async () => {
+    await setupProject();
+
+    const newResearchFiles = [
+      `${PATHS.PROJECT}/README.md`,
+      `${PATHS.PROJECT}/BACKGROUND.md`,
+      `${PATHS.PROJECT}/RESEARCH_PLAN.md`,
+      `${PATHS.PROJECT}/CONSTRAINTS.md`,
+      `${PATHS.PROJECT}/PROJECT_INDEX.md`,
+      `${PATHS.SPEC}/guides/general-code-guidelines.md`,
+      `${PATHS.SPEC}/languages/index.md`,
+      `${PATHS.SPEC}/languages/typescript-javascript.md`,
+      `${PATHS.SPEC}/languages/python.md`,
+      `${PATHS.SPEC}/languages/go.md`,
+      `${PATHS.SPEC}/languages/rust.md`,
+      `${PATHS.SPEC}/languages/cpp.md`,
+      `${PATHS.SPEC}/languages/shell.md`,
+    ];
+    const hashFile = hashFilePath();
+    let hashes = readHashesV2(hashFile);
+    for (const relativePath of newResearchFiles) {
+      fs.rmSync(projectFile(relativePath), { force: true });
+      hashes = removeHashEntry(hashes, relativePath) as Record<string, string>;
+    }
+    writeHashesV2(hashFile, hashes);
+    fs.writeFileSync(versionFilePath(), "0.7.0-beta.0");
+
+    await update({ force: true });
+
+    for (const relativePath of newResearchFiles) {
+      expect(fs.existsSync(projectFile(relativePath))).toBe(true);
+    }
+    expect(readProjectFile(`${PATHS.PROJECT}/PROJECT_INDEX.md`)).toContain(
+      "Project Fact Index",
+    );
+    expect(readProjectFile(`${PATHS.SPEC}/languages/index.md`)).toContain(
+      "TypeScript",
+    );
+  });
+
   it("#3 user-deleted file (with stored hash) is not re-added on update", async () => {
     await setupProject();
 
@@ -710,10 +750,11 @@ describe("update() integration", () => {
     const hermesPaths = [
       ".trellis/hermes/config.yaml",
       ".trellis/hermes/state_machine.yaml",
-      ".trellis/hermes/roles/scientist.md",
+      ".trellis/hermes/roles/planner.md",
       ".trellis/hermes/records/README.md",
       ".trellis/hermes/records/recordbus.md",
       ".trellis/hermes/records/subagent_protocol.md",
+      ".trellis/hermes/schemas/result-envelope.schema.json",
       ".trellis/hermes/ledgers/.gitkeep",
       ".trellis/scripts/hermes/__init__.py",
       ".trellis/scripts/hermes/runtime.py",
@@ -723,6 +764,7 @@ describe("update() integration", () => {
       ".trellis/scripts/hermes/guard.py",
       ".trellis/scripts/hermes/jobs.py",
       ".trellis/scripts/hermes/heartbeat.py",
+      ".trellis/scripts/hermes/dispatch.py",
       ".trellis/scripts/hermes/runner.py",
       ".trellis/scripts/hermes/report.py",
     ];
