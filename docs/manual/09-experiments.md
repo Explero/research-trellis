@@ -74,7 +74,7 @@ python3 ./.trellis/scripts/hermes/experiment.py validate --task "$TASK"
 ## 验证记录
 
 - 日期：2026-07-15。
-- 版本：`0.7.0-beta.0`（测试版）。
+- 版本：`0.7.1-beta.0`（测试版）。
 - 更名前基准提交：`9f7dc8497b4782878d6fa7ac3b63eba5bde507df`。
 - 命令：`rg -n -m 1 "allowed_commands|sandbox" packages/cli/src/templates/trellis/scripts/hermes packages/cli/test/templates/hermes-runtime.test.ts`（实现与测试核对）。
 - 结果：命令允许列表、隔离模式和对应测试均可定位。

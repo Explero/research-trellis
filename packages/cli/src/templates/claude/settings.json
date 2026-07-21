@@ -65,6 +65,16 @@
             "timeout": 15
           }
         ]
+      },
+      {
+        "matcher": "Read|Glob|Grep",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "{{PYTHON_CMD}} .claude/hooks/hermes-runtime-guard.py",
+            "timeout": 15
+          }
+        ]
       }
     ],
     "UserPromptSubmit": [
@@ -96,6 +106,30 @@
             "type": "command",
             "command": "{{PYTHON_CMD}} .claude/hooks/hermes-runtime-guard.py",
             "timeout": 15
+          }
+        ]
+      }
+    ],
+    "SubagentStart": [
+      {
+        "matcher": "hermes-planner|hermes-researcher|hermes-coder|hermes-runner|hermes-reviewer|hermes-scientist|hermes-literature|hermes-evaluator|hermes-claim-reviewer|trellis-implement|trellis-check|trellis-research",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "{{PYTHON_CMD}} .claude/hooks/hermes-runtime-guard.py",
+            "timeout": 15
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Agent",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "{{PYTHON_CMD}} .claude/hooks/hermes-runtime-guard.py",
+            "timeout": 30
           }
         ]
       }

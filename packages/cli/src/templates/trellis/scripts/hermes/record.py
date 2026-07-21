@@ -4,6 +4,13 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from pathlib import Path
+
+SCRIPTS_DIR = Path(__file__).resolve().parents[1]
+if str(SCRIPTS_DIR) not in sys.path:
+    sys.path.insert(0, str(SCRIPTS_DIR))
+
+from common.roles import RoleProfileError, normalize_task_card
 
 from runtime import append_record, record_path, repo_root
 
@@ -28,6 +35,15 @@ def main() -> int:
     if not isinstance(record, dict):
         print("record must be a JSON object", file=sys.stderr)
         return 2
+
+    if record.get("type") == "task_card":
+        try:
+            record, warnings = normalize_task_card(record, for_write=True)
+        except RoleProfileError as exc:
+            print(str(exc), file=sys.stderr)
+            return 2
+        for warning in warnings:
+            print(f"warning: {warning}", file=sys.stderr)
 
     try:
         path = record_path(root, args.task, args.record_type)

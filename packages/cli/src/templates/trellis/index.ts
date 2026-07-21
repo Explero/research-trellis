@@ -81,6 +81,9 @@ export const commonTasks = readTemplate("scripts/common/tasks.py");
 export const commonTaskContext = readTemplate("scripts/common/task_context.py");
 export const commonTaskStore = readTemplate("scripts/common/task_store.py");
 export const commonClosure = readTemplate("scripts/common/closure.py");
+export const commonRoles = readTemplate("scripts/common/roles.py");
+export const commonDispatch = readTemplate("scripts/common/dispatch.py");
+export const commonFirewall = readTemplate("scripts/common/firewall.py");
 export const commonSessionContext = readTemplate(
   "scripts/common/session_context.py",
 );
@@ -114,6 +117,14 @@ export const closureScript = readTemplate("scripts/closure.py");
 export const workflowMdTemplate = readTemplate("workflow.md");
 export const configYamlTemplate = readTemplate("config.yaml");
 export const gitignoreTemplate = readTemplate("gitignore.txt");
+export const projectBackgroundTemplate = readTemplate("project/BACKGROUND.md");
+export const projectResearchPlanTemplate = readTemplate(
+  "project/RESEARCH_PLAN.md",
+);
+export const projectConstraintsTemplate = readTemplate(
+  "project/CONSTRAINTS.md",
+);
+export const projectReadmeTemplate = readTemplate("project/README.md");
 
 /**
  * Get all script templates as a map of relative path to content
@@ -142,6 +153,9 @@ export function getAllScripts(): Map<string, string> {
   scripts.set("common/task_context.py", commonTaskContext);
   scripts.set("common/task_store.py", commonTaskStore);
   scripts.set("common/closure.py", commonClosure);
+  scripts.set("common/roles.py", commonRoles);
+  scripts.set("common/dispatch.py", commonDispatch);
+  scripts.set("common/firewall.py", commonFirewall);
   scripts.set("common/session_context.py", commonSessionContext);
   scripts.set("common/packages_context.py", commonPackagesContext);
   scripts.set("common/workflow_phase.py", commonWorkflowPhase);

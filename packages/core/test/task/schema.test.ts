@@ -25,7 +25,17 @@ describe("emptyTaskRecord", () => {
     expect(record.closure_state).toBe("open");
     expect(record.closure_mode).toBe("lean");
     expect(record.work_packages).toEqual([]);
+    expect(record.context_pins).toEqual([]);
+    expect(record.research_route).toBe("delivery");
+    expect(record.research_change_fields).toEqual([]);
+    expect(record.grill_completed).toBe(false);
+    expect(record.constraints).toEqual({
+      excluded_platforms: [],
+      excluded_paths: [],
+      validation_level: "targeted",
+    });
     expect(record.max_repair_count).toBe(1);
+    expect(record.hermes_revision).toBe(0);
     expect(record.createdAt).toMatch(/^\d{4}-\d{2}-\d{2}$/);
   });
 
@@ -107,12 +117,18 @@ describe("taskRecordSchema", () => {
       "in_scope",
       "out_of_scope",
       "definition_of_done",
+      "context_pins",
+      "research_route",
+      "research_change_fields",
+      "grill_completed",
+      "constraints",
       "work_packages",
       "current_work_package",
       "next_action",
       "blockers",
       "repair_count",
       "max_repair_count",
+      "hermes_revision",
     ]);
     const legacy = Object.fromEntries(
       Object.entries(emptyTaskRecord()).filter(
@@ -176,6 +192,45 @@ describe("taskRecordSchema", () => {
         hermes_phase: "complete",
       }),
     ).toThrow(/hermes_phase is invalid/);
+    expect(() =>
+      taskRecordSchema.parse({
+        ...emptyTaskRecord(),
+        hermes_revision: -1,
+      }),
+    ).toThrow(/hermes_revision must be a non-negative integer/);
+    const invalidDispatchField = emptyTaskRecord({
+      work_packages: [
+        {
+          id: "WP1",
+          title: "Invalid dispatch fields",
+          outcome: "Result exists",
+          done_when: ["Result exists"],
+          evidence_required: [],
+          depends_on: [],
+          status: "ready",
+          evidence_refs: [],
+          blocker: null,
+        },
+      ],
+    });
+    const invalidPackage = invalidDispatchField.work_packages?.[0] as Record<
+      string,
+      unknown
+    >;
+    invalidPackage.confirmed_dispatches = "job-1";
+    expect(() => taskRecordSchema.parse(invalidDispatchField)).toThrow(
+      /confirmed_dispatches must be an array of strings/,
+    );
+    invalidPackage.confirmed_dispatches = [];
+    invalidPackage.dispatch_blockers = "job-1";
+    expect(() => taskRecordSchema.parse(invalidDispatchField)).toThrow(
+      /dispatch_blockers must be an array of strings/,
+    );
+    invalidPackage.dispatch_blockers = ["job-1"];
+    invalidPackage.dispatch_blocked_from_status = "done";
+    expect(() => taskRecordSchema.parse(invalidDispatchField)).toThrow(
+      /dispatch_blocked_from_status must be running or review/,
+    );
   });
 
   it("rejects records missing canonical fields", () => {

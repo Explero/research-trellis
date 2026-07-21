@@ -16,18 +16,28 @@ communicator. It may read RecordBus, git status/diff/log, test results, and up
 to 5 files for routing. Once the implementation surface is identified, the main
 agent must dispatch the bounded work instead of doing it directly.
 
-Use task cards to assign one bounded worker at a time. The supported worker
-roles for task cards are `coder`, `runner`, `evaluator`, `reviewer`,
-`literature`, `researcher`, and `analyst`. Host-level `builder` identity maps
-to the `coder` mutation owner.
+Formal Agent Context Firewall support is limited to Claude and Codex. A
+validated dispatch lives at
+`.trellis/tasks/<task>/hermes/dispatches/<job>.dispatch.json`; its sanitized
+result lives beside it as `<job>.result.json`. Claude hooks replace Agent input
+and output. Codex native agents are advisory; strict mode uses `codex exec
+--output-schema --json -o` through `dispatch.py run`.
 
-- `builder` / `coder` owns code mutation inside `allowed_files`.
-- `runner` executes commands or tests and reports structured output.
-- `evaluator` compares outputs against the requested evidence standard.
-- `reviewer` owns quality and security review before handoff.
-- `researcher` / `literature` gathers outside sources, citations, and source
-  reading evidence.
-- `analyst` owns root-cause analysis, tradeoff analysis, and decision framing.
+Use task cards to assign one bounded worker at a time. Canonical roles are
+`planner`, `researcher`, `coder`, `runner`, and `reviewer`. The optional
+`profile` selects a focused mode inside that role without creating another
+agent template.
+
+- `planner` owns research design, task planning, method selection, and root-cause analysis.
+- `researcher` gathers codebase, literature, official documentation, or prior-art sources.
+- `coder` owns code, test, and configuration mutation inside `allowed_files`.
+- `runner` executes experiments, tests, builds, or validation and records outputs.
+- `reviewer` independently reviews quality, evidence, claims, safety, closure, or statistics.
+
+Legacy roles are normalized when read. New records store only canonical role
+and profile names. `evidence-curator` is no longer dispatchable; deterministic
+evidence commands organize and validate references before `reviewer:evidence`
+judges their quality.
 
 Every task card should point at `.trellis/tasks/<task>/hermes/worker_records.jsonl`
 and should carry both `allowed_files` and `forbidden_files`. RecordBus records
@@ -68,11 +78,12 @@ store task-specific evidence, claims, approvals, worker logs, or review results.
 - The local service queue goes to `service_queue.jsonl`; it supports enqueue,
   status, cancel, and retry records without a daemon.
 - Worker validation enforces one unfinished active writer per worktree. Active
-  writers are `coder` and `runner`; checker roles such as `reviewer`,
-  `evaluator`, and `literature` do not count as active writers.
+  writers are `coder` and `runner`; `planner`, `researcher`, and `reviewer` do
+  not count as active writers.
 - A `coder` result whose `status` or `handoff` enters `review` or `claim_ready`
-  must already have a related `runner` result and a related `reviewer` result
-  or checkpoint in `worker_records.jsonl`.
+  must already have a related `runner:test|build|validation` result and a
+  related `reviewer:quality|safety` result or checkpoint in
+  `worker_records.jsonl`.
 - `PreToolUse` hooks act as a role firewall and quality gate. They deny main
   agent mutation, execution, package/test commands, git mutation, and removal
   commands, then point to the appropriate subagent. Subagents still use the
@@ -128,6 +139,9 @@ Hermes runtime scripts live under `.trellis/scripts/hermes/`.
 - Validate audit records with `python3 ./.trellis/scripts/hermes/validate.py --task <task> --kind audit`.
 - Append plan change records with `python3 ./.trellis/scripts/hermes/record.py append --task <task> --record-type plan_change --json '<json>'`.
 - Validate plan change records with `python3 ./.trellis/scripts/hermes/validate.py --task <task> --kind plan_change`.
+- Collect a stable evidence index with `python3 ./.trellis/scripts/hermes/evidence.py collect --task <task>`.
+- Validate evidence paths, hashes, run links, and references with `python3 ./.trellis/scripts/hermes/evidence.py validate --task <task>`.
+- Print a compact evidence summary with `python3 ./.trellis/scripts/hermes/evidence.py summary --task <task>`.
 - Aggregate run manifests with `python3 ./.trellis/scripts/hermes/report.py aggregate --task <task> --output .trellis/tasks/<task>/hermes/aggregate.json`.
 - Append a compare record with `python3 ./.trellis/scripts/hermes/report.py compare --task <task> --metric <metric> --baseline <value> --new <value> --threshold <value> --direction higher_is_better`.
 - Generate a task report with `python3 ./.trellis/scripts/hermes/report.py report --task <task> --question <text> --method <text> --data <text> --metrics <text> --limitations <text> --risks <text>`.
@@ -145,7 +159,7 @@ Hermes runtime scripts live under `.trellis/scripts/hermes/`.
 Append a `task_card` record when dispatching a worker.
 
 ```json
-{"type":"task_card","id":"tc-YYYYMMDD-HHMMSS-slug","timestamp":"YYYY-MM-DDTHH:MM:SSZ","job_id":"job-YYYYMMDD-HHMMSS-slug","role":"coder|runner|evaluator|reviewer|literature|researcher|analyst","worktree_id":"main|worktree-name","status":"queued","allowed_files":["path/**"],"forbidden_files":["path/**"],"heartbeat_interval":"5m","timeout_at":"YYYY-MM-DDTHH:MM:SSZ","checkpoint":"not-started","resume_from":"task_card","record_uri":".trellis/tasks/<task>/hermes/worker_records.jsonl","evidence_refs":[],"risk_flags":[]}
+{"type":"task_card","id":"tc-YYYYMMDD-HHMMSS-slug","timestamp":"YYYY-MM-DDTHH:MM:SSZ","job_id":"job-YYYYMMDD-HHMMSS-slug","role":"reviewer","profile":"evidence","objective":"check current package evidence","worktree_id":"main|worktree-name","status":"queued","allowed_files":[".trellis/tasks/<task>/hermes/**"],"forbidden_files":["src/**",".env"],"heartbeat_interval":"5m","timeout_at":"YYYY-MM-DDTHH:MM:SSZ","checkpoint":"not-started","resume_from":"task_card","record_uri":".trellis/tasks/<task>/hermes/worker_records.jsonl","evidence_refs":[],"risk_flags":[]}
 ```
 
 ### heartbeat
@@ -207,11 +221,19 @@ experiment config changes.
 
 ### result
 
-Append a `result` record when the worker completes the authorized task.
+Agent output must first satisfy the Result Envelope. It requires `job_id`,
+`status`, `conclusion`, `uncertainties`, `changed_files`, `evidence_refs`, and
+`risk_flags`; optional bounded fields include `artifact_refs`, `run_refs`,
+`next_action`, `review_judgment`, and `decision_requests`.
 
 ```json
-{"type":"result","id":"rs-YYYYMMDD-HHMMSS-slug","timestamp":"YYYY-MM-DDTHH:MM:SSZ","job_id":"job-YYYYMMDD-HHMMSS-slug","status":"done","summary":"what changed","changed_files":["path/file"],"evidence_refs":["ev-..."],"risk_flags":[],"handoff":"structured next step or review request"}
+{"job_id":"job-YYYYMMDD-HHMMSS-slug","status":"success","conclusion":"bounded conclusion","uncertainties":[],"changed_files":["path/file"],"evidence_refs":[],"artifact_refs":[],"run_refs":[],"risk_flags":[],"next_action":"review current package"}
 ```
+
+The firewall then appends a compatible RecordBus `result`. Runner success must
+use existing `run_refs` and cannot accept `evidence_refs`. Evidence and claim
+reviewers return only proposed judgments; only existing ledgers can support
+facts, and only an external `human/root` record can approve a claim.
 
 ### stalled
 

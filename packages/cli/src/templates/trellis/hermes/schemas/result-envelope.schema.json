@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Hermes Result Envelope",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "job_id",
+    "task_revision",
+    "role",
+    "profile",
+    "status",
+    "conclusion",
+    "uncertainties",
+    "changed_files",
+    "evidence_refs",
+    "artifact_refs",
+    "verification",
+    "risks",
+    "next_action"
+  ],
+  "properties": {
+    "schema": { "type": "string", "const": "hermes-result/v1" },
+    "schema_version": { "type": "string", "const": "hermes-result/v1" },
+    "job_id": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,79}$" },
+    "task_revision": { "type": "integer", "minimum": 0 },
+    "role": { "type": "string", "enum": ["planner", "researcher", "coder", "runner", "reviewer"] },
+    "profile": { "type": "string" },
+    "status": { "type": "string", "enum": ["success", "failure", "blocked"] },
+    "conclusion": { "type": "string", "maxLength": 1200 },
+    "uncertainties": { "type": "array", "items": { "type": "string" } },
+    "changed_files": { "type": "array", "items": { "type": "string" } },
+    "evidence_refs": { "type": "array", "items": { "type": "string" } },
+    "artifact_refs": { "type": "array", "items": { "type": "string" } },
+    "run_refs": { "type": "array", "items": { "type": "string" } },
+    "risk_flags": { "type": "array", "items": { "type": "string" } },
+    "verification": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "status": { "type": "string" },
+        "run_refs": { "type": "array", "items": { "type": "string" } },
+        "commands": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "risks": { "type": "array", "items": { "type": "string" } },
+    "next_action": { "type": "string", "maxLength": 300 },
+    "review_judgment": { "type": ["object", "null"] },
+    "decision_requests": { "type": "array", "items": { "type": "string" } }
+  }
+}

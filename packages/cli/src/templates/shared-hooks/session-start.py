@@ -72,6 +72,24 @@ First visible reply: say once in Chinese that Trellis SessionStart context is lo
 This notice is one-shot: do not repeat it after the first assistant reply in the same session.
 </first-reply-notice>"""
 
+PROJECT_CONTEXT_REFS = (
+    (
+        "Project background",
+        "BACKGROUND.md",
+        "project origin, domain, current state, and objective",
+    ),
+    (
+        "Research plan",
+        "RESEARCH_PLAN.md",
+        "research question, current approach, evidence standard, and limits",
+    ),
+    (
+        "Project constraints",
+        "CONSTRAINTS.md",
+        "fixed boundaries, compatibility, data, resources, and approvals",
+    ),
+)
+
 # Force UTF-8 on stdin/stdout/stderr on Windows. Default codepage there is
 # cp936 / cp1252 / etc. — non-ASCII content (Chinese task names, prd snippets)
 # both in stdin (hook payload from host CLI) and stdout (our emitted blocks)
@@ -278,10 +296,30 @@ def _build_hermes_main_agent_boot_guard(trellis_dir: Path) -> str:
 Source: .trellis/hermes/HERMES_MAIN_AGENT_BOOT_GUARD.md. Read it before governance-sensitive work; keep this SessionStart payload compact.
 Role: Main Agent / Main Pilot coordinates Hermes state, bounded subagent routing, record validation, handoff, and human/PI stop points.
 Hard limits: do not directly modify source, metrics, dataset splits, baselines, official evaluation, claim_allowed=true, or main merge unless Hermes state and human/root authority allow it.
-Subagent context policy: minimal_file_context. Give role, task ID, allowed files, forbidden files, required output, stop condition, record schema, and claim boundary. Do not fork full chat by default.
+Formal Claude/Codex context policy: validated_dispatch_only. Give Agent only a validated job_id; keep raw output out of chat. Do not fork full chat by default.
 Record policy: chat is not completion; completed, failed, blocked, stale, interrupted, or capacity-blocked work needs structured records.
-Claim boundary: keep engineering success, runner success, evaluator approval, proxy evidence, scientific evidence, claim approval, and merge approval separate.
+Claim boundary: keep engineering success, runner success, evidence review, proxy evidence, scientific evidence, claim approval, and merge approval separate.
 </main-agent-boot-guard>"""
+
+
+def _build_project_context_index(trellis_dir: Path) -> str:
+    """List project-level documents without reading their contents."""
+    project_dir = trellis_dir / "project"
+    lines = [
+        "<project-context-index>",
+        "Main-agent planning input. Read only the relevant document before accepting, discussing, or splitting a request; do not inject document contents by default.",
+    ]
+    for title, filename, purpose in PROJECT_CONTEXT_REFS:
+        path = project_dir / filename
+        state = "available" if path.is_file() else "missing"
+        lines.append(
+            f"- {title}: .trellis/project/{filename} [{state}] - {purpose}."
+        )
+    lines.append(
+        "Subagents receive a project-context document only when it is an explicit allowed ref in their validated dispatch."
+    )
+    lines.append("</project-context-index>")
+    return "\n".join(lines)
 
 
 def _repo_relative(repo_root: Path, path: Path) -> str:
@@ -879,6 +917,20 @@ def _build_workflow_overview(workflow_path: Path) -> str:
     return "\n".join(out_lines).rstrip()
 
 
+def _record_context_firewall_heartbeat(project_dir: Path, platform: str | None) -> None:
+    if platform != "claude":
+        return
+    scripts_dir = project_dir / ".trellis" / "scripts"
+    if str(scripts_dir) not in sys.path:
+        sys.path.insert(0, str(scripts_dir))
+    try:
+        from common.firewall import record_firewall_heartbeat  # type: ignore[import-not-found]
+
+        record_firewall_heartbeat(project_dir, "claude", "hooks")
+    except Exception:
+        pass
+
+
 def main():
     if should_skip_injection():
         sys.exit(0)
@@ -909,6 +961,8 @@ def main():
             break
     if project_dir is None:
         project_dir = Path(_normalize_windows_shell_path(hook_input.get("cwd", "."))).resolve()
+
+    _record_context_firewall_heartbeat(project_dir, _detect_platform(hook_input))
 
     worktree_sync_notice = _maybe_sync_trellis_worktree(project_dir)
     trellis_dir = project_dir / ".trellis"
@@ -943,6 +997,9 @@ Trellis compact SessionStart context. Use it to orient the session; load details
     if hermes_boot_guard:
         output.write(hermes_boot_guard)
         output.write("\n\n")
+
+    output.write(_build_project_context_index(trellis_dir))
+    output.write("\n\n")
 
     output.write("<current-state>\n")
     output.write(_build_compact_current_state(trellis_dir, hook_input, spec_index_paths))

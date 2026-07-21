@@ -1255,11 +1255,12 @@ describe("regression: current-task path normalization", () => {
   const copilotSessionStart = getCopilotHooks().find(
     (hook) => hook.name === "session-start.py",
   )?.content;
-  it("[session-current-task] session-start template keeps trellis-grill-me as a required Claude Code planning gate", () => {
+  it("[session-current-task] analyzes every task but limits grill to unresolved decisions", () => {
     expect(claudeSessionStart).toContain("guide the user to `task.py create` first");
-    expect(workflowMdTemplate).toContain("Planning order for this Claude Code path: `task.py create` → `trellis-brainstorm` → `trellis-grill-me` → development strategy decision.");
-    expect(workflowMdTemplate).toContain("`trellis-grill-me` is a required planning gate on this Claude Code path, not an optional suggestion.");
-    expect(workflowMdTemplate).toContain("Before `trellis-grill-me` is complete, do not enter development strategy decisions, do not create or complete `design.md` / `implement.md`, and do not run `task.py start`.");
+    expect(workflowMdTemplate).toContain("Before every plan or dispatch, the main agent must analyze intent, scope, completion conditions, route, risks, and the smallest useful work-package split.");
+    expect(workflowMdTemplate).toContain("Do not load `trellis-brainstorm` or `trellis-grill-me` by default.");
+    expect(workflowMdTemplate).toContain("optional `trellis-brainstorm` / `trellis-grill-me` only for an unresolved material decision");
+    expect(workflowMdTemplate).toContain("When a grill is running, do not enter development strategy decisions");
   });
 
   beforeEach(() => {

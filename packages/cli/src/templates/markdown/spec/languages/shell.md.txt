@@ -1,0 +1,22 @@
+# Shell / Bash 书写规范
+
+## 默认规则
+
+- 先声明解释器。使用 Bash 特性时写 `#!/usr/bin/env bash`（Bash 解释器）；需要兼容 `sh`（标准 Shell）时不要混入 Bash 数组、`[[ ... ]]`（Bash 条件）等扩展；
+- 变量、路径和命令替换默认加引号；参数列表使用数组，避免依赖空格分割或 `eval`（二次解释命令）；
+- 对失败语义有明确预期时使用 `set -euo pipefail`（严格错误处理），但先理解条件判断、管道和允许失败命令的行为；
+- 临时文件使用 `mktemp`（安全临时文件），并用 `trap`（退出清理）处理清理和中断；不要使用固定临时路径或不受限的递归删除；
+- 外部命令、下载内容和环境变量都按不可信输入处理；验证参数、检查退出码，避免把数据拼接进可执行命令；
+- 脚本应接受显式输入、输出和配置路径，记录实际执行命令；不要依赖个人目录、交互式提示或未声明的环境状态。
+
+## 测试与检查
+
+- 项目已配置或当前环境确认可用时，运行 `ShellCheck`（Shell 静态检查）和已有的脚本测试；未配置时只做与改动直接相关的最小脚本验证；
+- 对包含路径空格、缺失变量、失败命令和中断清理的情况做最小验证；
+- 运行实验脚本前确认输出目录、覆盖策略、数据权限和资源消耗。
+
+## 公开基线
+
+- `Google Shell Style Guide`（谷歌 Shell 规范）：https://google.github.io/styleguide/shellguide.html
+- `Bash Reference Manual`（Bash 参考手册）：https://www.gnu.org/software/bash/manual/bash.html
+- `ShellCheck`（Shell 静态检查）：https://www.shellcheck.net/

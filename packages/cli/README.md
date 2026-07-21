@@ -97,7 +97,7 @@ node packages/cli/scripts/release-preflight.js verify-packed-cli
 新包发布后，可固定安装本次测试版：
 
 ```bash
-npm install -g research-trellis@0.7.0-beta.0
+npm install -g research-trellis@0.7.1-beta.0
 research-trellis --version
 ```
 
@@ -107,7 +107,7 @@ research-trellis --version
 
 ```bash
 npm uninstall -g trellis-hermes
-npm install -g research-trellis@0.7.0-beta.0
+npm install -g research-trellis@0.7.1-beta.0
 research-trellis --version
 ```
 
@@ -197,7 +197,17 @@ node /path/to/research-trellis/packages/cli/bin/trellis.js update
 
 详见[中文手册：Lean Research Closure](docs/manual/17-lean-research-closure.md)。
 
-### 6. 预检不是形式检查
+### 6. 五角色与轻量模式
+
+五个正式 `Hermes`（科研工作流）角色现在是 `planner`（规划代理）、`researcher`（检索代理）、`coder`（编码代理）、`runner`（运行代理）和 `reviewer`（复核代理）。角色决定权限，`Profile`（模式）决定本次关注点；正式模板目前只提供给 `Claude Code`（Claude 代码工具）和 `Codex`（代码代理平台）。
+
+### 7. Agent Context Firewall
+
+每次正式角色派发先生成绑定 `hermes_revision`（Hermes 修订号）的结构化文件，正文最多 2000 字符、引用最多 3 个。`Claude Code`（Claude 代码工具）钩子只接收 `job_id`（工作编号）并替换长提示；`Codex native`（Codex 原生）仅为建议性，`Codex strict`（Codex 严格模式）使用结构化输出参数执行。
+
+返回必须包含 `uncertainties`（不确定项），长日志、完整差异和搜索过程不会进入主上下文。原始跟踪保存在 `.trellis/.runtime/`（本地运行目录），成功或失败都会机械更新下一动作，但不会仅凭聊天关闭任务。
+
+### 8. 预检不是形式检查
 
 `hermes:preflight`（Hermes 预检）会检查模板文件、Python 编译、Hermes hook、门禁文档、沙箱配置、模板测试、类型检查和构建。
 

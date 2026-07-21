@@ -56,12 +56,19 @@ class TaskData(TypedDict, total=False):
     in_scope: list[str]
     out_of_scope: list[str]
     definition_of_done: list[str]
+    context_pins: list[str]
+    research_route: str
+    research_change_fields: list[str]
+    grill_completed: bool
+    constraints: dict
     work_packages: list[dict]
     current_work_package: str | None
     next_action: str | None
     blockers: list[str]
     repair_count: int
     max_repair_count: int
+    hermes_revision: int
+    confirmed_dispatches: list[str]
 
 
 # =============================================================================

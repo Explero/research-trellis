@@ -84,6 +84,37 @@ def ensure_tasks_dir(repo_root: Path) -> Path:
     return tasks_dir
 
 
+def _closure_archive_errors(task_dir: Path, data: dict[str, object]) -> list[str]:
+    errors: list[str] = []
+    if data.get("closure_state") != "closed":
+        errors.append("closure_state is not closed")
+    if data.get("hermes_phase") != "closed":
+        errors.append("hermes_phase is not closed")
+    if data.get("status") != "completed":
+        errors.append("task status is not completed")
+    if data.get("current_work_package") is not None:
+        errors.append("a work package is still current")
+    packages = data.get("work_packages")
+    if not isinstance(packages, list) or any(
+        not isinstance(item, dict) or item.get("status") not in {"done", "deferred", "waived"}
+        for item in packages
+    ):
+        errors.append("work packages are not fully disposed")
+    event_path = task_dir / "hermes" / "task-events.jsonl"
+    try:
+        events = [json.loads(line) for line in event_path.read_text(encoding="utf-8").splitlines() if line.strip()]
+    except (OSError, json.JSONDecodeError):
+        events = []
+    if not any(
+        isinstance(event, dict)
+        and event.get("event_type") == "task_closed"
+        and event.get("new_state") == "closed"
+        for event in events
+    ):
+        errors.append("task_closed event is missing")
+    return errors
+
+
 # =============================================================================
 # Sub-agent platform detection + JSONL seeding
 # =============================================================================
@@ -379,10 +410,12 @@ def cmd_archive(args: argparse.Namespace) -> int:
         data = read_json(task_json_path)
         if data:
             if is_closure_task(data):
-                if data.get("closure_state") != "closed":
+                closure_errors = _closure_archive_errors(task_dir, data)
+                if closure_errors:
                     print(
                         colored(
-                            "Error: Hermes closure task is not closed; run closure.py audit/close before archive.",
+                            "Error: Hermes closure task is not closed; run closure.py audit/close before archive. "
+                            + "; ".join(closure_errors),
                             Colors.RED,
                         ),
                         file=sys.stderr,

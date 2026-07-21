@@ -26,8 +26,20 @@ const REQUIRED_FILES = [
   "packages/cli/src/templates/trellis/hermes/experiments/experiment.yaml",
   "packages/cli/src/templates/trellis/hermes/metrics/metrics_schema.yaml",
   "packages/cli/src/templates/trellis/hermes/reports/report.md",
+  "packages/cli/src/templates/trellis/hermes/roles/base.md",
+  "packages/cli/src/templates/trellis/hermes/roles/planner.md",
+  "packages/cli/src/templates/trellis/hermes/roles/researcher.md",
+  "packages/cli/src/templates/trellis/hermes/roles/coder.md",
+  "packages/cli/src/templates/trellis/hermes/roles/runner.md",
+  "packages/cli/src/templates/trellis/hermes/roles/reviewer.md",
   "packages/cli/src/templates/trellis/scripts/closure.py",
   "packages/cli/src/templates/trellis/scripts/common/closure.py",
+  "packages/cli/src/templates/trellis/scripts/common/roles.py",
+  "packages/cli/src/templates/trellis/scripts/common/dispatch.py",
+  "packages/cli/src/templates/trellis/scripts/common/firewall.py",
+  "packages/cli/src/templates/trellis/scripts/hermes/dispatch.py",
+  "packages/cli/src/templates/trellis/hermes/schemas/result-envelope.schema.json",
+  "packages/cli/src/templates/trellis/scripts/hermes/evidence.py",
   "packages/cli/src/templates/trellis/scripts/hermes/runner.py",
   "packages/cli/src/templates/trellis/scripts/hermes/report.py",
   "packages/cli/src/templates/trellis/scripts/hermes/service.py",
@@ -43,6 +55,7 @@ const TEMPLATE_TEST_ARGS = [
   "test/templates/claude.test.ts",
   "test/templates/codex.test.ts",
   "test/templates/shared-hooks.test.ts",
+  "test/scripts/agent-context-firewall.integration.test.ts",
   "test/scripts/closure.integration.test.ts",
 ];
 
@@ -314,7 +327,7 @@ export function runPreflight(options = {}) {
   if (quick) {
     checks.push(
       result("Template tests", true, [
-        `${YELLOW}quick mode${RESET}: skipped; run pnpm --filter research-trellis exec vitest run test/templates/hermes-runtime.test.ts test/templates/trellis.test.ts test/templates/claude.test.ts test/templates/codex.test.ts test/templates/shared-hooks.test.ts`,
+        `${YELLOW}quick mode${RESET}: skipped; run pnpm --filter research-trellis ${TEMPLATE_TEST_ARGS.join(" ")}`,
       ]),
       result("Typecheck", true, [
         `${YELLOW}quick mode${RESET}: skipped; run pnpm --filter research-trellis typecheck`,

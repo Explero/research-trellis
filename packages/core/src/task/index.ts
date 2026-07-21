@@ -4,6 +4,8 @@
 // Task API is intentionally independent from the channel API.
 
 export type {
+  ClosureConstraints,
+  ResearchRoute,
   TrellisTaskRecord,
   TaskRecordField,
 } from "./schema.js";

@@ -25,11 +25,19 @@ project_doc_fallback_filenames = ["AGENTS.md"]
 # [agents].max_threads (codex will reject the combination).
 # `enabled = true` is required inside the table — the table form does
 # NOT auto-enable the feature without it.
-# - max_concurrent_threads_per_session: bumps default 4 → 6.
-# - min_wait_timeout_ms: 480000 ms = 8 min. Codex default is 10 s, too
-#   short for Trellis subagents that routinely take 2-10 min. Hard
-#   ceiling is 3,600,000 (1 h).
+# - max_concurrent_threads_per_session: keeps at most three bounded workers.
+# - min_wait_timeout_ms: 120000 ms = 2 min. A worker that needs longer must
+#   report progress through its task record instead of holding the coordinator.
 [features.multi_agent_v2]
 enabled = true
-max_concurrent_threads_per_session = 6
-min_wait_timeout_ms = 480000
+max_concurrent_threads_per_session = 3
+min_wait_timeout_ms = 120000
+
+# Native custom-agent dispatch cannot mechanically replace or validate the
+# agent prompt/output, so its Context Firewall authority is advisory only.
+# Use the generated dispatch CLI strict wrapper for enforced Hermes work:
+# python3 ./.trellis/scripts/hermes/dispatch.py run --task <task> --job-id <job> --platform codex --mode strict
+[hermes.context_firewall]
+native_authority = "advisory"
+strict_authority = "enforced"
+strict_runtime = "codex exec --output-schema --json -o"

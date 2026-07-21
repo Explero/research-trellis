@@ -1,0 +1,23 @@
+# C++ 书写规范
+
+## 默认规则
+
+- 优先使用仓库的 `clang-format`（C++ 格式化）、`clang-tidy`（C++ 静态检查）、编译器警告和构建配置；没有项目约定时参考 C++ 核心规范；
+- 用 RAII（资源获取即初始化）管理文件、锁、内存和设备资源；避免裸 `new`（直接分配）与 `delete`（直接释放），明确拥有者与非拥有者；
+- 默认使用值、引用、`const`（只读）和标准容器。传递视图或指针时必须说明生命周期、可空性和边界；
+- 所有数组、缓冲区、索引、转换和外部数据入口都要有边界与溢出检查；
+- 异常、错误码和断言必须遵从项目现有错误模型，不能在同一模块混用不兼容的失败语义；
+- 性能优化先保留基准与测量条件；不要以牺牲资源安全、可读性或可复现性换取未经验证的微小优化。
+
+## 测试与检查
+
+- 运行项目已有的构建、单元测试、格式化和静态检查；
+- 修改资源管理、并发、数值边界或原生接口时，覆盖失败、边界和生命周期路径；
+- 科研数值代码还应记录编译器、优化选项、硬件差异和容差标准。
+
+## 公开基线
+
+- `C++ Core Guidelines`（C++ 核心规范）：https://isocpp.github.io/CppCoreGuidelines/CppCoreGuidelines
+- `Google C++ Style Guide`（谷歌 C++ 规范）：https://google.github.io/styleguide/cppguide.html
+- `ClangFormat`（C++ 格式化）：https://clang.llvm.org/docs/ClangFormat.html
+- `Clang-Tidy`（C++ 静态检查）：https://clang.llvm.org/extra/clang-tidy/

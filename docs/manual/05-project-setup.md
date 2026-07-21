@@ -55,7 +55,16 @@ research-trellis init --claude
 research-trellis init -u "$USER"
 ```
 
-5. 完成后检查：
+5. 初始化会先区分两种情况：
+
+| 情况 | 生成内容 | 启动任务如何开始 |
+| --- | --- | --- |
+| 已有项目 | `PROJECT_INDEX.md`（事实索引）列出发现的文档、约定、配置、源码和记录路径 | 先读取索引中的原始资料，再填写项目背景、研究方案、项目约束和工程规范；索引不自动概括内容，也不生成研究结论 |
+| 空仓库 | 同样生成项目资料目录，但索引明确没有既有事实 | 先进行一次聚焦讨论，确认问题、首个可验证结果、数据或输入、指标、资源约束和不做什么；然后创建首个可验证任务 |
+
+`.trellis/project/`（项目资料目录）包含 `BACKGROUND.md`（项目背景）、`RESEARCH_PLAN.md`（研究方案）、`CONSTRAINTS.md`（项目约束）和 `PROJECT_INDEX.md`（事实索引）。空仓库只填写已确认的信息，不要虚构研究方案。
+
+6. 完成后检查：
 
 ```bash
 git status --short
@@ -63,11 +72,11 @@ python3 ./.trellis/scripts/get_developer.py
 python3 ./.trellis/scripts/task.py list
 ```
 
-首次创建项目会生成 `00-bootstrap-guidelines`（规范启动任务）；已有项目的新开发者会生成 `00-join-<name>`（入项任务）。
+首次创建项目会生成 `00-bootstrap-guidelines`（项目启动任务）。空仓库中，它先完成研究合同讨论并创建首个可验证任务；已有项目中，它先建立可追溯的项目事实和工程规范。已有项目的新开发者会生成 `00-join-<name>`（入项任务）。
 
 ## 预期结果
 
-项目拥有 `.trellis/`（工作流目录）、至少一个平台目录、开发者身份、规范模板、科研模板和启动或入项任务。多包模式还会按包创建规范目录。
+项目拥有 `.trellis/`（工作流目录）、项目资料、至少一个平台目录、开发者身份、规范模板、科研模板和启动或入项任务。多包模式还会按包创建规范目录。
 
 ## 失败恢复
 
@@ -79,7 +88,7 @@ python3 ./.trellis/scripts/task.py list
 ## 验证记录
 
 - 日期：2026-07-15。
-- 版本：`0.7.0-beta.0`（测试版）。
+- 版本：`0.7.1-beta.0`（测试版）。
 - 更名前基准提交：`9f7dc8497b4782878d6fa7ac3b63eba5bde507df`。
 - 命令：`rg -n "options.yes|registry|selectedTemplate" packages/cli/src/commands/init.ts packages/cli/test/commands/init.integration.test.ts`（分支核对）。
 - 结果：默认、交互、指定模板、自定义源和 `-y`（自动确认）的失败行为已分开记录。

@@ -28,6 +28,7 @@ warnings.filterwarnings("ignore")
 
 import json
 import os
+import re
 import sys
 from pathlib import Path
 from typing import Any
@@ -61,6 +62,26 @@ AGENT_SPEC_REVIEW = "trellis-spec-review"
 AGENT_CODE_REVIEW = "trellis-code-review"
 AGENT_CODE_ARCHITECTURE_REVIEW = "trellis-code-architecture-review"
 AGENT_MERGE_REVIEW = "trellis-merge-review"
+AGENT_HERMES_PLANNER = "hermes-planner"
+AGENT_HERMES_RESEARCHER = "hermes-researcher"
+AGENT_HERMES_CODER = "hermes-coder"
+AGENT_HERMES_RUNNER = "hermes-runner"
+AGENT_HERMES_REVIEWER = "hermes-reviewer"
+
+HERMES_AGENT_ROLES = {
+    AGENT_HERMES_PLANNER: "planner",
+    AGENT_HERMES_RESEARCHER: "researcher",
+    AGENT_HERMES_CODER: "coder",
+    AGENT_HERMES_RUNNER: "runner",
+    AGENT_HERMES_REVIEWER: "reviewer",
+}
+HERMES_LEGACY_AGENTS = {
+    "hermes-scientist": ("planner", "research_design"),
+    "hermes-literature": ("researcher", "literature"),
+    "hermes-evaluator": ("reviewer", "evidence"),
+    "hermes-claim-reviewer": ("reviewer", "claim"),
+}
+HERMES_AGENTS = (*HERMES_AGENT_ROLES, *HERMES_LEGACY_AGENTS)
 
 CLAUDE_SHARED_WORKTREE_MARKER = "/.trellis/trellis-worktrees/"
 
@@ -73,9 +94,15 @@ AGENTS_REVIEW = (
 AGENTS_CHECK_CONTEXT = (AGENT_CHECK, *AGENTS_REVIEW)
 
 # Agents that require a task directory
-AGENTS_REQUIRE_TASK = (AGENT_IMPLEMENT, *AGENTS_CHECK_CONTEXT)
+AGENTS_REQUIRE_TASK = (AGENT_IMPLEMENT, *AGENTS_CHECK_CONTEXT, *HERMES_AGENTS)
 # All supported agents
 AGENTS_ALL = (*AGENTS_REQUIRE_TASK, AGENT_RESEARCH)
+
+HERMES_BASE_SUMMARY = (
+    "Use task.json and append-only records as state; chat claims do not change state. "
+    "Stay inside task-card permissions, cite evidence, keep output compact, and block "
+    "high-risk research changes or missing human approval."
+)
 
 
 def find_repo_root(start_path: str) -> str | None:
@@ -669,6 +696,222 @@ To get structured package info, run: `python3 ./{DIR_WORKFLOW}/scripts/get_conte
     return "\n\n".join(context_parts)
 
 
+def _load_role_helpers(repo_root: str):
+    scripts_dir = Path(repo_root) / DIR_WORKFLOW / "scripts"
+    if str(scripts_dir) not in sys.path:
+        sys.path.insert(0, str(scripts_dir))
+    try:
+        from common.roles import (  # type: ignore[import-not-found]
+            DEFAULT_PROFILES,
+            normalize_task_card,
+            profile_summary,
+            role_summary,
+        )
+
+        return DEFAULT_PROFILES, normalize_task_card, profile_summary, role_summary
+    except Exception:
+        return None
+
+
+def _load_task_json(repo_root: str, task_dir: str) -> dict[str, Any]:
+    path = Path(repo_root) / task_dir / FILE_TASK_JSON
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    return value if isinstance(value, dict) else {}
+
+
+def _active_task_card(
+    repo_root: str,
+    task_dir: str,
+    role: str,
+    job_id: str | None = None,
+) -> dict[str, Any] | None:
+    path = Path(repo_root) / task_dir / "hermes" / "worker_records.jsonl"
+    if not path.is_file():
+        return None
+    records: list[dict[str, Any]] = []
+    try:
+        for line in path.read_text(encoding="utf-8").splitlines():
+            if not line.strip():
+                continue
+            value = json.loads(line)
+            if isinstance(value, dict):
+                records.append(value)
+    except (OSError, json.JSONDecodeError):
+        return None
+    terminal = {
+        str(item.get("job_id"))
+        for item in records
+        if item.get("type") in {"result", "rejection", "stalled"}
+        and isinstance(item.get("job_id"), str)
+    }
+    helpers = _load_role_helpers(repo_root)
+    candidates: list[dict[str, Any]] = []
+    for item in records:
+        if item.get("type") != "task_card" or item.get("job_id") in terminal:
+            continue
+        normalized = item
+        if helpers is not None:
+            try:
+                normalized, _warnings = helpers[1](item)
+            except ValueError:
+                continue
+        if normalized.get("role") == role:
+            candidates.append(normalized)
+    if job_id:
+        return next(
+            (card for card in reversed(candidates) if card.get("job_id") == job_id),
+            None,
+        )
+    return candidates[0] if len(candidates) == 1 else None
+
+
+def _dispatch_job_id(prompt: str) -> str | None:
+    stripped = prompt.strip()
+    match = re.fullmatch(
+        r"(?i)(?:(?:job_id|job)\s*[:=]\s*)?([A-Za-z0-9][A-Za-z0-9._-]{0,79})",
+        stripped,
+    )
+    return match.group(1) if match else None
+
+
+def _explicit_dispatch_job_id(tool_input: dict[str, Any], prompt: str) -> str | None:
+    for key in ("job_id", "jobId", "hermes_job_id", "hermesJobId"):
+        value = tool_input.get(key)
+        if isinstance(value, str) and re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,79}", value.strip()):
+            return value.strip()
+    return _dispatch_job_id(prompt)
+
+
+def _async_agent_requested(tool_input: dict[str, Any]) -> bool:
+    for key in ("run_in_background", "background", "async", "asynchronous"):
+        value = tool_input.get(key)
+        if value is True or (isinstance(value, str) and value.casefold() in {"true", "yes", "async", "background"}):
+            return True
+    mode = tool_input.get("mode")
+    return isinstance(mode, str) and mode.casefold() in {"async", "background"}
+
+
+def _is_hermes_closure_task(task: dict[str, Any]) -> bool:
+    return bool(task) and any(
+        key in task for key in ("closure_state", "hermes_phase", "work_packages")
+    )
+
+
+def _prepare_claude_firewall_dispatch(
+    repo_root: str,
+    task_dir: str,
+    subagent_type: str,
+    original_prompt: str,
+    tool_input: dict[str, Any],
+    session_id: str | None,
+) -> str:
+    if _async_agent_requested(tool_input):
+        raise ValueError("Hermes Agent dispatch must be synchronous so a final result can be validated.")
+    task = _load_task_json(repo_root, task_dir)
+    if not _is_hermes_closure_task(task):
+        raise ValueError("Legacy agent aliases are available only inside a Hermes closure task.")
+    job_id = _explicit_dispatch_job_id(tool_input, original_prompt)
+    if not job_id:
+        raise ValueError("Hermes Agent accepts only a validated job_id; create the dispatch first.")
+    helpers = _load_role_helpers(repo_root)
+    if helpers is None:
+        raise ValueError("Hermes role helpers are unavailable.")
+    if subagent_type in HERMES_AGENT_ROLES:
+        role = HERMES_AGENT_ROLES[subagent_type]
+    else:
+        role = HERMES_LEGACY_AGENTS[subagent_type][0]
+    scripts_dir = Path(repo_root) / DIR_WORKFLOW / "scripts"
+    if str(scripts_dir) not in sys.path:
+        sys.path.insert(0, str(scripts_dir))
+    try:
+        from common.dispatch import prepare_dispatch_for_agent  # type: ignore[import-not-found]
+
+        dispatch = prepare_dispatch_for_agent(
+            Path(repo_root) / task_dir,
+            task,
+            Path(repo_root),
+            job_id,
+            platform="claude",
+            role=role,
+            session_id=session_id,
+        )
+    except (ImportError, ValueError) as exc:
+        raise ValueError(str(exc)) from exc
+    return str(dispatch["body"])
+
+
+def _compact_capsule(repo_root: str, task_dir: str, task: dict[str, Any]) -> str:
+    scripts_dir = Path(repo_root) / DIR_WORKFLOW / "scripts"
+    if str(scripts_dir) not in sys.path:
+        sys.path.insert(0, str(scripts_dir))
+    try:
+        from common.closure import build_capsule  # type: ignore[import-not-found]
+
+        return build_capsule(Path(repo_root) / task_dir, task, Path(repo_root))
+    except Exception:
+        title = str(task.get("title") or Path(task_dir).name)
+        status = str(task.get("status") or "planning")
+        return f"Task: {task.get('id') or Path(task_dir).name} | {title}\nStatus: {status}"
+
+
+def get_hermes_minimal_context(
+    repo_root: str,
+    task_dir: str,
+    subagent_type: str,
+    original_prompt: str,
+) -> str:
+    helpers = _load_role_helpers(repo_root)
+    if helpers is None:
+        return ""
+    defaults, _normalize_task_card, get_profile_summary, get_role_summary = helpers
+    migration = ""
+    if subagent_type in HERMES_AGENT_ROLES:
+        role = HERMES_AGENT_ROLES[subagent_type]
+        profile = defaults[role]
+    else:
+        role, profile = HERMES_LEGACY_AGENTS[subagent_type]
+        canonical_agent = f"hermes-{role}"
+        migration = f"Legacy alias: use {canonical_agent} with profile {profile}.\n"
+    card = _active_task_card(
+        repo_root,
+        task_dir,
+        role,
+        _dispatch_job_id(original_prompt),
+    )
+    if card is not None:
+        profile = str(card.get("profile") or profile)
+    task = _load_task_json(repo_root, task_dir)
+    capsule = _compact_capsule(repo_root, task_dir, task)
+    return (
+        "<hermes-min-context>\n"
+        f"{migration}Base: {HERMES_BASE_SUMMARY}\n"
+        f"Role: {role} - {get_role_summary(role)}\n"
+        f"Profile: {profile} - {get_profile_summary(role, profile)}\n"
+        "Task Capsule:\n"
+        f"{capsule}\n"
+        "</hermes-min-context>"
+    )
+
+
+def build_hermes_prompt(original_prompt: str, context: str) -> str:
+    return f"""<!-- trellis-hook-injected -->
+# Hermes Role Task
+
+{context}
+
+## Assignment
+
+{original_prompt}
+
+Use only this compact context initially. Read a referenced file only when the
+assignment cannot be completed without it. Do not load complete task history,
+all specifications, or all Hermes ledgers by default. Do not spawn another
+sub-agent; return the required record or result to the main agent."""
+
+
 def build_research_prompt(original_prompt: str, context: str) -> str:
     """Build complete prompt for Research"""
     return f"""# Research Agent Task
@@ -877,7 +1120,7 @@ def _normalize_hook_text(value: Any) -> str:
 
 
 def is_claude_code_dev_agent(subagent_type: str) -> bool:
-    return subagent_type in (AGENT_IMPLEMENT, *AGENTS_CHECK_CONTEXT)
+    return subagent_type in (AGENT_IMPLEMENT, *AGENTS_CHECK_CONTEXT, AGENT_HERMES_CODER)
 
 
 def _extract_strategy_field(text: str, *labels: str) -> str | None:
@@ -1153,6 +1396,8 @@ def main():
     is_finish_phase = "[finish]" in original_prompt.lower()
 
     # Get context and build prompt based on subagent type
+    context = ""
+    new_prompt = original_prompt
     if subagent_type == AGENT_IMPLEMENT:
         assert task_dir is not None  # validated above
         context = get_implement_context(repo_root, task_dir)
@@ -1175,6 +1420,37 @@ def main():
         # Research can work without task directory
         context = get_research_context(repo_root, task_dir)
         new_prompt = build_research_prompt(original_prompt, context)
+    elif subagent_type in HERMES_AGENTS and platform == "claude":
+        assert task_dir is not None
+        try:
+            if _async_agent_requested(normalized_tool_input):
+                raise ValueError(
+                    "Hermes Agent dispatch must be synchronous so a final result can be validated."
+                )
+            normalized_tool_input = {
+                **normalized_tool_input,
+                "run_in_background": False,
+            }
+            context = "validated-dispatch"
+            new_prompt = _prepare_claude_firewall_dispatch(
+                repo_root,
+                task_dir,
+                subagent_type,
+                original_prompt,
+                normalized_tool_input,
+                str(input_data.get("session_id") or "") or None,
+            )
+        except ValueError as exc:
+            deny_pretooluse(f"Hermes Context Firewall: {exc}")
+    elif subagent_type in HERMES_AGENTS:
+        assert task_dir is not None
+        context = get_hermes_minimal_context(
+            repo_root,
+            task_dir,
+            subagent_type,
+            original_prompt,
+        )
+        new_prompt = build_hermes_prompt(original_prompt, context)
     else:
         sys.exit(0)
 

@@ -17,6 +17,8 @@ export const DIR_NAMES = {
   ARCHIVE: "archive",
   /** Spec/guidelines directory (under .trellis/) */
   SPEC: "spec",
+  /** Project-level background, research plan, and constraints (under .trellis/) */
+  PROJECT: "project",
   /** Scripts directory (under .trellis/) */
   SCRIPTS: "scripts",
 } as const;
@@ -49,6 +51,8 @@ export const PATHS = {
   TASKS: `${DIR_NAMES.WORKFLOW}/${DIR_NAMES.TASKS}`,
   /** .trellis/spec/ */
   SPEC: `${DIR_NAMES.WORKFLOW}/${DIR_NAMES.SPEC}`,
+  /** .trellis/project/ */
+  PROJECT: `${DIR_NAMES.WORKFLOW}/${DIR_NAMES.PROJECT}`,
   /** .trellis/scripts/ */
   SCRIPTS: `${DIR_NAMES.WORKFLOW}/${DIR_NAMES.SCRIPTS}`,
   /** .trellis/.developer */

@@ -4,7 +4,7 @@ from __future__ import annotations
 import argparse
 import sys
 
-from runtime import record_path, repo_root, validate_records
+from runtime import compatibility_warnings, record_path, repo_root, validate_records
 
 
 def main() -> int:
@@ -25,10 +25,11 @@ def main() -> int:
         for error in errors:
             print(error, file=sys.stderr)
         return 1
+    for warning in compatibility_warnings(path, args.kind):
+        print(f"warning: {warning}", file=sys.stderr)
     print(f"valid {path.relative_to(root)}")
     return 0
 
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

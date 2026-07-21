@@ -70,6 +70,43 @@ describe("init() integration", () => {
     expect(fs.existsSync(path.join(tmpDir, PATHS.WORKSPACE))).toBe(true);
     expect(fs.existsSync(path.join(tmpDir, PATHS.TASKS))).toBe(true);
     expect(fs.existsSync(path.join(tmpDir, PATHS.SPEC))).toBe(true);
+    expect(
+      fs.existsSync(
+        path.join(tmpDir, PATHS.SPEC, "guides", "general-code-guidelines.md"),
+      ),
+    ).toBe(true);
+    const generalCodeGuidelines = fs.readFileSync(
+      path.join(tmpDir, PATHS.SPEC, "guides", "general-code-guidelines.md"),
+      "utf-8",
+    );
+    expect(generalCodeGuidelines).toContain("规则优先级");
+    expect(generalCodeGuidelines).toContain("科研代码与可复现性");
+    expect(generalCodeGuidelines).toContain("不会自动加入每个任务");
+    for (const filename of [
+      "index.md",
+      "typescript-javascript.md",
+      "python.md",
+      "go.md",
+      "rust.md",
+      "cpp.md",
+      "shell.md",
+    ]) {
+      expect(
+        fs.existsSync(path.join(tmpDir, PATHS.SPEC, "languages", filename)),
+      ).toBe(true);
+    }
+    expect(
+      fs.existsSync(path.join(tmpDir, PATHS.PROJECT, "BACKGROUND.md")),
+    ).toBe(true);
+    expect(
+      fs.existsSync(path.join(tmpDir, PATHS.PROJECT, "RESEARCH_PLAN.md")),
+    ).toBe(true);
+    expect(
+      fs.existsSync(path.join(tmpDir, PATHS.PROJECT, "CONSTRAINTS.md")),
+    ).toBe(true);
+    expect(
+      fs.existsSync(path.join(tmpDir, PATHS.PROJECT, "PROJECT_INDEX.md")),
+    ).toBe(true);
 
     // Default platforms: cursor + claude
     expect(fs.existsSync(path.join(tmpDir, ".cursor"))).toBe(true);
@@ -122,7 +159,7 @@ describe("init() integration", () => {
     ).toBe(true);
     expect(
       fs.existsSync(
-        path.join(tmpDir, ".trellis", "hermes", "roles", "scientist.md"),
+        path.join(tmpDir, ".trellis", "hermes", "roles", "planner.md"),
       ),
     ).toBe(true);
     expect(
@@ -156,6 +193,8 @@ describe("init() integration", () => {
       "runtime.py",
       "record.py",
       "validate.py",
+      "evidence.py",
+      "dispatch.py",
       "experiment.py",
       "guard.py",
       "jobs.py",
@@ -171,7 +210,7 @@ describe("init() integration", () => {
     }
     expect(
       fs.existsSync(
-        path.join(tmpDir, ".claude", "agents", "hermes-scientist.md"),
+        path.join(tmpDir, ".claude", "agents", "hermes-planner.md"),
       ),
     ).toBe(true);
     expect(
@@ -179,6 +218,77 @@ describe("init() integration", () => {
         path.join(tmpDir, ".claude", "skills", "hermes-research", "SKILL.md"),
       ),
     ).toBe(true);
+  });
+
+  it("#1a creates a focused research-contract startup task for an empty repository", async () => {
+    await init({ yes: true, user: "alice", codex: true });
+
+    const taskDir = path.join(tmpDir, PATHS.TASKS, "00-bootstrap-guidelines");
+    const task = JSON.parse(
+      fs.readFileSync(path.join(taskDir, FILE_NAMES.TASK_JSON), "utf-8"),
+    );
+    const index = fs.readFileSync(
+      path.join(tmpDir, PATHS.PROJECT, "PROJECT_INDEX.md"),
+      "utf-8",
+    );
+    const prd = fs.readFileSync(path.join(taskDir, FILE_NAMES.PRD), "utf-8");
+
+    expect(index).toContain("Initialization kind: **blank**");
+    expect(task.status).toBe("planning");
+    expect(task.hermes_phase).toBe("planning");
+    expect(task.research_route).toBe("exploration");
+    expect(task.work_packages).toHaveLength(2);
+    expect(task.work_packages[0].title).toContain("research contract");
+    expect(prd).toContain("六项");
+    expect(prd).toContain("可验证的首个研究任务");
+  });
+
+  it("#1c indexes an existing repository without copying its contents into project context", async () => {
+    fs.mkdirSync(path.join(tmpDir, "src"), { recursive: true });
+    fs.mkdirSync(path.join(tmpDir, "docs"), { recursive: true });
+    fs.writeFileSync(
+      path.join(tmpDir, "README.md"),
+      "PRIVATE_PROJECT_FACT\n",
+      "utf-8",
+    );
+    fs.writeFileSync(
+      path.join(tmpDir, "AGENTS.md"),
+      "Existing convention\n",
+      "utf-8",
+    );
+    fs.writeFileSync(
+      path.join(tmpDir, "package.json"),
+      '{"name":"existing-project"}\n',
+      "utf-8",
+    );
+    fs.writeFileSync(
+      path.join(tmpDir, "src", "main.ts"),
+      "export {};\n",
+      "utf-8",
+    );
+
+    await init({ yes: true, user: "alice", codex: true });
+
+    const index = fs.readFileSync(
+      path.join(tmpDir, PATHS.PROJECT, "PROJECT_INDEX.md"),
+      "utf-8",
+    );
+    const taskDir = path.join(tmpDir, PATHS.TASKS, "00-bootstrap-guidelines");
+    const task = JSON.parse(
+      fs.readFileSync(path.join(taskDir, FILE_NAMES.TASK_JSON), "utf-8"),
+    );
+    const prd = fs.readFileSync(path.join(taskDir, FILE_NAMES.PRD), "utf-8");
+
+    expect(index).toContain("Initialization kind: **existing**");
+    expect(index).toContain("`README.md`");
+    expect(index).toContain("`AGENTS.md`");
+    expect(index).toContain("`package.json`");
+    expect(index).toContain("`src/`");
+    expect(index).not.toContain("PRIVATE_PROJECT_FACT");
+    expect(task.research_route).toBe("delivery");
+    expect(task.work_packages).toHaveLength(2);
+    expect(prd).toContain("PROJECT_INDEX.md");
+    expect(prd).toContain("不要推测");
   });
 
   it("#1b does not print the promotional pain-point block", async () => {
@@ -1062,9 +1172,9 @@ describe("init() integration", () => {
     expect(Array.isArray(taskJson.subtasks)).toBe(true);
     expect(taskJson.subtasks).toEqual([]);
 
-    // Legacy current_phase stays absent; v0.7 closure owns next_action.
+    // Legacy current_phase stays absent; the closure task owns next_action.
     expect(taskJson.current_phase).toBeUndefined();
-    expect(taskJson.next_action).toBeNull();
+    expect(taskJson.next_action).toContain("PROJECT_INDEX.md");
 
     // relatedFiles point to spec/<name>/
     expect(taskJson.relatedFiles).toContain(".trellis/spec/core/");

@@ -1,5 +1,7 @@
+import { spawnSync } from "node:child_process";
 import { describe, expect, it } from "vitest";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
@@ -13,8 +15,18 @@ import { AI_TOOLS } from "../../src/types/ai-tools.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, "../../../..");
+const PYTHON = process.platform === "win32" ? "python" : "python3";
+const TEMPLATE_SCRIPTS = path.resolve(
+  __dirname,
+  "../../src/templates/trellis/scripts",
+);
 
 const EXPECTED_AGENT_NAMES = [
+  "hermes-coder",
+  "hermes-planner",
+  "hermes-researcher",
+  "hermes-reviewer",
+  "hermes-runner",
   "trellis-check",
   "trellis-implement",
   "trellis-research",
@@ -56,6 +68,20 @@ describe("codex getAllAgents", () => {
       expect(agent.content).toContain("developer_instructions = ");
     }
   });
+
+  it("marks native Hermes agents advisory and points enforced work to strict dispatch", () => {
+    const agents = new Map(getAllAgents().map((agent) => [agent.name, agent.content]));
+    for (const role of ["planner", "researcher", "coder", "runner", "reviewer"]) {
+      const content = agents.get(`hermes-${role}`);
+      expect(content).toContain("Native Codex dispatch is advisory");
+      expect(content).toContain(`role: ${role}:<profile>`);
+      expect(content).toMatch(/Profile|profile/);
+      expect(content).toContain("multi_agent = false");
+      expect(content).toContain("--mode strict");
+      expect(content).toContain("Result Envelope JSON");
+      expect(content).not.toContain(".trellis/tasks/<task>/prd.md");
+    }
+  });
 });
 
 describe("codex getAllCodexSkills (platform-specific)", () => {
@@ -71,6 +97,8 @@ describe("codex getConfigTemplate", () => {
     expect(config.targetPath).toBe("config.toml");
     expect(config.content).toContain("project_doc_fallback_filenames");
     expect(config.content).toContain("AGENTS.md");
+    expect(config.content).toContain('native_authority = "advisory"');
+    expect(config.content).toContain("--output-schema --json -o");
   });
 });
 
@@ -159,12 +187,76 @@ describe("codex session-start.py compact SessionStart context", () => {
     expect(content).toContain(
       ".trellis/hermes/HERMES_MAIN_AGENT_BOOT_GUARD.md",
     );
-    expect(content).toContain("minimal_file_context");
+    expect(content).toContain("validated_dispatch_only");
     expect(content).toContain("design.md if present");
     expect(content).not.toContain("<sub-agent-notice>");
     expect(content).not.toContain("guides (inlined");
     expect(content).not.toContain(
       "Project spec indexes are listed by path below",
     );
+  });
+
+  it("shows the closure capsule instead of legacy planning guidance", () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "trellis-codex-closure-"));
+    try {
+      const taskDir = path.join(root, ".trellis", "tasks", "demo");
+      fs.mkdirSync(taskDir, { recursive: true });
+      fs.cpSync(TEMPLATE_SCRIPTS, path.join(root, ".trellis", "scripts"), {
+        recursive: true,
+      });
+      fs.mkdirSync(path.join(root, ".trellis", ".runtime", "sessions"), {
+        recursive: true,
+      });
+      fs.writeFileSync(
+        path.join(root, ".trellis", ".runtime", "sessions", "codex-demo.json"),
+        '{"current_task":".trellis/tasks/demo"}\n',
+      );
+      fs.writeFileSync(
+        path.join(taskDir, "task.json"),
+        `${JSON.stringify({
+          id: "demo",
+          title: "Closure demo",
+          status: "planning",
+          hermes_phase: "ready",
+          closure_state: "open",
+          closure_mode: "lean",
+          intent: "Verify the active work package",
+          in_scope: ["demo"],
+          out_of_scope: [],
+          definition_of_done: ["Focused validation passes"],
+          work_packages: [
+            {
+              id: "WP1",
+              title: "Verify result",
+              outcome: "Focused validation passes",
+              done_when: ["Focused validation passes"],
+              evidence_required: [],
+              depends_on: [],
+              status: "ready",
+              evidence_refs: [],
+              blocker: null,
+            },
+          ],
+          current_work_package: null,
+          next_action: "Run closure.py package-start.",
+          blockers: [],
+          repair_count: 0,
+          max_repair_count: 1,
+          hermes_revision: 2,
+        }, null, 2)}\n`,
+      );
+      const result = spawnSync(PYTHON, [hookPath], {
+        cwd: root,
+        encoding: "utf-8",
+        input: JSON.stringify({ cwd: root }),
+      });
+      expect(result.status, result.stderr).toBe(0);
+      expect(result.stdout).toContain("Status: HERMES CLOSURE");
+      expect(result.stdout).toContain("Mode/Phase: lean / ready");
+      expect(result.stdout).toContain("Start WP1 with closure.py package-start.");
+      expect(result.stdout).not.toContain("Status: PLANNING");
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
   });
 });

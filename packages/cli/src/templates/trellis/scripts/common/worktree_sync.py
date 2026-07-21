@@ -16,6 +16,7 @@ RUNTIME_BUNDLE_FILES = (
 )
 RUNTIME_BUNDLE_DIRS = (
     ".trellis/scripts",
+    ".trellis/project",
 )
 PLANNING_FILE_NAMES = (
     "task.json",

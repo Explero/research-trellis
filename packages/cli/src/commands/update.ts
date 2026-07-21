@@ -42,8 +42,26 @@ import {
   configYamlTemplate,
   gitignoreTemplate,
   workflowMdTemplate,
+  projectBackgroundTemplate,
+  projectResearchPlanTemplate,
+  projectConstraintsTemplate,
+  projectReadmeTemplate,
 } from "../templates/trellis/index.js";
-import { agentsMdContent } from "../templates/markdown/index.js";
+import {
+  agentsMdContent,
+  guidesGeneralCodeGuidelinesContent,
+  languageGuidesIndexContent,
+  languageTypeScriptJavaScriptContent,
+  languagePythonContent,
+  languageGoContent,
+  languageRustContent,
+  languageCppContent,
+  languageShellContent,
+} from "../templates/markdown/index.js";
+import {
+  collectProjectFactIndex,
+  renderProjectFactIndex,
+} from "../utils/project-context.js";
 
 import {
   ALL_MANAGED_DIRS,
@@ -102,6 +120,7 @@ const PROTECTED_PATHS = [
   `${DIR_NAMES.WORKFLOW}/.developer`,
   `${DIR_NAMES.WORKFLOW}/.current-task`,
 ];
+const RESEARCH_BASELINES_VERSION = "0.7.1-beta.0";
 
 function getTrellisManagedBlock(content: string): string | null {
   const start = content.indexOf(TRELLIS_BLOCK_START);
@@ -620,6 +639,7 @@ function collectTemplateFiles(
    * "Modified by you" conflict prompt — they can skip per-file there.
    */
   bypassUpdateSkip = false,
+  addResearchBaselines = false,
 ): Map<string, string> {
   const files = new Map<string, string>();
   const platforms = getConfiguredPlatforms(cwd);
@@ -653,6 +673,9 @@ function collectTemplateFiles(
   // workspace/index.md stays excluded — it's runtime-appended by add_session.py
   // (journal index) and has no script-parsed structure.
   files.set(FILE_NAMES.AGENTS, buildAgentsMdTemplate(cwd));
+  if (addResearchBaselines) {
+    addMissingResearchBaselines(cwd, files);
+  }
 
   // Platform-specific templates (only for configured platforms)
   for (const platformId of platforms) {
@@ -690,6 +713,46 @@ function collectTemplateFiles(
   }
 
   return files;
+}
+
+/** Add missing research defaults for a pre-v0.7.1 project without rewriting user specs. */
+function addMissingResearchBaselines(
+  cwd: string,
+  files: Map<string, string>,
+): void {
+  const additions = new Map<string, string>([
+    [`${PATHS.PROJECT}/README.md`, projectReadmeTemplate],
+    [`${PATHS.PROJECT}/BACKGROUND.md`, projectBackgroundTemplate],
+    [`${PATHS.PROJECT}/RESEARCH_PLAN.md`, projectResearchPlanTemplate],
+    [`${PATHS.PROJECT}/CONSTRAINTS.md`, projectConstraintsTemplate],
+    [
+      `${PATHS.PROJECT}/PROJECT_INDEX.md`,
+      renderProjectFactIndex(collectProjectFactIndex(cwd)),
+    ],
+    [
+      `${PATHS.SPEC}/guides/general-code-guidelines.md`,
+      guidesGeneralCodeGuidelinesContent,
+    ],
+    [`${PATHS.SPEC}/languages/index.md`, languageGuidesIndexContent],
+    [
+      `${PATHS.SPEC}/languages/typescript-javascript.md`,
+      languageTypeScriptJavaScriptContent,
+    ],
+    [`${PATHS.SPEC}/languages/python.md`, languagePythonContent],
+    [`${PATHS.SPEC}/languages/go.md`, languageGoContent],
+    [`${PATHS.SPEC}/languages/rust.md`, languageRustContent],
+    [`${PATHS.SPEC}/languages/cpp.md`, languageCppContent],
+    [`${PATHS.SPEC}/languages/shell.md`, languageShellContent],
+  ]);
+  const specRoot = path.join(cwd, PATHS.SPEC);
+  for (const [relativePath, content] of additions) {
+    if (relativePath.startsWith(`${PATHS.SPEC}/`) && !fs.existsSync(specRoot)) {
+      continue;
+    }
+    if (!fs.existsSync(path.join(cwd, relativePath))) {
+      files.set(relativePath, content);
+    }
+  }
 }
 
 /**
@@ -1858,10 +1921,15 @@ export async function update(options: UpdateOptions): Promise<void> {
     })();
 
   // Collect templates (used for both migration classification and change analysis)
+  const addResearchBaselines =
+    cliVsProject > 0 &&
+    projectVersion !== "unknown" &&
+    compareVersions(projectVersion, RESEARCH_BASELINES_VERSION) < 0;
   const templates = collectTemplateFiles(
     cwd,
     codexUpgradeNeeded ? new Set<AITool>(["codex"]) : undefined,
     breakingBypass,
+    addResearchBaselines,
   );
 
   // Load update.skip paths (used for both safe-file-delete and template collection)

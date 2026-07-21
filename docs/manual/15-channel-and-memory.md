@@ -27,12 +27,14 @@ research-trellis channel list --scope project
 
 频道事件保存在用户目录下的 `.trellis/channels/`（频道存储），项目范围会按当前目录分桶，不写入项目的任务记录。
 
+频道消息和会话记忆都不是 `Hermes`（科研工作流）的事实源，也不能把任务改成 `closed`（已关闭）。正式角色的事实链必须经过账本和 validated result（已验证结果）；原始代理输出只保存在 `.trellis/.runtime/hermes-traces/`（本地运行目录），不会自动进入频道、会话记忆或发布包。
+
 2. 需要工作代理时，可启动当前仅支持的 `claude`（Claude 提供方）或 `codex`（Codex 提供方）：
 
 ```bash
-research-trellis channel spawn research-sync --scope project --provider codex --as evaluator --cwd "$PWD"
-research-trellis channel send research-sync --scope project --as main --to evaluator "检查固定指标的证据引用"
-research-trellis channel wait research-sync --scope project --as main --from evaluator --kind done --timeout 5m
+research-trellis channel spawn research-sync --scope project --provider codex --as reviewer --cwd "$PWD"
+research-trellis channel send research-sync --scope project --as main --to reviewer "使用 evidence 模式检查固定指标的证据引用"
+research-trellis channel wait research-sync --scope project --as main --from reviewer --kind done --timeout 5m
 ```
 
 `spawn`（启动工作代理）会创建后台监督进程。工作完成后用 `channel kill`（停止工作代理）结束仍在运行的进程；删除频道前先看[命令参考](appendix-a-cli-reference.md)。
@@ -64,7 +66,7 @@ research-trellis mem search "固定指标" --platform codex --cwd "$PWD" --limit
 ## 验证记录
 
 - 日期：2026-07-15。
-- 版本：`0.7.0-beta.0`（测试版）。
+- 版本：`0.7.1`（测试版）。
 - 更名前基准提交：`9f7dc8497b4782878d6fa7ac3b63eba5bde507df`。
 - 命令：`rg -n -m 1 "OpenCode|channel|mem" packages/cli/src/commands packages/core/src packages/cli/test packages/core/test`（频道与会话读取核对）。
 - 结果：频道、会话读取和 `OpenCode`（开放代码工具）未实现分支均有当前代码与测试依据。

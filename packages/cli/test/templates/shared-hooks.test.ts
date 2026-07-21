@@ -356,6 +356,26 @@ function runHermesRuntimeGuard(
   }
 }
 
+function runDispatchCli(
+  repoRoot: string,
+  args: string[],
+): { status: number | null; stdout: string; stderr: string } {
+  const result = spawnSync(
+    PYTHON,
+    [path.join(repoRoot, ".trellis", "scripts", "hermes", "dispatch.py"), ...args],
+    {
+      cwd: repoRoot,
+      encoding: "utf-8",
+      env: {
+        ...process.env,
+        TRELLIS_HOOKS_ACTIVE: "1",
+        TRELLIS_PLATFORM: "claude",
+      },
+    },
+  );
+  return { status: result.status, stdout: result.stdout, stderr: result.stderr };
+}
+
 describe("shared-hooks capability table", () => {
   it("every capability-table entry names a real shared-hook file", () => {
     const realFiles = new Set(getSharedHookScripts().map((h) => h.name));
@@ -513,6 +533,72 @@ describe("shared-hooks capability table", () => {
     expect(content).not.toContain("<workflow>");
   });
 
+  it("lists project context references for the main agent without inlining documents", () => {
+    const repoRoot = fs.mkdtempSync(path.join(os.tmpdir(), "trellis-project-index-"));
+    try {
+      setupMainRepo(repoRoot, "project-index", "# prd\n");
+      const projectDir = path.join(repoRoot, ".trellis", "project");
+      fs.mkdirSync(projectDir, { recursive: true });
+      fs.writeFileSync(
+        path.join(projectDir, "BACKGROUND.md"),
+        "BACKGROUND_BODY_MUST_NOT_BE_INJECTED\n",
+      );
+      fs.writeFileSync(path.join(projectDir, "RESEARCH_PLAN.md"), "# Plan\n");
+      fs.writeFileSync(path.join(projectDir, "CONSTRAINTS.md"), "# Constraints\n");
+
+      const payload = JSON.parse(runSessionStart(repoRoot)) as {
+        hookSpecificOutput?: { additionalContext?: string };
+      };
+      const context = payload.hookSpecificOutput?.additionalContext ?? "";
+      expect(context).toContain("<project-context-index>");
+      expect(context).toContain(".trellis/project/BACKGROUND.md");
+      expect(context).toContain(".trellis/project/RESEARCH_PLAN.md");
+      expect(context).toContain(".trellis/project/CONSTRAINTS.md");
+      expect(context).toContain("Subagents receive a project-context document only");
+      expect(context).not.toContain("BACKGROUND_BODY_MUST_NOT_BE_INJECTED");
+    } finally {
+      fs.rmSync(repoRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("gives Codex the same project context index through its first prompt hook", () => {
+    const repoRoot = fs.mkdtempSync(path.join(os.tmpdir(), "trellis-codex-project-index-"));
+    try {
+      setupMainRepo(repoRoot, "project-index", "# prd\n");
+      const projectDir = path.join(repoRoot, ".trellis", "project");
+      fs.mkdirSync(projectDir, { recursive: true });
+      fs.writeFileSync(
+        path.join(projectDir, "BACKGROUND.md"),
+        "CODEX_BACKGROUND_BODY_MUST_NOT_BE_INJECTED\n",
+      );
+      fs.writeFileSync(path.join(projectDir, "RESEARCH_PLAN.md"), "# Plan\n");
+      fs.writeFileSync(path.join(projectDir, "CONSTRAINTS.md"), "# Constraints\n");
+
+      const hook = getSharedHookScripts().find(
+        (item) => item.name === "inject-workflow-state.py",
+      );
+      if (!hook) throw new Error("inject-workflow-state.py template missing");
+      const hookPath = path.join(repoRoot, ".codex", "hooks", "inject-workflow-state.py");
+      fs.mkdirSync(path.dirname(hookPath), { recursive: true });
+      fs.writeFileSync(hookPath, hook.content);
+      const result = spawnSync(PYTHON, [hookPath], {
+        cwd: repoRoot,
+        encoding: "utf-8",
+        input: JSON.stringify({ cwd: repoRoot }),
+      });
+      expect(result.status, result.stderr).toBe(0);
+      const payload = JSON.parse(result.stdout) as {
+        hookSpecificOutput?: { additionalContext?: string };
+      };
+      const context = payload.hookSpecificOutput?.additionalContext ?? "";
+      expect(context).toContain("<project-context-index>");
+      expect(context).toContain(".trellis/project/BACKGROUND.md");
+      expect(context).not.toContain("CODEX_BACKGROUND_BODY_MUST_NOT_BE_INJECTED");
+    } finally {
+      fs.rmSync(repoRoot, { recursive: true, force: true });
+    }
+  });
+
   it("injects a compact closure capsule without full task artifacts", () => {
     const repoRoot = fs.mkdtempSync(path.join(os.tmpdir(), "trellis-capsule-hook-"));
     try {
@@ -565,12 +651,38 @@ describe("shared-hooks capability table", () => {
       expect(context).toContain("<task-capsule>");
       expect(context).toContain("Current: WP1");
       expect(context).toContain("Done when: Focused test passes");
-      expect(context).toContain("use only the Task Capsule");
+      expect(context).toContain("Hermes closure task: capsule-task");
+      expect(context).toContain("Route: delivery");
+      expect(context).toContain("Route rule:");
       expect(context).not.toContain("Claude review gates are read-only gates");
       expect(context).not.toContain("FULL_PRD_MUST_NOT_BE_INJECTED");
       const capsule =
         /<task-capsule>\n([\s\S]*?)\n<\/task-capsule>/.exec(context)?.[1] ?? "";
       expect(capsule.length).toBeLessThanOrEqual(1000);
+
+      const repeated = JSON.parse(runWorkflowState(repoRoot, contextId)) as {
+        hookSpecificOutput: { additionalContext: string };
+      };
+      expect(repeated.hookSpecificOutput.additionalContext).toContain(
+        "anchor revision",
+      );
+      expect(repeated.hookSpecificOutput.additionalContext).not.toContain(
+        "<task-capsule>",
+      );
+
+      const revisedTask = JSON.parse(fs.readFileSync(taskJsonPath, "utf-8"));
+      revisedTask.hermes_revision = 1;
+      revisedTask.next_action = "Record focused validation evidence";
+      fs.writeFileSync(taskJsonPath, `${JSON.stringify(revisedTask, null, 2)}\n`);
+      const revised = JSON.parse(runWorkflowState(repoRoot, contextId)) as {
+        hookSpecificOutput: { additionalContext: string };
+      };
+      expect(revised.hookSpecificOutput.additionalContext).toContain(
+        "revision 0 -> 1",
+      );
+      expect(revised.hookSpecificOutput.additionalContext).toContain(
+        "<task-capsule>",
+      );
     } finally {
       fs.rmSync(repoRoot, { recursive: true, force: true });
     }
@@ -587,7 +699,7 @@ describe("shared-hooks capability table", () => {
     expect(content).toContain(
       ".trellis/hermes/HERMES_MAIN_AGENT_BOOT_GUARD.md",
     );
-    expect(content).toContain("minimal_file_context");
+    expect(content).toContain("validated_dispatch_only");
     expect(content).not.toContain("You are running inside a Hermes-governed");
   });
 
@@ -944,6 +1056,117 @@ describe.skipIf(!hasPython())(
       );
     });
 
+    it("injects only the current Hermes role, profile, capsule, and direct refs", () => {
+      setupMainRepo(repoRoot, taskName, "# prd\nFULL_PRD_MUST_NOT_BE_INJECTED\n");
+      const taskDir = path.join(repoRoot, ".trellis", "tasks", taskName);
+      fs.writeFileSync(
+        path.join(taskDir, "task.json"),
+        JSON.stringify({
+          id: taskName,
+          title: "Compact review",
+          status: "in_progress",
+          hermes_revision: 0,
+          closure_state: "open",
+          closure_mode: "lean",
+          hermes_phase: "review",
+          intent: "Review evidence for the current package",
+          in_scope: ["evidence"],
+          out_of_scope: ["implementation"],
+          definition_of_done: ["Evidence review recorded"],
+          work_packages: [
+            {
+              id: "WP1",
+              outcome: "Evidence is independently reviewed",
+              done_when: ["Review record exists"],
+              status: "review",
+            },
+          ],
+          current_work_package: "WP1",
+          next_action: "Review WP1 evidence",
+          blockers: [],
+          relatedFiles: ["docs/direct.md", "docs/second.md", "docs/third.md", "docs/fourth.md"],
+        }) + "\n",
+      );
+      fs.mkdirSync(path.join(repoRoot, "docs"), { recursive: true });
+      for (const name of ["direct.md", "second.md", "third.md", "fourth.md"]) {
+        fs.writeFileSync(path.join(repoRoot, "docs", name), name, "utf-8");
+      }
+      const created = runDispatchCli(repoRoot, [
+        "create", "--task", taskName, "--job-id", "review-evidence",
+        "--role", "reviewer", "--profile", "evidence",
+        "--objective", "Review the current package evidence.",
+        "--ref", "docs/direct.md", "--ref", "docs/second.md", "--ref", "docs/third.md",
+      ]);
+      expect(created.status, created.stderr).toBe(0);
+      const contextId = setSessionActiveTask(repoRoot, taskName, "hermes-role-session");
+      const result = runPreToolUseHook(
+        repoRoot,
+        {
+          cwd: repoRoot,
+          tool_name: "Agent",
+          tool_input: {
+            subagent_type: "hermes-reviewer",
+            prompt: "job_id: review-evidence",
+          },
+        },
+        {
+          CLAUDE_PROJECT_DIR: repoRoot,
+          TRELLIS_CONTEXT_ID: contextId,
+        },
+      );
+      const prompt = String(result.hookSpecificOutput?.updatedInput?.prompt ?? "");
+      expect(prompt).toContain("Hermes Agent Context Firewall dispatch");
+      expect(prompt).toContain("role: reviewer:evidence");
+      expect(prompt).toContain("work_package: null");
+      expect(prompt).toContain("docs/direct.md");
+      expect(prompt).not.toContain("docs/fourth.md");
+      expect(prompt).not.toContain("FULL_PRD_MUST_NOT_BE_INJECTED");
+      expect(prompt).not.toContain("# design");
+      expect(prompt.length).toBeLessThanOrEqual(2000);
+    });
+
+    it("keeps installed legacy Hermes agent aliases on the compact canonical path", () => {
+      setupMainRepo(repoRoot, taskName, "# prd\nLEGACY_FULL_PRD\n");
+      const taskPath = path.join(repoRoot, ".trellis", "tasks", taskName, "task.json");
+      const task = JSON.parse(fs.readFileSync(taskPath, "utf-8"));
+      Object.assign(task, {
+        hermes_revision: 0,
+        closure_state: "open",
+        closure_mode: "lean",
+        hermes_phase: "review",
+        intent: "Review evidence",
+        definition_of_done: ["Evidence reviewed"],
+        work_packages: [],
+        current_work_package: null,
+      });
+      fs.writeFileSync(taskPath, `${JSON.stringify(task)}\n`, "utf-8");
+      const created = runDispatchCli(repoRoot, [
+        "create", "--task", taskName, "--job-id", "legacy-evidence",
+        "--role", "reviewer", "--profile", "evidence",
+        "--objective", "Evaluate evidence.",
+      ]);
+      expect(created.status, created.stderr).toBe(0);
+      const contextId = setSessionActiveTask(repoRoot, taskName, "legacy-role-session");
+      const result = runPreToolUseHook(
+        repoRoot,
+        {
+          cwd: repoRoot,
+          tool_name: "Agent",
+          tool_input: {
+            subagent_type: "hermes-evaluator",
+            prompt: "legacy-evidence",
+          },
+        },
+        {
+          CLAUDE_PROJECT_DIR: repoRoot,
+          TRELLIS_CONTEXT_ID: contextId,
+        },
+      );
+      const prompt = String(result.hookSpecificOutput?.updatedInput?.prompt ?? "");
+      expect(prompt).toContain("role: reviewer:evidence");
+      expect(prompt).not.toContain("LEGACY_FULL_PRD");
+    });
+
     it("covers the documented A/B/C strategy block format in implement.md", () => {
       setupMainRepo(
         repoRoot,
@@ -1224,6 +1447,25 @@ describe.skipIf(!hasPython())("hermes runtime guard hook", () => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "research-trellis-hook-"));
     repoRoot = path.join(tmpDir, "repo");
     setupMainRepo(repoRoot, taskName, "# prd\n");
+    const taskPath = path.join(
+      repoRoot,
+      ".trellis",
+      "tasks",
+      taskName,
+      "task.json",
+    );
+    const task = JSON.parse(fs.readFileSync(taskPath, "utf-8"));
+    Object.assign(task, {
+      hermes_revision: 0,
+      closure_state: "open",
+      closure_mode: "lean",
+      hermes_phase: "running",
+      intent: "Runtime guard fixture",
+      definition_of_done: ["Runtime checks pass"],
+      work_packages: [],
+      current_work_package: null,
+    });
+    fs.writeFileSync(taskPath, `${JSON.stringify(task)}\n`, "utf-8");
     setSessionActiveTask(repoRoot, taskName);
   });
 
@@ -1677,6 +1919,27 @@ describe.skipIf(!hasPython())("hermes runtime guard hook", () => {
     );
   });
 
+  it("allows parameterized Hermes control-plane commands for the main agent", () => {
+    for (const command of [
+      "python3 ./.trellis/scripts/hermes/dispatch.py create --task demo --role coder --objective bounded",
+      "python3 ./.trellis/scripts/closure.py audit --task demo",
+      "python3 ./.trellis/scripts/task.py archive demo --no-commit",
+    ]) {
+      const result = runHermesRuntimeGuard(repoRoot, {
+        cwd: repoRoot,
+        hook_event_name: "PreToolUse",
+        tool_name: "Bash",
+        tool_input: { command },
+        session_id: "test-session",
+      });
+      expect(result.status).toBe(0);
+      expect(result.stdout).toBe("");
+    }
+    expectMainAgentBashDenied(
+      "python3 ./.trellis/scripts/hermes/dispatch.py create --task demo; touch src/app.ts",
+    );
+  });
+
   it("allows main-agent git status short paths as read-only Bash", () => {
     const result = runHermesRuntimeGuard(repoRoot, {
       cwd: repoRoot,
@@ -1849,6 +2112,9 @@ describe.skipIf(!hasPython())("hermes runtime guard hook", () => {
       { subagent: "runner" },
       { agent_role: "hermes-coder" },
       { agent_role: "hermes-scientist" },
+      { agent_role: "scientist" },
+      { agent_role: "claim-reviewer" },
+      { agent_role: "research/scout" },
       { subagent_type: "trellis-implement" },
       { subagent_type: "trellis-spec-review" },
       { subagent_type: "trellis-code-architecture-review" },

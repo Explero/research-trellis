@@ -86,3 +86,14 @@ max_journal_lines: 2000
 #
 # codex:
 #   dispatch_mode: sub-agent  # "inline" requires the Hermes runtime guard to be inactive
+
+#-------------------------------------------------------------------------------
+# Hermes Agent Context Firewall
+#-------------------------------------------------------------------------------
+# Claude uses approved Agent hooks for enforced prompt replacement and result
+# sanitization. Codex native custom agents are advisory; strict mode invokes
+# codex exec with the bundled result schema. Lean warns without a live
+# heartbeat, standard requires hooks or strict, and publication fails closed.
+#
+# hermes:
+#   codex_mode: native  # native (advisory) | strict (enforced)

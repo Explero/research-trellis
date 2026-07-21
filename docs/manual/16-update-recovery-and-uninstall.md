@@ -69,7 +69,7 @@ research-trellis uninstall --yes
 ## 验证记录
 
 - 日期：2026-07-15。
-- 版本：`0.7.0-beta.0`（测试版）。
+- 版本：`0.7.1-beta.0`（测试版）。
 - 更名前基准提交：`9f7dc8497b4782878d6fa7ac3b63eba5bde507df`。
 - 命令：`rg -n -m 1 "dry-run|create-new|allow-downgrade" packages/cli/src/commands packages/cli/test/commands`（更新与恢复核对）。
 - 结果：预览、冲突副本、降级拒绝和卸载预览分支均可定位。

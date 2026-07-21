@@ -1,0 +1,9 @@
+{
+  "version": "0.7.1-beta.0",
+  "description": "新增 Agent Context Firewall，以最小派发包、结构化结果和关闭门禁降低多代理上下文污染。",
+  "breaking": false,
+  "recommendMigrate": false,
+  "changelog": "**Agent Context Firewall：**\n- feat(dispatch): Hermes 子代理使用绑定任务修订、当前工作包和最多三个引用的 Dispatch Packet。\n- feat(result): 子代理以紧凑 Result Envelope 返回结论和证据引用，原始日志、diff 与搜索过程只保存为文件。\n- feat(claude): PreToolUse、SubagentStart、SubagentStop 和 PostToolUse 共同验证 Claude Code 的 Hermes 子代理输入和输出。\n- feat(codex): Codex native 模式保留协议级约束；strict 模式使用隔离工作区和结构化结果校验。\n- feat(gates): 未确认派发、未处置工作包或关闭条件未满足时，Stop 和 close 不再接受聊天声明。\n\n**兼容性：**\n- 五个正式角色和旧角色别名继续可读取；旧非 Hermes 任务维持原有 Trellis 行为。\n- 已有 closure 任务无需改写，更新模板后即可使用 dispatch 命令。",
+  "migrations": [],
+  "notes": "运行 research-trellis update 后会更新 Claude Code 与 Codex 模板、共享钩子和 Hermes dispatch 脚本。旧项目会补齐缺失的项目资料与科研代码规范，但不会覆盖已有项目资料或 spec。先使用 dispatch create 生成派发包；不要把完整会话、终端日志或完整 diff 直接传给子代理。"
+}

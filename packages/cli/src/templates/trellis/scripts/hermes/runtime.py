@@ -4,11 +4,24 @@ import json
 import hashlib
 import re
 import shlex
+import sys
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 from fnmatch import fnmatchcase
+
+SCRIPTS_DIR = Path(__file__).resolve().parents[1]
+if str(SCRIPTS_DIR) not in sys.path:
+    sys.path.insert(0, str(SCRIPTS_DIR))
+
+from common.roles import (
+    ACTIVE_WRITER_ROLES,
+    CODE_REVIEW_PROFILES,
+    CODE_RUNNER_PROFILES,
+    RoleProfileError,
+    normalize_task_card,
+)
 
 
 DIR_WORKFLOW = ".trellis"
@@ -40,7 +53,6 @@ RUN_MANIFEST_REQUIRED_FIELDS = [
     "started_at",
     "finished_at",
 ]
-ACTIVE_WRITER_ROLES = {"coder", "runner"}
 CODER_REVIEW_HANDOFFS = {"review", "claim_ready"}
 TERMINAL_WORKER_RECORD_TYPES = {"result", "rejection", "stalled"}
 APPROVAL_CHANGE_ID_FIELDS = {
@@ -1160,6 +1172,12 @@ def validate_worker_records(records: list[JsonlRecord]) -> list[str]:
     for entry in records:
         errors.extend(validate_required_fields(entry.value, entry.line_number))
         record_type = entry.value.get("type")
+        if record_type == "task_card":
+            try:
+                normalized, _warnings = normalize_task_card(entry.value)
+                entry.value = normalized
+            except RoleProfileError as exc:
+                errors.append(f"line {entry.line_number}: {exc}")
         job_id = entry.value.get("job_id")
         if isinstance(job_id, str):
             if record_type == "task_card":
@@ -1221,7 +1239,15 @@ def validate_worker_records(records: list[JsonlRecord]) -> list[str]:
                     f"line {entry.line_number}: missing checkpoint for job_id {job_id}"
                 )
             if card and card.get("role") == "coder" and is_coder_review_handoff(value):
-                if not has_related_record(records, task_cards, job_id, "runner", {"result"}, entry.line_number):
+                if not has_related_record(
+                    records,
+                    task_cards,
+                    job_id,
+                    "runner",
+                    {"result"},
+                    entry.line_number,
+                    CODE_RUNNER_PROFILES,
+                ):
                     errors.append(
                         f"line {entry.line_number}: coder review handoff requires runner result"
                     )
@@ -1232,6 +1258,7 @@ def validate_worker_records(records: list[JsonlRecord]) -> list[str]:
                     "reviewer",
                     {"checkpoint", "result"},
                     entry.line_number,
+                    CODE_REVIEW_PROFILES,
                 ):
                     errors.append(
                         f"line {entry.line_number}: coder review handoff requires reviewer result or checkpoint"
@@ -1259,6 +1286,7 @@ def has_related_record(
     role: str,
     record_types: set[str],
     before_line: int,
+    profiles: set[str] | None = None,
 ) -> bool:
     for entry in records:
         value = entry.value
@@ -1273,6 +1301,8 @@ def has_related_record(
         card = entries[0].value
         if card.get("role") != role:
             continue
+        if profiles is not None and card.get("profile") not in profiles:
+            continue
         if (
             result_job_id == coder_job_id
             or card.get("parent_job_id") == coder_job_id
@@ -1280,6 +1310,30 @@ def has_related_record(
         ):
             return True
     return False
+
+
+def compatibility_warnings(path: Path, kind: str) -> list[str]:
+    if kind != "worker" or not path.exists():
+        return []
+    records, errors = read_jsonl(path)
+    if errors:
+        return []
+    warnings: list[str] = []
+    seen: set[str] = set()
+    for entry in records:
+        if entry.value.get("type") != "task_card":
+            continue
+        try:
+            _normalized, card_warnings = normalize_task_card(entry.value)
+        except RoleProfileError:
+            continue
+        for warning in card_warnings:
+            if warning in seen:
+                continue
+            seen.add(warning)
+            message = f"line {entry.line_number}: {warning}"
+            warnings.append(message)
+    return warnings
 
 
 def validate_records(path: Path, kind: str) -> list[str]:

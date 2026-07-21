@@ -102,6 +102,23 @@ describe("settingsTemplate SessionStart matchers", () => {
     expect(entry?.matcher).toBe("Edit|Write|MultiEdit|Bash|apply_patch");
     expect(entry?.hooks[0].timeout).toBeGreaterThanOrEqual(15);
   });
+
+  it("replaces Agent tool output through the Hermes PostToolUse firewall", () => {
+    const settings = JSON.parse(settingsTemplate) as {
+      hooks: {
+        PostToolUse?: {
+          matcher?: string;
+          hooks: { command: string; timeout: number }[];
+        }[];
+      };
+    };
+    const entry = settings.hooks.PostToolUse?.find(
+      (candidate) => candidate.matcher === "Agent",
+    );
+    expect(entry).toBeDefined();
+    expect(entry?.hooks[0].command).toContain("hermes-runtime-guard.py");
+    expect(entry?.hooks[0].timeout).toBeGreaterThanOrEqual(30);
+  });
 });
 
 // Commands are now sourced from common/ templates and tested in platforms.test.ts
@@ -133,63 +150,30 @@ describe("getAllAgents", () => {
     );
   });
 
-  it("includes Hermes research agents that load global config and task records", () => {
+  it("includes exactly five canonical Hermes role templates", () => {
     const agents = new Map(
       getAllAgents().map((agent) => [agent.name, agent.content]),
     );
-
-    expect([...agents.keys()]).toEqual(
-      expect.arrayContaining(["hermes-scientist", "hermes-claim-reviewer"]),
-    );
-
-    for (const name of ["hermes-scientist", "hermes-claim-reviewer"]) {
-      const content = agents.get(name);
-      expect(content).toBeDefined();
-      expect(content).toContain(".trellis/hermes/config.yaml");
-      expect(content).toContain(".trellis/hermes/state_machine.yaml");
-      expect(content).toContain(".trellis/tasks/<task>/hermes/");
-      expect(content).toContain("append-only");
-    }
-
-    expect(agents.get("hermes-claim-reviewer")).toContain("claim_ready");
-    expect(agents.get("hermes-claim-reviewer")).toContain("approved");
-    expect(agents.get("hermes-claim-reviewer")).toContain(
-      "human approval record",
-    );
-  });
-
-  it("includes the expanded Hermes worker roster and task-card discipline", () => {
-    const agents = new Map(
-      getAllAgents().map((agent) => [agent.name, agent.content]),
-    );
-
-    expect([...agents.keys()]).toEqual(
-      expect.arrayContaining([
-        "hermes-scientist",
-        "hermes-claim-reviewer",
-        "hermes-coder",
-        "hermes-runner",
-        "hermes-evaluator",
-        "hermes-reviewer",
-        "hermes-literature",
-      ]),
-    );
-
-    for (const name of [
-      "hermes-scientist",
-      "hermes-claim-reviewer",
+    const canonical = [
+      "hermes-planner",
+      "hermes-researcher",
       "hermes-coder",
       "hermes-runner",
-      "hermes-evaluator",
       "hermes-reviewer",
-      "hermes-literature",
-    ]) {
+    ];
+    expect([...agents.keys()].filter((name) => name.startsWith("hermes-"))).toEqual(
+      canonical.sort(),
+    );
+    for (const name of canonical) {
       const content = agents.get(name);
       expect(content).toBeDefined();
-      expect(content).toContain(".trellis/hermes/roles/");
-      expect(content).toContain("worker_records.jsonl");
-      expect(content).toContain("task card");
-      expect(content).toContain("HumanGate");
+      expect(content).toMatch(/validated (?:blind-review )?dispatch body/);
+      expect(content).toMatch(/Profile|profile/);
+      expect(content).toMatch(/Do not spawn another sub-agent/i);
+      expect(content).toContain("Result Envelope JSON");
+      expect(content).toContain("uncertainties");
+      expect(content).not.toContain(".trellis/hermes/state_machine.yaml");
+      expect(content).not.toContain(".trellis/tasks/<task>/prd.md");
     }
   });
 
@@ -202,7 +186,8 @@ describe("getAllAgents", () => {
     expect(files).toBeDefined();
     const skill = files?.find((file) => file.relativePath === "SKILL.md");
     expect(skill?.content).toContain("name: hermes-research");
-    expect(skill?.content).toContain(".trellis/hermes/config.yaml");
+    expect(skill?.content).toContain("Pass only its `job_id` to Claude Agent");
+    expect(skill?.content).toContain("at most three direct references");
     expect(skill?.content).toContain(".trellis/hermes/state_machine.yaml");
     expect(skill?.content).toContain(".trellis/hermes/records/recordbus.md");
     expect(skill?.content).toContain(

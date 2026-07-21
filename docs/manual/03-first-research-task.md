@@ -23,7 +23,7 @@ git status --short
 research-trellis init -y -u "$USER" --codex --no-monorepo
 ```
 
-2. 检查生成结果和启动任务：
+2. 检查生成结果和启动任务。空仓库先处理 `00-bootstrap-guidelines`（项目启动任务）：完成一次研究合同讨论，填写 `.trellis/project/` 中的三份项目资料，再创建下面的首个任务。已有项目先读取 `PROJECT_INDEX.md`（事实索引）列出的原始资料，不把索引当作自动摘要。
 
 ```bash
 python3 ./.trellis/scripts/task.py list
@@ -95,7 +95,7 @@ python3 ./.trellis/scripts/closure.py close --task "$TASK"
 ## 验证记录
 
 - 日期：2026-07-15。
-- 版本：`0.7.0-beta.0`（测试版）。
+- 版本：`0.7.1-beta.0`（测试版）。
 - 更名前基准提交：`9f7dc8497b4782878d6fa7ac3b63eba5bde507df`。
 - 命令：`rg -n "experiment.py|task.py start|--codex" packages/cli/src packages/cli/test`（实现与测试核对）。
 - 结果：初始化、任务创建、实验校验和启动步骤与当前入口一致。

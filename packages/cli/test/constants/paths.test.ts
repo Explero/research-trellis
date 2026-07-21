@@ -19,6 +19,7 @@ describe("DIR_NAMES", () => {
     expect(DIR_NAMES).toHaveProperty("TASKS");
     expect(DIR_NAMES).toHaveProperty("ARCHIVE");
     expect(DIR_NAMES).toHaveProperty("SPEC");
+    expect(DIR_NAMES).toHaveProperty("PROJECT");
     expect(DIR_NAMES).toHaveProperty("SCRIPTS");
   });
 
@@ -81,6 +82,10 @@ describe("PATHS", () => {
 
   it("SPEC is WORKFLOW/spec", () => {
     expect(PATHS.SPEC).toBe(`${DIR_NAMES.WORKFLOW}/${DIR_NAMES.SPEC}`);
+  });
+
+  it("PROJECT is WORKFLOW/project", () => {
+    expect(PATHS.PROJECT).toBe(`${DIR_NAMES.WORKFLOW}/${DIR_NAMES.PROJECT}`);
   });
 
   it("SCRIPTS is WORKFLOW/scripts", () => {
