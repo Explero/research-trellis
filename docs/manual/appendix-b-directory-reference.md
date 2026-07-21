@@ -20,7 +20,21 @@
 .trellis/
 ├── config.yaml
 ├── workflow.md
+├── project/
+│   ├── PROJECT_INDEX.md
+│   ├── BACKGROUND.md
+│   ├── RESEARCH_PLAN.md
+│   └── CONSTRAINTS.md
 ├── spec/
+│   ├── guides/
+│   │   └── general-code-guidelines.md
+│   └── languages/
+│       ├── typescript-javascript.md
+│       ├── python.md
+│       ├── go.md
+│       ├── rust.md
+│       ├── cpp.md
+│       └── shell.md
 ├── tasks/
 │   └── <task>/
 │       ├── task.json
@@ -38,6 +52,8 @@
 ```
 
 - `.trellis/hermes/`（全局科研模板）只保存约定和模板。
+- `.trellis/project/`（项目资料）保存项目背景、研究方案、约束和初始化时生成的事实索引。事实索引只列出原始资料路径，不自动总结内容。
+- `.trellis/spec/languages/`（语言书写规范）预置常用语言基线；任务只能按当前修改的语言选择引用，避免一次加载全部规则。
 - `.trellis/tasks/<task>/hermes/`（任务科研记录）保存任务事实。
 - `task.json`（任务状态）保存当前 closure 状态；`task-events.jsonl`（任务事件）只追加重要历史。
 - `HANDOFF.md`（交接）按条件生成；`closure-report.md`（关闭报告）由通过的收口审计生成。
@@ -55,7 +71,7 @@
 ## 验证记录
 
 - 日期：2026-07-15。
-- 版本：`0.7.0-beta.0`（测试版）。
+- 版本：`0.7.1-beta.0`（测试版）。
 - 更名前基准提交：`9f7dc8497b4782878d6fa7ac3b63eba5bde507df`。
 - 命令：`rg -n -m 1 "tasks|hermes|workflow" packages/cli/src/constants packages/cli/src/configurators packages/cli/src/templates/trellis`（目录来源核对）。
 - 结果：项目、任务和科研记录目录均与当前常量及模板对齐。
