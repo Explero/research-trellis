@@ -250,6 +250,45 @@ describe("Agent Context Firewall dispatch CLI", () => {
     expect(dispatch.audit.metrics.ref_count).toBe(1);
   });
 
+  it("permits a coder configuration dispatch only for the current task handoff", () => {
+    const result = run([
+      "create",
+      "--task", "demo",
+      "--job-id", "job-handoff",
+      "--role", "coder",
+      "--profile", "configuration",
+      "--objective", "Write the current task handoff.",
+      "--ref", "prd.md",
+      "--allowed-file", ".trellis/tasks/demo/HANDOFF.md",
+    ]);
+    expect(result.status, result.stderr).toBe(0);
+    const dispatch = JSON.parse(
+      fs.readFileSync(
+        path.join(taskDir, "hermes", "dispatches", "job-handoff.dispatch.json"),
+        "utf-8",
+      ),
+    ) as { handoff_writer: boolean; work_package: string | null; body: string };
+    expect(dispatch.handoff_writer).toBe(true);
+    expect(dispatch.work_package).toBeNull();
+    expect(dispatch.body).toContain("Handoff writer:");
+
+    const applied = apply("job-handoff", validResult("job-handoff", {
+      changed_files: [".trellis/tasks/demo/HANDOFF.md"],
+    }));
+    expect(applied.status, applied.stderr).toBe(0);
+    const handoff = fs.readFileSync(path.join(taskDir, "HANDOFF.md"), "utf-8");
+    expect(handoff).toContain("<!-- hermes-handoff-revision: 5 -->");
+    expect(handoff).toContain("- .trellis/tasks/demo/HANDOFF.md");
+  });
+
+  it("reserves the task handoff path for the dedicated handoff dispatch", () => {
+    const result = create("job-handoff-escape", "coder", [
+      "--allowed-file", ".trellis/tasks/demo/HANDOFF.md",
+    ]);
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("handoff_path_reserved");
+  });
+
   it("adds only role-matched project context after explicit task refs", () => {
     const projectDir = path.join(root, ".trellis", "project");
     fs.mkdirSync(projectDir, { recursive: true });

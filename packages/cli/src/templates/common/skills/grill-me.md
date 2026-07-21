@@ -25,7 +25,9 @@ Do **not** use this skill for questions the codebase can answer directly.
   - why it matters
   - your recommended answer
   - what trade-off the user accepts if they choose differently
-- After each answer, update `prd.md` before asking the next question.
+- After each answer, record the proposed `prd.md` update for a validated planner
+  or coder dispatch before asking the next question. A main agent must not edit
+  `prd.md` directly.
 - Stop once `prd.md` has converged enough to enter development-strategy decisions.
 
 ## Questioning Style

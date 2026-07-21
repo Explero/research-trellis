@@ -208,7 +208,10 @@ function commitRepoState(repoRoot: string, message = "init"): void {
   }
 }
 
-function runSessionStart(worktreeRoot: string): string {
+function runSessionStart(
+  worktreeRoot: string,
+  hookInput: Record<string, unknown> = {},
+): string {
   const sessionStart = getSharedHookScripts().find(
     (h) => h.name === "session-start.py",
   );
@@ -228,7 +231,7 @@ function runSessionStart(worktreeRoot: string): string {
         ...process.env,
         CLAUDE_PROJECT_DIR: worktreeRoot,
       },
-      input: JSON.stringify({ cwd: worktreeRoot }),
+      input: JSON.stringify({ cwd: worktreeRoot, ...hookInput }),
     });
     if (result.status !== 0) {
       throw new Error(result.stderr || result.stdout || "session-start failed");
@@ -239,7 +242,11 @@ function runSessionStart(worktreeRoot: string): string {
   }
 }
 
-function runWorkflowState(repoRoot: string, contextId: string): string {
+function runWorkflowState(
+  repoRoot: string,
+  contextId: string,
+  hookInput: Record<string, unknown> = {},
+): string {
   const hook = getSharedHookScripts().find(
     (item) => item.name === "inject-workflow-state.py",
   );
@@ -258,7 +265,7 @@ function runWorkflowState(repoRoot: string, contextId: string): string {
         CLAUDE_PROJECT_DIR: repoRoot,
         TRELLIS_CONTEXT_ID: contextId,
       },
-      input: JSON.stringify({ cwd: repoRoot, session_id: contextId }),
+      input: JSON.stringify({ cwd: repoRoot, session_id: contextId, ...hookInput }),
     });
     if (result.status !== 0) {
       throw new Error(result.stderr || result.stdout || "workflow-state failed");
@@ -561,6 +568,54 @@ describe("shared-hooks capability table", () => {
     }
   });
 
+  it("reinjects a compact closure capsule after a session compaction", () => {
+    const repoRoot = fs.mkdtempSync(path.join(os.tmpdir(), "trellis-compact-capsule-"));
+    try {
+      setupMainRepo(repoRoot, "compact-task", "# prd\n");
+      const taskDir = path.join(repoRoot, ".trellis", "tasks", "compact-task");
+      const taskJsonPath = path.join(taskDir, "task.json");
+      const task = JSON.parse(fs.readFileSync(taskJsonPath, "utf-8"));
+      Object.assign(task, {
+        closure_state: "open",
+        closure_mode: "lean",
+        hermes_phase: "running",
+        intent: "Restore closure context after compaction",
+        definition_of_done: ["Focused validation is recorded"],
+        current_work_package: "WP1",
+        next_action: "stale persisted text",
+        blockers: [],
+        repair_count: 0,
+        max_repair_count: 1,
+        work_packages: [{
+          id: "WP1",
+          title: "Restore state",
+          outcome: "Current work package remains visible",
+          done_when: ["Focused validation is recorded"],
+          evidence_required: [],
+          depends_on: [],
+          status: "running",
+          evidence_refs: [],
+          blocker: null,
+        }],
+      });
+      fs.writeFileSync(taskJsonPath, `${JSON.stringify(task, null, 2)}\n`);
+      const contextId = setSessionActiveTask(repoRoot, "compact-task", "compact-session");
+      const payload = JSON.parse(runSessionStart(repoRoot, {
+        session_id: contextId,
+        source: "compact",
+      })) as { hookSpecificOutput?: { additionalContext?: string } };
+      const context = payload.hookSpecificOutput?.additionalContext ?? "";
+      expect(context).toContain("Status: HERMES CLOSURE");
+      expect(context).toContain("Current: WP1");
+      expect(context).toContain("Done when: Focused validation is recorded");
+      expect(context).toContain("Complete WP1 outcome");
+      expect(context).not.toContain("stale persisted text");
+      expect(context.match(/Current: WP1/g)).toHaveLength(1);
+    } finally {
+      fs.rmSync(repoRoot, { recursive: true, force: true });
+    }
+  });
+
   it("gives Codex the same project context index through its first prompt hook", () => {
     const repoRoot = fs.mkdtempSync(path.join(os.tmpdir(), "trellis-codex-project-index-"));
     try {
@@ -654,19 +709,52 @@ describe("shared-hooks capability table", () => {
       expect(context).toContain("Hermes closure task: capsule-task");
       expect(context).toContain("Route: delivery");
       expect(context).toContain("Route rule:");
+      expect(context).toContain("<task-resume>");
+      expect(context).toContain(
+        ".trellis/tasks/capsule-task/task.json",
+      );
+      expect(context).toContain("No current HANDOFF.md exists");
       expect(context).not.toContain("Claude review gates are read-only gates");
       expect(context).not.toContain("FULL_PRD_MUST_NOT_BE_INJECTED");
       const capsule =
         /<task-capsule>\n([\s\S]*?)\n<\/task-capsule>/.exec(context)?.[1] ?? "";
       expect(capsule.length).toBeLessThanOrEqual(1000);
 
+      fs.writeFileSync(
+        path.join(taskDir, "HANDOFF.md"),
+        "<!-- hermes-handoff-revision: 0 -->\nHANDOFF_BODY_MUST_NOT_BE_INJECTED\n",
+      );
+
       const repeated = JSON.parse(runWorkflowState(repoRoot, contextId)) as {
         hookSpecificOutput: { additionalContext: string };
       };
       expect(repeated.hookSpecificOutput.additionalContext).toContain(
-        "anchor revision",
+        "Hermes closure update",
+      );
+      expect(repeated.hookSpecificOutput.additionalContext).toContain(
+        "<task-capsule>",
+      );
+      expect(repeated.hookSpecificOutput.additionalContext).toContain(
+        "<task-resume>",
+      );
+      expect(repeated.hookSpecificOutput.additionalContext).toContain(
+        ".trellis/tasks/capsule-task/HANDOFF.md",
       );
       expect(repeated.hookSpecificOutput.additionalContext).not.toContain(
+        "HANDOFF_BODY_MUST_NOT_BE_INJECTED",
+      );
+
+      const stableHandoff = JSON.parse(runWorkflowState(repoRoot, contextId)) as {
+        hookSpecificOutput: { additionalContext: string };
+      };
+      expect(stableHandoff.hookSpecificOutput.additionalContext).not.toContain(
+        "/HANDOFF.md",
+      );
+
+      const compacted = JSON.parse(runWorkflowState(repoRoot, contextId, {
+        source: "compact",
+      })) as { hookSpecificOutput: { additionalContext: string } };
+      expect(compacted.hookSpecificOutput.additionalContext).toContain(
         "<task-capsule>",
       );
 
@@ -683,6 +771,24 @@ describe("shared-hooks capability table", () => {
       expect(revised.hookSpecificOutput.additionalContext).toContain(
         "<task-capsule>",
       );
+      expect(revised.hookSpecificOutput.additionalContext).toContain(
+        "HANDOFF.md is stale",
+      );
+
+      revisedTask.hermes_revision = 2;
+      revisedTask.current_work_package =
+        "PACKAGE_HEAD " + "x".repeat(2000) + " PACKAGE_TAIL";
+      fs.writeFileSync(taskJsonPath, `${JSON.stringify(revisedTask, null, 2)}\n`);
+      const longAction = JSON.parse(runWorkflowState(repoRoot, contextId)) as {
+        hookSpecificOutput: { additionalContext: string };
+      };
+      const resume =
+        /<task-resume>\n([\s\S]*?)\n<\/task-resume>/.exec(
+          longAction.hookSpecificOutput.additionalContext,
+        )?.[1] ?? "";
+      expect(resume).toContain("PACKAGE_HEAD");
+      expect(resume).not.toContain("PACKAGE_TAIL");
+      expect(resume.length).toBeLessThanOrEqual(800);
     } finally {
       fs.rmSync(repoRoot, { recursive: true, force: true });
     }
@@ -1938,6 +2044,9 @@ describe.skipIf(!hasPython())("hermes runtime guard hook", () => {
     expectMainAgentBashDenied(
       "python3 ./.trellis/scripts/hermes/dispatch.py create --task demo; touch src/app.ts",
     );
+    expectMainAgentBashDenied(
+      "python3 ./.trellis/scripts/closure.py handoff --task demo",
+    );
   });
 
   it("allows main-agent git status short paths as read-only Bash", () => {
@@ -3056,6 +3165,39 @@ describe.skipIf(!hasPython())("hermes runtime guard hook", () => {
     expect(payload.hookSpecificOutput?.permissionDecision).toBe("deny");
     expect(payload.hookSpecificOutput?.permissionDecisionReason).toContain(
       "cannot safely parse Bash write targets",
+    );
+  });
+
+  it("denies PreToolUse link creation for a dispatched coder", () => {
+    writeHermesWorkerRecords([
+      taskCard("job-active", "coder"),
+      heartbeat("job-active"),
+    ]);
+
+    const result = runHermesRuntimeGuard(repoRoot, {
+      cwd: repoRoot,
+      hook_event_name: "PreToolUse",
+      agent_role: "coder",
+      tool_name: "Bash",
+      tool_input: {
+        job_id: "job-active",
+        command: "ln -s /tmp/escape .trellis/tasks/06-04-hermes-runtime/HANDOFF.md",
+      },
+      session_id: "test-session",
+    });
+
+    expect(result.status).toBe(0);
+    const payload = JSON.parse(result.stdout) as {
+      hookSpecificOutput?: {
+        hookEventName?: string;
+        permissionDecision?: string;
+        permissionDecisionReason?: string;
+      };
+    };
+    expect(payload.hookSpecificOutput?.hookEventName).toBe("PreToolUse");
+    expect(payload.hookSpecificOutput?.permissionDecision).toBe("deny");
+    expect(payload.hookSpecificOutput?.permissionDecisionReason).toContain(
+      "link creation is not allowed",
     );
   });
 

@@ -220,6 +220,12 @@ Complex task: ask the user if you can create a Trellis task and enter the planni
 当用户用自然语言提出 Claude Code 工作流改动时，先引导他们进入 `task.py create`；不要要求固定命令短语。
 [/workflow-state:no_task]
 
+### 用户入口优先级
+
+先根据活动任务、当前工作包、任务胶囊和用户的自然语言请求自动选择规划、执行、审核、交接或收尾流程；不要等待用户输入固定命令。`continue`（继续）、`status`（状态）、`handoff`（交接）、`finish-work`（收尾）和 `start`（启动）只是明确入口或兼容入口，不能绕过任何状态门禁。
+
+建议用户主动理解和调用的技能只有 `grill-me`（聚焦讨论）和 `update-spec`（更新规范）。前者用于未解决的研究设计、架构或范围决策，后者用于把经过验证的项目知识写入规范；即使用户不显式调用，主代理也必须在相应条件出现时自动触发这些过程。为保持旧项目兼容和自动路由，其他规划、规范读取、验证、测试驱动、根因分析和架构审查技能仍会随平台安装，但不要求用户记忆其名称。
+
 ### Phase 1: Plan
 - 1.0 Create task `[required · once]`（只有获得 task-creation consent 后才能执行）
 - 1.1 Requirement exploration `[required · repeatable]`（`prd.md`；复杂任务还需要 `design.md` + `implement.md`）

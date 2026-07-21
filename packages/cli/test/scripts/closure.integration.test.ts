@@ -1,4 +1,5 @@
 import { execFileSync, spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -157,6 +158,27 @@ function writeTask(taskDir: string, value: Record<string, unknown>): void {
     path.join(taskDir, "task.json"),
     `${JSON.stringify(value, null, 2)}\n`,
   );
+}
+
+function stableValue(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(stableValue);
+  if (value && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>)
+        .sort(([left], [right]) => left.localeCompare(right))
+        .map(([key, item]) => [key, stableValue(item)]),
+    );
+  }
+  return value;
+}
+
+function resultSha256(value: Record<string, unknown>): string {
+  const payload = Object.fromEntries(
+    Object.entries(value).filter(([key]) => key !== "audit"),
+  );
+  return `sha256:${createHash("sha256")
+    .update(JSON.stringify(stableValue(payload)), "utf8")
+    .digest("hex")}`;
 }
 
 function plan(root: string, doneWhen: string[], extra: string[] = []) {
@@ -609,7 +631,7 @@ describe.skipIf(!hasPython())("Lean Research Closure CLI", () => {
     expect(fs.existsSync(taskDir)).toBe(true);
   });
 
-  it("writes a handoff when an open task session is finished", () => {
+  it("requires a current handoff before an open task session can finish", () => {
     expect(plan(root, ["Result A"]).status).toBe(0);
     const sessions = path.join(root, ".trellis", ".runtime", "sessions");
     fs.mkdirSync(sessions, { recursive: true });
@@ -617,10 +639,97 @@ describe.skipIf(!hasPython())("Lean Research Closure CLI", () => {
       path.join(sessions, "closure-test-session.json"),
       `${JSON.stringify({ current_task: ".trellis/tasks/demo" })}\n`,
     );
+    const blocked = runTask(root, "finish");
+    expect(blocked.status).toBe(1);
+    expect(blocked.stdout).toContain("dedicated handoff subagent");
+    expect(fs.existsSync(path.join(taskDir, "HANDOFF.md"))).toBe(false);
+
+    const task = readTask(taskDir);
+    fs.writeFileSync(
+      path.join(taskDir, "HANDOFF.md"),
+      `<!-- hermes-handoff-revision: ${task.hermes_revision} -->\n`,
+    );
     const result = runTask(root, "finish");
     expect(result.status).toBe(0);
-    expect(result.stdout).toContain("Handoff updated");
-    expect(fs.existsSync(path.join(taskDir, "HANDOFF.md"))).toBe(true);
+    expect(result.stdout).not.toContain("Handoff updated");
+  });
+
+  it("writes revision-bound handoffs from validated task results only", () => {
+    expect(plan(root, ["Result A"]).status).toBe(0);
+    fs.mkdirSync(path.join(taskDir, "hermes", "dispatches"), { recursive: true });
+    fs.mkdirSync(path.join(root, "src"), { recursive: true });
+    fs.writeFileSync(path.join(root, "src", "owned.ts"), "export {};\n");
+    fs.writeFileSync(path.join(root, "src", "forged.ts"), "export {};\n");
+    fs.writeFileSync(path.join(root, "unrelated.txt"), "other task change\n");
+    const task = readTask(taskDir);
+    writeTask(taskDir, { ...task, confirmed_dispatches: ["job-1"] });
+    const confirmedResult = {
+      job_id: "job-1",
+      task_revision: task.hermes_revision,
+      status: "success",
+      confirmed: true,
+      changed_files: ["src/owned.ts"],
+    };
+    fs.writeFileSync(
+      path.join(taskDir, "hermes", "dispatches", "job-1.dispatch.json"),
+      `${JSON.stringify({
+        job_id: "job-1",
+        hermes_revision: task.hermes_revision,
+        confirmed_revision: task.hermes_revision,
+        result_sha256: resultSha256(confirmedResult),
+        status: "confirmed",
+      })}\n`,
+    );
+    fs.writeFileSync(
+      path.join(taskDir, "hermes", "dispatches", "job-1.result.json"),
+      `${JSON.stringify({ ...confirmedResult, changed_files: ["src/forged.ts"] })}\n`,
+    );
+    fs.writeFileSync(
+      path.join(taskDir, "hermes", "dispatches", "forged.result.json"),
+      `${JSON.stringify({
+        job_id: "forged",
+        status: "success",
+        confirmed: true,
+        changed_files: ["src/forged.ts"],
+      })}\n`,
+    );
+
+    expect(run(root, "handoff").status).toBe(0);
+    const handoff = fs.readFileSync(path.join(taskDir, "HANDOFF.md"), "utf-8");
+    expect(handoff).toContain(
+      `<!-- hermes-handoff-revision: ${readTask(taskDir).hermes_revision} -->`,
+    );
+    expect(handoff).not.toContain("- src/owned.ts");
+    expect(handoff).not.toContain("src/forged.ts");
+    expect(handoff).not.toContain("unrelated.txt");
+    expect(handoff).toContain("job-1: confirmed result integrity check failed");
+  });
+
+  it("refuses to replace a handoff symlink", () => {
+    if (process.platform === "win32") return;
+    expect(plan(root, ["Result A"]).status).toBe(0);
+    const sentinel = path.join(root, "sentinel.md");
+    fs.writeFileSync(sentinel, "do not overwrite\n");
+    fs.symlinkSync(sentinel, path.join(taskDir, "HANDOFF.md"));
+
+    const result = run(root, "handoff");
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("crosses a symlink");
+    expect(fs.readFileSync(sentinel, "utf-8")).toBe("do not overwrite\n");
+  });
+
+  it("derives next action from current closure state instead of stale task text", () => {
+    expect(plan(root, ["Result A"]).status).toBe(0);
+    const task = readTask(taskDir);
+    writeTask(taskDir, { ...task, next_action: "obsolete action" });
+    const result = run(root, "next");
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain("Run closure.py validate.");
+    expect(result.stdout).not.toContain("obsolete action");
+
+    const status = run(root, "status", "--json");
+    expect(status.status).toBe(0);
+    expect(JSON.parse(status.stdout).next_action).toContain("Run closure.py validate.");
   });
 
   it("prints a compact actionable audit gap", () => {

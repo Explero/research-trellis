@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import re
-import subprocess
 import uuid
 from copy import deepcopy
 from datetime import datetime, timezone
@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Any
 
 from .firewall import closure_mode_gate
-from .io import file_lock, read_json, write_json_atomic, write_text_atomic
+from .io import file_lock, path_has_symlink, read_json, write_json_atomic, write_text_atomic
 from .paths import FILE_TASK_JSON, get_current_task, get_developer, get_repo_root
 from .task_utils import resolve_task_dir
 
@@ -776,8 +776,9 @@ def validate_closure(data: dict[str, Any]) -> tuple[list[str], list[str]]:
     if _string_list(data.get("blockers")):
         errors.append("unresolved blockers must be resolved before validation")
 
-    pins = _string_list(data.get("context_pins"))
-    if isinstance(data.get("context_pins"), list) and len(pins) != len(data.get("context_pins")):
+    raw_pins = data.get("context_pins")
+    pins = _string_list(raw_pins)
+    if isinstance(raw_pins, list) and len(pins) != len(raw_pins):
         errors.append("context_pins must be an array of non-empty strings")
     if len(pins) > 3:
         errors.append("context_pins supports at most 3 entries")
@@ -1527,14 +1528,14 @@ def amend_plan(
         semantic_ids = [field.split(".", 2)[1]]
     affected_ids = _dedupe([*semantic_ids, *incomplete_ids])
     human_approved = str(approved_by or "").casefold() in {"human", "root", "human/root"}
+    previous_route = research_route(data)
+    previous_changes = _research_change_fields(data)
     requires_independent_task = (
         research_change == "model_architecture" and human_approved
     )
     applied = not high_risk or human_approved
     if requires_independent_task:
         applied = False
-        previous_route = research_route(data)
-        previous_changes = _research_change_fields(data)
         data["research_route"] = "exploration"
         data["research_change_fields"] = _dedupe(
             [*previous_changes, "model_architecture"]
@@ -1760,7 +1761,6 @@ def build_capsule(task_dir: Path, data: dict[str, Any], root: Path | None = None
 
 
 def write_handoff(task_dir: Path, data: dict[str, Any], root: Path | None = None) -> Path:
-    repo_root = root or get_repo_root(task_dir)
     packages = [item for item in data.get("work_packages") or [] if isinstance(item, dict)]
     completed = [str(item.get("id")) for item in packages if item.get("status") == "done"]
     evidence = _dedupe([
@@ -1768,10 +1768,14 @@ def write_handoff(task_dir: Path, data: dict[str, Any], root: Path | None = None
         for item in packages
         for ref in _string_list(item.get("evidence_refs"))
     ])
-    changed = _git_changed_files(repo_root)
+    changed, integrity_warnings = _task_changed_file_records(task_dir, data)
     failed_attempts = _recent_event_reasons(task_dir, {"package_blocked", "repair_started"})
+    revision = data.get("hermes_revision", 0)
+    if not isinstance(revision, int) or isinstance(revision, bool) or revision < 0:
+        revision = 0
     content = "\n".join(
         [
+            f"<!-- hermes-handoff-revision: {revision} -->",
             "# Task Handoff",
             "",
             "## Current Goal",
@@ -1789,6 +1793,9 @@ def write_handoff(task_dir: Path, data: dict[str, Any], root: Path | None = None
             "## Files Changed",
             _markdown_items(changed),
             "",
+            "## Integrity Warnings",
+            _markdown_items(integrity_warnings),
+            "",
             "## Artifacts/Evidence",
             _markdown_items(evidence),
             "",
@@ -1799,15 +1806,24 @@ def write_handoff(task_dir: Path, data: dict[str, Any], root: Path | None = None
             _markdown_items(_string_list(data.get("blockers"))),
             "",
             "## Next Action",
-            str(data.get("next_action") or "-"),
+            closure_next_action(data),
             "",
             "## Do Not Do",
             "- Do not widen scope or change research contracts without an approved amend event.",
             "",
         ]
     )
+    path = handoff_path(task_dir)
+    if not write_text_atomic(path, content):
+        raise ClosureError("cannot write HANDOFF.md")
+    return path
+
+
+def handoff_path(task_dir: Path) -> Path:
+    """Return a safe handoff destination without following symbolic links."""
     path = task_dir / "HANDOFF.md"
-    path.write_text(content, encoding="utf-8")
+    if task_dir.is_symlink() or path_has_symlink(path, task_dir):
+        raise ClosureError("HANDOFF.md path crosses a symlink")
     return path
 
 
@@ -2293,31 +2309,61 @@ def _recent_event_reasons(task_dir: Path, types: set[str]) -> list[str]:
     ][-5:]
 
 
-def _git_changed_files(root: Path) -> list[str]:
-    try:
-        result = subprocess.run(
-            ["git", "status", "--short", "--untracked-files=all"],
-            cwd=root,
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-            timeout=3,
-        )
-    except (OSError, subprocess.SubprocessError):
-        return []
+def _task_changed_files(task_dir: Path, data: dict[str, Any]) -> list[str]:
+    """Return only files from successful dispatches confirmed by task state."""
+    return _task_changed_file_records(task_dir, data)[0]
+
+
+def _task_changed_file_records(task_dir: Path, data: dict[str, Any]) -> tuple[list[str], list[str]]:
+    """Return verified changed files and compact warnings for rejected result records."""
     files: list[str] = []
-    for line in result.stdout.splitlines():
-        value = line[3:].strip() if len(line) > 3 else ""
-        if " -> " in value:
-            value = value.split(" -> ", 1)[1]
-        lowered = value.casefold()
-        if value and not any(
-            marker in lowered
-            for marker in (".env", "credentials", "secret", "token", "api_key")
+    integrity_warnings: list[str] = []
+    confirmed = set(_string_list(data.get("confirmed_dispatches")))
+    current_revision = data.get("hermes_revision")
+    for result_path in sorted((task_dir / "hermes" / "dispatches").glob("*.result.json")):
+        value = read_json(result_path)
+        if not isinstance(value, dict):
+            continue
+        job_id = result_path.name.removesuffix(".result.json")
+        if value.get("job_id") != job_id or job_id not in confirmed:
+            continue
+        dispatch = read_json(task_dir / "hermes" / "dispatches" / f"{job_id}.dispatch.json")
+        confirmed_revision = dispatch.get("confirmed_revision") if isinstance(dispatch, dict) else None
+        if (
+            not isinstance(dispatch, dict)
+            or dispatch.get("job_id") != job_id
+            or dispatch.get("status") != "confirmed"
+            or value.get("status") != "success"
+            or value.get("confirmed") is not True
+            or value.get("task_revision") != dispatch.get("hermes_revision")
+            or not isinstance(confirmed_revision, int)
+            or isinstance(confirmed_revision, bool)
+            or not isinstance(current_revision, int)
+            or isinstance(current_revision, bool)
+            or confirmed_revision > current_revision
         ):
-            files.append(value)
-    return files[:20]
+            continue
+        expected_hash = dispatch.get("result_sha256")
+        actual_hash = _result_sha256(value)
+        if not isinstance(expected_hash, str) or expected_hash != actual_hash:
+            integrity_warnings.append(f"{job_id}: confirmed result integrity check failed")
+            continue
+        for raw_path in _string_list(value.get("changed_files")):
+            normalized = raw_path.replace("\\", "/").removeprefix("./")
+            if (
+                normalized
+                and not normalized.startswith("/")
+                and not re.match(r"^[A-Za-z]:/", normalized)
+                and ".." not in Path(normalized).parts
+            ):
+                files.append(normalized)
+    return _dedupe(files)[:20], _dedupe(integrity_warnings)[:5]
+
+
+def _result_sha256(value: dict[str, Any]) -> str:
+    payload = {key: item for key, item in value.items() if key != "audit"}
+    serialized = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    return f"sha256:{hashlib.sha256(serialized.encode('utf-8')).hexdigest()}"
 
 
 def _gap(package: str | None, missing: str, action: str) -> dict[str, Any]:

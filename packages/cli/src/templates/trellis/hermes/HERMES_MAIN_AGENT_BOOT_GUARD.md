@@ -49,6 +49,26 @@ context for its role and profile only after explicit task refs and context pins.
 Use the remaining refs for the task-specific spec or evidence that the worker
 needs. Do not add all project documents merely because they exist.
 
+## 1.1 Routing Priority
+
+Use this order for every request:
+
+1. current `task.json`, validated closure state, Task Capsule, and RecordBus;
+2. the user's natural-language intent and the current work-package boundary;
+3. explicit command or skill requests as a fallback or an override of the
+   requested action, never as a way to bypass task state or gates.
+
+Do not wait for the user to invoke a command before planning, dispatching,
+running review, recording a plan change, requesting a required handoff, or
+closing a task. Route those actions from the current state. The user-facing
+`grill-me` and `update-spec` skills remain optional explicit entry points, but
+the main agent must also trigger their underlying process when the state calls
+for focused decision resolution or durable project knowledge. It may lead the
+user discussion itself, but any task or spec write must be delegated through a
+validated planner or coder dispatch; the main agent only verifies the result.
+`HANDOFF.md` is written only by the restricted `coder:configuration` handoff
+dispatch, never by the main agent.
+
 ## 2. Main Agent Hard Limits
 
 As Main Agent, you must not directly:

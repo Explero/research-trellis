@@ -564,6 +564,20 @@ describe("resolveSkillsNeutral / resolveAllAsSkillsNeutral", () => {
     }
   });
 
+  it("resolveCommands exposes compact status and handoff entry points", () => {
+    const commands = resolveCommands(claudeCtx);
+    const status = commands.find((command) => command.name === "status")?.content ?? "";
+    const handoff = commands.find((command) => command.name === "handoff")?.content ?? "";
+    const py = getPythonCommandForPlatform();
+
+    expect(status).toContain(`${py} ./.trellis/scripts/closure.py status --task <task>`);
+    expect(status).toContain(`${py} ./.trellis/scripts/closure.py next --task <task>`);
+    expect(status).toContain("This command is read-only");
+    expect(handoff).toContain("coder:configuration");
+    expect(handoff).toContain("must not run the write command");
+    expect(handoff).toContain("does not complete, close, archive, approve, or amend");
+  });
+
   it("resolveCommands injects the trellis-switch guard", () => {
     const commands = resolveCommands(claudeCtx);
     const guard = `${getPythonCommandForPlatform()} ./.trellis/scripts/assert_trellis_enabled.py`;

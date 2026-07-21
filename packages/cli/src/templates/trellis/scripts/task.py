@@ -24,6 +24,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import re
 import subprocess
 import sys
 
@@ -293,34 +294,46 @@ def cmd_start(args: argparse.Namespace) -> int:
 def cmd_finish(args: argparse.Namespace) -> int:
     """Clear active task."""
     repo_root = get_repo_root()
-    active = clear_active_task(repo_root)
+    active = resolve_active_task(repo_root)
     current = active.task_path
 
     if not current:
         print(colored("No current task set", Colors.YELLOW))
         return 0
 
-    # Resolve task.json path before clearing
     task_json_path = repo_root / current / FILE_TASK_JSON
-
-    print(colored(f"✓ Cleared current task (was: {current})", Colors.GREEN))
-    print(f"Source: {active.source}")
 
     if task_json_path.is_file():
         task_data = read_json(task_json_path)
         if isinstance(task_data, dict):
-            from common.closure import is_closure_task, write_handoff
+            from common.closure import is_closure_task
 
             if is_closure_task(task_data) and task_data.get("closure_state") != "closed":
-                handoff_path = write_handoff(
-                    task_json_path.parent,
-                    task_data,
-                    repo_root,
+                revision = task_data.get("hermes_revision")
+                handoff_path = task_json_path.parent / "HANDOFF.md"
+                fresh_handoff = (
+                    isinstance(revision, int)
+                    and not isinstance(revision, bool)
+                    and handoff_path.is_file()
+                    and not handoff_path.is_symlink()
+                    and re.search(
+                        rf"<!--\s*hermes-handoff-revision:\s*{revision}\s*-->",
+                        handoff_path.read_text(encoding="utf-8", errors="replace")[:512],
+                    ) is not None
                 )
-                print(colored(
-                    f"✓ Handoff updated: {handoff_path.relative_to(repo_root)}",
-                    Colors.GREEN,
-                ))
+                if not fresh_handoff:
+                    print(colored(
+                        "Open Hermes task requires a current HANDOFF.md from the dedicated handoff subagent before finish.",
+                        Colors.RED,
+                    ))
+                    return 1
+
+    cleared = clear_active_task(repo_root)
+
+    print(colored(f"✓ Cleared current task (was: {current})", Colors.GREEN))
+    print(f"Source: {cleared.source}")
+
+    if task_json_path.is_file():
         run_task_hooks("after_finish", task_json_path, repo_root)
     return 0
 

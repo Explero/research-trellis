@@ -599,6 +599,14 @@ describe("trellis template constants", () => {
     expect(templates.get("HERMES_MAIN_AGENT_BOOT_GUARD.md")).toContain(
       "Main Agent / Main Pilot",
     );
+    expect(templates.get("HERMES_MAIN_AGENT_BOOT_GUARD.md")).toContain(
+      "Routing Priority",
+    );
+    expect(templates.get("HERMES_MAIN_AGENT_BOOT_GUARD.md")).toContain(
+      "Do not wait for the user to invoke a command",
+    );
+    expect(workflowMdTemplate).toContain("用户入口优先级");
+    expect(workflowMdTemplate).toContain("主代理也必须在相应条件出现时自动触发");
     expect(templates.get("metrics/metrics_schema.yaml")).toContain("HumanGate");
     expect(templates.get("reports/report.md")).toContain("Core Conclusions");
     expect(templates.get("schemas/result-envelope.schema.json")).toContain(

@@ -71,6 +71,8 @@ PROJECT_CONTEXT_REFS = (
     ("Project constraints", "CONSTRAINTS.md", "fixed boundaries and approvals"),
 )
 
+_HANDOFF_REVISION_RE = re.compile(r"<!--\s*hermes-handoff-revision:\s*(\d+)\s*-->")
+
 
 def _build_project_context_index(root: Path) -> str:
     """List main-agent project inputs without loading the documents themselves."""
@@ -215,7 +217,76 @@ def get_task_capsule(root: Path, input_data: dict) -> str | None:
     return build_capsule(task_dir, task, root)
 
 
-def _closure_turn_context(root: Path, input_data: dict) -> tuple[str, str | None] | None:
+def _build_task_resume_notice(
+    root: Path,
+    task_dir: Path,
+    data: dict,
+    *,
+    task_id: str,
+    phase: str,
+    next_action: str,
+    handoff_notice: str | None,
+) -> str:
+    """Point the main agent at durable task state on every active-task turn."""
+    def compact(value: object, limit: int) -> str:
+        text = " ".join(str(value or "-").split())
+        return text if len(text) <= limit else text[: limit - 3].rstrip() + "..."
+
+    try:
+        task_ref = task_dir.relative_to(root).as_posix()
+    except ValueError:
+        task_ref = ".trellis/tasks/" + task_dir.name
+    task_label = compact(task_id, 72)
+    phase_label = compact(phase, 32)
+    current_package = compact(data.get("current_work_package"), 48)
+    action = compact(next_action, 180)
+    lines = [
+        "<task-resume>",
+        f"Active task: {task_label}; phase={phase_label}; current package={current_package}; next={action}",
+        f"Before planning, dispatching, or continuing work, read {task_ref}/task.json.",
+    ]
+    if handoff_notice:
+        lines.append(handoff_notice)
+    lines.append(
+        "Read only the directly relevant referenced file for this request; do not preload project context, full task history, or unrelated artifacts."
+    )
+    lines.append("</task-resume>")
+    return "\n".join(lines)
+
+
+def _handoff_state(task_dir: Path, revision: object) -> tuple[str, str | None]:
+    """Return a fresh handoff marker or a compact stale/missing explanation."""
+    handoff = task_dir / "HANDOFF.md"
+    if not handoff.is_file():
+        return "missing", "No current HANDOFF.md exists; use the Task Capsule and task state."
+    if not isinstance(revision, int) or isinstance(revision, bool) or revision < 0:
+        return "invalid-task-revision", "Ignore HANDOFF.md until task.json has a valid Hermes revision."
+    try:
+        prefix = handoff.read_text(encoding="utf-8", errors="replace")[:512]
+        marker = _HANDOFF_REVISION_RE.search(prefix)
+        stamp = handoff.stat().st_mtime_ns
+    except OSError:
+        return "unreadable", "HANDOFF.md could not be read; use task.json as the source of truth."
+    if marker is None or int(marker.group(1)) != revision:
+        return f"stale:{marker.group(1) if marker else 'legacy'}:{stamp}", "HANDOFF.md is stale for this task revision; do not rely on it. Regenerate it before a handoff."
+    return f"fresh:{revision}:{stamp}", None
+
+
+def _context_reset_requested(input_data: dict) -> bool:
+    """Recognize compact/clear markers supplied by hook-capable hosts."""
+    for key in ("source", "event", "event_type", "reason", "session_start_source"):
+        value = input_data.get(key)
+        if isinstance(value, str) and value.casefold() in {
+            "compact",
+            "compaction",
+            "context_compacted",
+            "clear",
+        }:
+            return True
+    return False
+
+
+def _closure_turn_context(root: Path, input_data: dict) -> tuple[str, str | None, str] | None:
     """Return closure-specific, revision-aware per-turn context."""
     active = _resolve_active_task(root, input_data)
     if not active.task_path or active.stale:
@@ -257,12 +328,37 @@ def _closure_turn_context(root: Path, input_data: dict) -> tuple[str, str | None
         except (OSError, json.JSONDecodeError):
             anchor = {}
     previous = anchor.get("closure_context_anchor") if isinstance(anchor, dict) else None
+    context_reset = _context_reset_requested(input_data)
+    if context_reset:
+        previous = None
+    handoff_marker, handoff_problem = _handoff_state(task_dir, revision)
+    seen_handoff_marker = previous.get("handoff_marker") if isinstance(previous, dict) else None
+    if handoff_marker == seen_handoff_marker:
+        handoff_notice = None
+    elif handoff_problem:
+        handoff_notice = handoff_problem
+    else:
+        try:
+            handoff_ref = task_dir.relative_to(root).as_posix()
+        except ValueError:
+            handoff_ref = ".trellis/tasks/" + task_dir.name
+        handoff_notice = f"Read {handoff_ref}/HANDOFF.md once before continuing; it matches the current task revision."
+    resume_notice = _build_task_resume_notice(
+        root,
+        task_dir,
+        data,
+        task_id=task_id,
+        phase=phase,
+        next_action=next_action,
+        handoff_notice=handoff_notice,
+    )
     current = {
         "task": task_id,
         "revision": revision,
         "phase": phase,
         "next_action": next_action,
         "route": route_summary,
+        "handoff_marker": handoff_marker,
     }
     if anchor_path:
         try:
@@ -271,10 +367,19 @@ def _closure_turn_context(root: Path, input_data: dict) -> tuple[str, str | None
             anchor_path.write_text(json.dumps(anchor, ensure_ascii=False) + "\n", encoding="utf-8")
         except OSError:
             pass
-    if isinstance(previous, dict) and previous.get("task") == task_id and previous.get("revision") == revision:
+    force_capsule = context_reset or (
+        handoff_marker.startswith("fresh:") and handoff_marker != seen_handoff_marker
+    )
+    if (
+        isinstance(previous, dict)
+        and previous.get("task") == task_id
+        and previous.get("revision") == revision
+        and not force_capsule
+    ):
         return (
             f"<workflow-state>\nHermes closure task: {task_id}; anchor revision {revision} remains active.\n{route_summary}\nRoute rule: {route_rule}\n</workflow-state>",
             None,
+            resume_notice,
         )
     if isinstance(previous, dict) and previous.get("task") == task_id:
         changes = [f"Hermes closure update: {task_id}; revision {previous.get('revision')} -> {revision}."]
@@ -287,10 +392,12 @@ def _closure_turn_context(root: Path, input_data: dict) -> tuple[str, str | None
         return (
             "<workflow-state>\n" + "\n".join(changes) + "\n</workflow-state>",
             build_capsule(task_dir, data, root),
+            resume_notice,
         )
     return (
         f"<workflow-state>\nHermes closure task: {task_id}; phase={phase}.\n{route_summary}\nRoute rule: {route_rule}\nNext: {next_action}\n</workflow-state>",
         build_capsule(task_dir, data, root),
+        resume_notice,
     )
 # ---------------------------------------------------------------------------
 # Breadcrumb loading: parse workflow.md, fall back to hardcoded defaults
@@ -492,8 +599,9 @@ def main() -> int:
     closure_context = _closure_turn_context(root, data)
     task = get_active_task(root, data)
     capsule = None
+    resume_notice = None
     if closure_context is not None:
-        breadcrumb, capsule = closure_context
+        breadcrumb, capsule, resume_notice = closure_context
     elif task is None:
         # No active task — still emit a breadcrumb nudging AI toward
         # trellis-brainstorm + task.py create when user describes real work.
@@ -520,11 +628,16 @@ def main() -> int:
             parts.append(CODEX_NO_TASK_BOOTSTRAP_NOTICE)
         parts.append(_codex_mode_banner(config))
         parts.append(breadcrumb)
+        if resume_notice:
+            parts.append(resume_notice)
         if capsule:
             parts.append(f"<task-capsule>\n{capsule}\n</task-capsule>")
         breadcrumb = "\n\n".join(parts)
-    elif capsule:
-        breadcrumb = f"{breadcrumb}\n\n<task-capsule>\n{capsule}\n</task-capsule>"
+    else:
+        if resume_notice:
+            breadcrumb = f"{breadcrumb}\n\n{resume_notice}"
+        if capsule:
+            breadcrumb = f"{breadcrumb}\n\n<task-capsule>\n{capsule}\n</task-capsule>"
 
     # Gemini CLI 0.40.x rejects "UserPromptSubmit" — its per-turn event is
     # named "BeforeAgent". Other platforms (Claude/Cursor/Qoder/CodeBuddy/

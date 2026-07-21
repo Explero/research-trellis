@@ -18,11 +18,13 @@ from typing import Any
 from .closure import (
     ClosureError,
     closure_constraints,
+    handoff_path,
     is_closure_task,
     now_utc,
     package_by_id,
     save_task,
     task_state_lock,
+    write_handoff,
 )
 from .firewall import closure_mode_gate, record_firewall_heartbeat
 from .io import path_has_symlink, read_json, write_json_atomic
@@ -211,16 +213,25 @@ def create_dispatch(
     role = normalized.role
     profile = normalized.profile
     work_package = _normalize_optional_text(spec.get("work_package"))
-    _validate_work_package(task, role, work_package)
+    constraints = closure_constraints(task)
+    allowed_files = _normalize_patterns(spec.get("allowed_files"), "allowed_files")
+    forbidden_files = _normalize_patterns(spec.get("forbidden_files"), "forbidden_files")
+    handoff_writer = _is_handoff_writer(
+        task_dir,
+        repo_root,
+        role,
+        profile,
+        work_package,
+        allowed_files,
+    )
+    _validate_handoff_file_boundary(task_dir, repo_root, allowed_files, handoff_writer)
+    _validate_work_package(task, role, work_package, allow_task_handoff=handoff_writer)
     refs = _normalize_refs(
         task_dir,
         repo_root,
         _merged_dispatch_refs(task, spec.get("refs"), repo_root, role, profile),
         role,
     )
-    constraints = closure_constraints(task)
-    allowed_files = _normalize_patterns(spec.get("allowed_files"), "allowed_files")
-    forbidden_files = _normalize_patterns(spec.get("forbidden_files"), "forbidden_files")
     if role == "coder" and not allowed_files:
         raise DispatchError("missing_allowed_files", "coder dispatch requires allowed_files")
     if not forbidden_files:
@@ -275,6 +286,7 @@ def create_dispatch(
         "role": role,
         "profile": profile,
         "work_package": work_package,
+        "handoff_writer": handoff_writer,
         "objective": objective,
         "allowed_refs": refs,
         "refs": refs,
@@ -453,10 +465,27 @@ def validate_dispatch(
     except RoleProfileError:
         errors.append("role_profile")
     try:
+        handoff_writer = _is_handoff_writer(
+            task_dir,
+            repo_root,
+            str(dispatch.get("role") or ""),
+            str(dispatch.get("profile") or ""),
+            dispatch.get("work_package"),
+            _string_list(dispatch.get("allowed_files")),
+        )
+        if dispatch.get("handoff_writer") is not handoff_writer:
+            errors.append("handoff_writer")
+        _validate_handoff_file_boundary(
+            task_dir,
+            repo_root,
+            _string_list(dispatch.get("allowed_files")),
+            handoff_writer,
+        )
         _validate_work_package(
             task,
             str(dispatch.get("role") or ""),
             dispatch.get("work_package"),
+            allow_task_handoff=handoff_writer,
         )
     except DispatchError as exc:
         errors.append(exc.code)
@@ -562,7 +591,8 @@ def prepare_dispatch_for_agent(
 
 def build_canonical_prompt(dispatch: dict[str, Any]) -> str:
     refs = _string_list(dispatch.get("refs"))
-    constraints = dispatch.get("constraints") if isinstance(dispatch.get("constraints"), dict) else {}
+    raw_constraints = dispatch.get("constraints")
+    constraints: dict[str, Any] = raw_constraints if isinstance(raw_constraints, dict) else {}
     verification_level = constraints.get("validation_level", "targeted")
     excluded_platforms = _string_list(constraints.get("excluded_platforms"))
     excluded_paths = _string_list(constraints.get("excluded_paths"))
@@ -587,6 +617,10 @@ def build_canonical_prompt(dispatch: dict[str, Any]) -> str:
     ]
     if dispatch.get("blind_review"):
         lines.append("Blind review: do not read coder/runner explanations or worker result prose; judge current artifacts and ledgers only.")
+    if dispatch.get("handoff_writer"):
+        lines.append(
+            "Handoff writer: run closure.py handoff for this task. Do not edit task state or other files; report HANDOFF.md as the only changed file."
+        )
     body = "\n".join(lines)
     _check_sensitive_text(body, "dispatch body")
     if ABSOLUTE_USER_PATH_RE.search(body):
@@ -632,6 +666,8 @@ def accept_result_text(
             raise DispatchError("state_confirmation_failed", "cannot reload task state")
         validate_dispatch(task_dir, current, dispatch, repo_root)
         sanitized = _sanitized_result(dispatch, result, raw_text)
+        if dispatch.get("handoff_writer") and sanitized["status"] == "success":
+            handoff_path(task_dir)
         dispatch["status"] = "result_returned"
         dispatch["result_returned_at"] = now_utc()
         _write_task_runtime_json(task_dir, dispatch_path(task_dir, job_id), dispatch)
@@ -641,6 +677,13 @@ def accept_result_text(
         _apply_result_state(updated_task, dispatch, sanitized)
         try:
             save_task(task_dir, updated_task, lock_held=True)
+            if dispatch.get("handoff_writer") and sanitized["status"] == "success":
+                dispatch["status"] = "confirmed"
+                dispatch["confirmed_revision"] = _task_revision(updated_task)
+                dispatch["confirmed_at"] = now_utc()
+                dispatch["result_sha256"] = sanitized["audit"]["result_sha256"]
+                _write_task_runtime_json(task_dir, dispatch_path(task_dir, job_id), dispatch)
+                write_handoff(task_dir, updated_task, repo_root)
             _append_worker_result(task_dir, dispatch, sanitized)
         except (ClosureError, DispatchError, OSError) as exc:
             raise DispatchError("state_confirmation_failed", "result was stored but state confirmation failed") from exc
@@ -1678,10 +1721,47 @@ def _mark_dispatch_terminal(
     )
 
 
-def _validate_work_package(task: dict[str, Any], role: str, work_package: Any) -> None:
+def _is_handoff_writer(
+    task_dir: Path,
+    repo_root: Path,
+    role: str,
+    profile: str,
+    work_package: Any,
+    allowed_files: list[str],
+) -> bool:
+    expected = f"{_repo_relative(task_dir, repo_root)}/HANDOFF.md"
+    return (
+        role == "coder"
+        and profile == "configuration"
+        and _normalize_optional_text(work_package) is None
+        and allowed_files == [expected]
+    )
+
+
+def _validate_handoff_file_boundary(
+    task_dir: Path,
+    repo_root: Path,
+    allowed_files: list[str],
+    handoff_writer: bool,
+) -> None:
+    expected = f"{_repo_relative(task_dir, repo_root)}/HANDOFF.md"
+    if any(_path_matches(expected, pattern) for pattern in allowed_files) and not handoff_writer:
+        raise DispatchError(
+            "handoff_path_reserved",
+            "HANDOFF.md is reserved for the dedicated coder:configuration handoff dispatch",
+        )
+
+
+def _validate_work_package(
+    task: dict[str, Any],
+    role: str,
+    work_package: Any,
+    *,
+    allow_task_handoff: bool = False,
+) -> None:
     current = task.get("current_work_package")
     normalized = _normalize_optional_text(work_package)
-    if role in EXECUTION_ROLES:
+    if role in EXECUTION_ROLES and not allow_task_handoff:
         if not normalized:
             raise DispatchError("missing_work_package", f"{role} dispatch requires work_package")
         if normalized != current:

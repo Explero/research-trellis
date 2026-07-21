@@ -39,6 +39,18 @@ python3 ./.trellis/scripts/task.py finish
 python3 ./.trellis/scripts/task.py archive "$TASK" --no-commit
 ```
 
+平台命令入口：
+
+| 入口 | 用途 | 任务状态影响 |
+| --- | --- | --- |
+| `continue`（继续） | 恢复活动任务 | 无直接写入 |
+| `status`（状态） | 显示阶段、工作包、阻塞和下一动作 | 只读 |
+| `handoff`（交接） | 派发受限子代理写入 `HANDOFF.md`（交接摘要） | 只更新交接文件 |
+| `finish-work`（收尾） | 审计、关闭并归档满足条件的任务 | 可能归档 |
+| `start`（启动） | 兼容无自动启动钩子的环境 | 无直接写入 |
+
+平台决定命令前缀。`Claude Code`（Claude 代码工具）等原生命令平台使用斜杠命令；`Codex`（代码代理平台）使用同名技能入口。`status`（状态）不会运行修复、关闭或归档；`handoff`（交接）不会完成或关闭任务。
+
 Closure 命令：
 
 ```bash
@@ -55,7 +67,7 @@ python3 ./.trellis/scripts/closure.py package-block --task "$TASK" --reason "阻
 python3 ./.trellis/scripts/closure.py amend --task "$TASK" --field <field> --value <value> --reason <reason>
 python3 ./.trellis/scripts/closure.py audit --task "$TASK"
 python3 ./.trellis/scripts/closure.py repair --task "$TASK"
-python3 ./.trellis/scripts/closure.py handoff --task "$TASK"
+python3 ./.trellis/scripts/closure.py handoff --task "$TASK"  # 仅交接子代理执行
 python3 ./.trellis/scripts/closure.py close --task "$TASK"
 ```
 

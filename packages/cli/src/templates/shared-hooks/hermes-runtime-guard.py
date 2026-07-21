@@ -756,7 +756,7 @@ def is_main_control_bash(command: str) -> bool:
         },
         ".trellis/scripts/closure.py": {
             "status", "next", "capsule", "validate", "package-start", "package-check",
-            "package-done", "package-block", "audit", "repair", "amend", "handoff", "close",
+            "package-done", "package-block", "audit", "repair", "amend", "close",
         },
         ".trellis/scripts/task.py": {"current", "archive", "finish"},
     }
@@ -963,6 +963,9 @@ def extract_bash_targets(root: Path, command: str) -> tuple[list[str], str | Non
         tokens = shlex.split(command, posix=True)
     except ValueError as exc:
         return [], f"cannot safely parse Bash write targets: {exc}"
+
+    if any(command_basename(token) == "ln" for token in tokens):
+        return [], "link creation is not allowed for Hermes dispatches"
 
     targets: list[str] = []
     redirect_tokens = {">", ">>", "1>", "1>>", "2>", "2>>", "&>", "&>>", ">|"}

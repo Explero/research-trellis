@@ -18,6 +18,7 @@ from common.closure import (
     block_package,
     build_capsule,
     check_package,
+    closure_next_action,
     close_task,
     complete_package,
     format_audit_yaml,
@@ -209,7 +210,7 @@ def main(argv: list[str] | None = None) -> int:
                 print(build_capsule(task_dir, data, repo_root))
             return 0
         if args.command == "next":
-            print(data.get("next_action") or "Run closure.py plan or validate.")
+            print(closure_next_action(data))
             return 0
         if args.command == "capsule":
             print(build_capsule(task_dir, data, repo_root))
@@ -305,7 +306,7 @@ def _status_record(data: dict[str, Any]) -> dict[str, Any]:
         "closure_state": data.get("closure_state"),
         "closure_mode": data.get("closure_mode"),
         "current_work_package": current_package,
-        "next_action": data.get("next_action"),
+        "next_action": closure_next_action(data),
         "blockers": data.get("blockers") or [],
         "repair_count": data.get("repair_count", 0),
         "max_repair_count": data.get("max_repair_count", 1),

@@ -1,5 +1,10 @@
 # Update Code-Spec - Capture Executable Contracts
 
+In a Hermes closure task, the main agent may identify that this process is
+needed, but it must delegate every file update through a validated
+`coder:configuration` dispatch. The main agent only checks the returned
+result and does not edit a spec directly.
+
 When you learn something valuable (from debugging, implementing, or discussion), use this to update the relevant code-spec documents.
 
 **Timing**: After completing a task, fixing a bug, or discovering a new pattern
