@@ -1299,6 +1299,21 @@ def _parent_job_card_errors(
         return [
             f"line {entry.line_number}: reviewer task_card requires parent_job_id unless profile is closure or safety"
         ]
+    if role == "runner" and profile in {"test", "build"} and parent_job_id is None:
+        return [
+            f"line {entry.line_number}: runner {profile} task_card requires parent_job_id"
+        ]
+    if role == "runner" and profile == "validation" and parent_job_id is None:
+        has_coder = any(
+            len(entries) == 1
+            and entries[0].value.get("role") == "coder"
+            and entries[0].value.get("work_package") == card.get("work_package")
+            for entries in task_cards.values()
+        )
+        if has_coder:
+            return [
+                f"line {entry.line_number}: runner validation task_card requires parent_job_id when checking coder work"
+            ]
     if parent_job_id is None:
         return []
     if parent_job_id == job_id:

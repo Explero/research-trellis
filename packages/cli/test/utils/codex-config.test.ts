@@ -5,6 +5,8 @@ import {
   CODEX_CONFIG_BLOCK_START,
   CODEX_MODEL_BLOCK_END,
   CODEX_MODEL_BLOCK_START,
+  CODEX_TABLES_BLOCK_END,
+  CODEX_TABLES_BLOCK_START,
   isTrellisCodexConfigMerge,
   mergeTrellisCodexConfig,
   stripTrellisCodexConfig,
@@ -17,7 +19,9 @@ function withoutMarkers(content: string): string {
     .replace(`${CODEX_CONFIG_BLOCK_START}\n`, "")
     .replace(`\n${CODEX_CONFIG_BLOCK_END}`, "")
     .replace(`${CODEX_MODEL_BLOCK_START}\n`, "")
-    .replace(`\n${CODEX_MODEL_BLOCK_END}`, "");
+    .replace(`\n${CODEX_MODEL_BLOCK_END}`, "")
+    .replace(`${CODEX_TABLES_BLOCK_START}\n`, "")
+    .replace(`\n${CODEX_TABLES_BLOCK_END}`, "");
 }
 
 describe("mergeTrellisCodexConfig", () => {
@@ -63,7 +67,7 @@ keep = true
     expect(isTrellisCodexConfigMerge(legacy, migrated.content)).toBe(true);
   });
 
-  it("leaves an unmarked user model untouched", () => {
+  it("installs managed settings around an unmarked user config without replacing its model", () => {
     const existing = `model = "my-project-model"
 model_reasoning_effort = "low"
 
@@ -71,11 +75,16 @@ model_reasoning_effort = "low"
 name = "example"
 `;
 
-    expect(mergeTrellisCodexConfig(existing, TEMPLATE)).toEqual({
-      content: existing,
-      changed: false,
-      migratedLegacyDefaults: false,
-    });
+    const merged = mergeTrellisCodexConfig(existing, TEMPLATE);
+    expect(merged.changed).toBe(true);
+    expect(merged.migratedLegacyDefaults).toBe(false);
+    expect(merged.content).toContain('model = "my-project-model"');
+    expect(merged.content).toContain('model_reasoning_effort = "low"');
+    expect(merged.content).not.toContain('model = "gpt-5.6-sol"');
+    expect(merged.content).toContain(CODEX_CONFIG_BLOCK_START);
+    expect(merged.content).toContain(CODEX_TABLES_BLOCK_START);
+    expect(merged.content).toContain("[project]\nname = \"example\"");
+    expect(isTrellisCodexConfigMerge(existing, merged.content)).toBe(true);
   });
 
   it("does not alter malformed marker blocks", () => {
@@ -84,6 +93,18 @@ model = "my-project-model"
 `;
 
     expect(mergeTrellisCodexConfig(existing, TEMPLATE).content).toBe(existing);
+  });
+
+  it("does not duplicate a user-owned Codex table when adding managed settings", () => {
+    const existing = `[features.multi_agent_v2]
+enabled = false
+max_concurrent_threads_per_session = 1
+`;
+    const merged = mergeTrellisCodexConfig(existing, TEMPLATE).content;
+
+    expect(merged.match(/\[features\.multi_agent_v2\]/g)).toHaveLength(1);
+    expect(merged).toContain("enabled = false");
+    expect(merged).toContain("[hermes.context_firewall]");
   });
 });
 

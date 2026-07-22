@@ -299,7 +299,11 @@ describe("Agent Context Firewall dispatch CLI", () => {
     fs.writeFileSync(path.join(taskDir, "evidence.md"), "Evidence\n");
 
     expect(create("job-project-coder", "coder").status).toBe(0);
-    expect(create("job-project-runner", "runner").status).toBe(0);
+    expect(
+      create("job-project-runner", "runner", [
+        "--parent-job-id", "job-project-coder",
+      ]).status,
+    ).toBe(0);
     expect(
       create("job-project-review", "reviewer", [
         "--profile", "evidence",
@@ -359,6 +363,36 @@ describe("Agent Context Firewall dispatch CLI", () => {
     ) as Record<string, unknown>;
     expect(review.work_package).toBeNull();
     expect(review.blind_review).toBe(true);
+  });
+
+  it("restricts non-coder writes to role-owned task record directories", () => {
+    const sourceWrite = create("job-review-source-write", "reviewer", [
+      "--profile", "closure",
+      "--allowed-file", "src/**",
+    ]);
+    expect(sourceWrite.status).toBe(1);
+    expect(sourceWrite.stderr).toContain("role_write_scope");
+
+    const reviewRecord = create("job-review-record", "reviewer", [
+      "--profile", "closure",
+      "--allowed-file", ".trellis/tasks/demo/hermes/reviews/**",
+    ]);
+    expect(reviewRecord.status, reviewRecord.stderr).toBe(0);
+  });
+
+  it("requires a runner checking coder work to bind the coder job", () => {
+    expect(create("job-parent-coder", "coder").status).toBe(0);
+    const unbound = create("job-unbound-runner", "runner", [
+      "--profile", "validation",
+    ]);
+    expect(unbound.status).toBe(1);
+    expect(unbound.stderr).toContain("missing_parent_job");
+
+    const bound = create("job-bound-runner", "runner", [
+      "--profile", "validation",
+      "--parent-job-id", "job-parent-coder",
+    ]);
+    expect(bound.status, bound.stderr).toBe(0);
   });
 
   it("rejects missing jobs, stale revisions, and execution without the current package", () => {

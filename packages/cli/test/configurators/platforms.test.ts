@@ -356,6 +356,24 @@ describe("configurePlatform", () => {
     expect(written).toContain("max_concurrent_threads_per_session = 3");
   });
 
+  it("configurePlatform('codex') adds managed settings to an unmarked user config", async () => {
+    const configPath = path.join(tmpDir, ".codex", "config.toml");
+    fs.mkdirSync(path.dirname(configPath), { recursive: true });
+    fs.writeFileSync(
+      configPath,
+      'model = "user-model"\n\n[project]\nname = "kept"\n',
+    );
+
+    await configurePlatform("codex", tmpDir);
+
+    const written = fs.readFileSync(configPath, "utf-8");
+    expect(written).toContain('model = "user-model"');
+    expect(written).toContain('[project]\nname = "kept"');
+    expect(written).toContain("# TRELLIS:CODEX_CONFIG:START");
+    expect(written).toContain("# TRELLIS:CODEX_TABLES:START");
+    expect(written).not.toContain('model = "gpt-5.6-sol"');
+  });
+
   it("configurePlatform('codex') resolves PYTHON_CMD in hooks.json", async () => {
     await configurePlatform("codex", tmpDir);
 

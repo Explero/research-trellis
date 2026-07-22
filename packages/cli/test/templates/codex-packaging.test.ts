@@ -46,5 +46,6 @@ describe("codex template packaging", () => {
     );
     expect(copied).toContain("# TRELLIS:CODEX_CONFIG:START");
     expect(copied).toContain("# TRELLIS:CODEX_MODEL_DEFAULTS:END");
+    expect(copied).toContain("# TRELLIS:CODEX_TABLES:END");
   });
 });

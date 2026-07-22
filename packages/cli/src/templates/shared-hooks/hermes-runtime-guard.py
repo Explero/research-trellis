@@ -645,6 +645,23 @@ def declared_worker_role(data: dict[str, Any]) -> str | None:
         "trellis_implement": "coder",
         "runner": "runner",
         "hermes_runner": "runner",
+        "planner": "planner",
+        "hermes_planner": "planner",
+        "scientist": "planner",
+        "hermes_scientist": "planner",
+        "researcher": "researcher",
+        "hermes_researcher": "researcher",
+        "research_scout": "researcher",
+        "trellis_research": "researcher",
+        "reviewer": "reviewer",
+        "hermes_reviewer": "reviewer",
+        "claim_reviewer": "reviewer",
+        "trellis_check": "reviewer",
+        "trellis_spec_review": "reviewer",
+        "trellis_code_review": "reviewer",
+        "trellis_code_architecture_review": "reviewer",
+        "trellis_merge_review": "reviewer",
+        "trellis_improve_codebase_architecture": "reviewer",
     }
     for value in agent_identity_values(data):
         normalized = normalized_agent_identity(value)
@@ -1162,6 +1179,21 @@ def guard_tool_input_permissions(
 
     records = read_worker_records(worker_records)
     job_id = extract_job_id_from_tool_input(tool_input)
+    agent_id = data.get("agent_id")
+    if job_id is None and isinstance(agent_id, str) and agent_id:
+        scripts_dir = root / ".trellis" / "scripts"
+        if str(scripts_dir) not in sys.path:
+            sys.path.insert(0, str(scripts_dir))
+        try:
+            from common.dispatch import load_dispatch_for_agent  # type: ignore[import-not-found]
+
+            bound_dispatch = load_dispatch_for_agent(
+                root / ".trellis" / "tasks" / task,
+                agent_id,
+            )
+            job_id = str(bound_dispatch.get("job_id") or "") or None
+        except Exception:
+            return "Hermes Runtime: write caller has no valid dispatch binding."
     if job_id is None:
         candidates = unresolved_task_card_job_ids(records)
         if len(candidates) == 1:
@@ -1171,6 +1203,39 @@ def guard_tool_input_permissions(
             "Hermes Runtime: cannot check current write because tool_input "
             "does not include job_id and there is no unique active task_card."
         )
+
+    cards = task_cards_by_job(records, root)
+    card = cards.get(job_id)
+    if card is None:
+        return f"Hermes Runtime: task_card for {job_id} is missing or invalid."
+    role = str(card.get("role") or "")
+    declared_role = declared_worker_role(data)
+    if declared_role is not None and declared_role != role:
+        return (
+            f"Hermes Runtime: declared {declared_role} role does not match "
+            f"task_card role {role or 'unknown'}."
+        )
+    role_roots = {
+        "planner": [f".trellis/tasks/{task}/hermes/analysis"],
+        "researcher": [
+            f".trellis/tasks/{task}/research",
+            f".trellis/tasks/{task}/hermes/research",
+        ],
+        "reviewer": [f".trellis/tasks/{task}/hermes/reviews"],
+        "runner": [],
+    }
+    if role != "coder":
+        roots = role_roots.get(role, [])
+        invalid_targets = [
+            target
+            for target in target_files
+            if not any(target == item or target.startswith(item + "/") for item in roots)
+        ]
+        if invalid_targets:
+            return (
+                f"Hermes Runtime: {role or 'unknown'} cannot write implementation files; "
+                "use the role's task-scoped record directory or delegate to coder."
+            )
 
     guard = run_runtime(
         root,

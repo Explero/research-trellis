@@ -377,7 +377,9 @@ describe("update() integration", () => {
       .replace("# TRELLIS:CODEX_CONFIG:START\n", "")
       .replace("\n# TRELLIS:CODEX_CONFIG:END", "")
       .replace("# TRELLIS:CODEX_MODEL_DEFAULTS:START\n", "")
-      .replace("\n# TRELLIS:CODEX_MODEL_DEFAULTS:END", "");
+      .replace("\n# TRELLIS:CODEX_MODEL_DEFAULTS:END", "")
+      .replace("# TRELLIS:CODEX_TABLES:START\n", "")
+      .replace("\n# TRELLIS:CODEX_TABLES:END", "");
     fs.writeFileSync(configPath, legacy);
 
     await update({});

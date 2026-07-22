@@ -67,7 +67,7 @@ trust_level = "trusted"
 
 重启 `Codex`（代码代理）后运行 `/hooks`（钩子审阅），逐项检查并批准 `.codex/hooks.json`（Codex 钩子配置）中的工作流注入和 `Hermes`（科研工作流）门禁。旧版 `Codex`（代码代理）使用 `codex_hooks = true`（旧钩子开关）。项目未信任、功能开关未开、未经 `/hooks`（钩子审阅）批准，或设置 `TRELLIS_HOOKS=0`（关闭钩子）、`TRELLIS_DISABLE_HOOKS=1`（禁用钩子）时，注入和门禁都不生效。
 
-项目模板为 `Codex 0.144.0`（代码代理 0.144.0 版）及以上版本设置默认模型：主代理以及 `planner/researcher/reviewer`（规划、检索和复核代理）使用 `gpt-5.6-sol`（推理模型）和 `high`（高推理强度），`coder/runner`（编码和运行代理）使用 `gpt-5.6-terra`（执行模型）和 `max`（最大推理强度）。初始化和更新只维护带 Trellis 标记的配置块；用户自行选择的项目模型会保留，卸载时也不会被当成 Trellis 默认值删除。旧版 `Codex`（代码代理）只显示兼容警告，不阻止初始化。
+项目模板为 `Codex 0.144.0`（代码代理 0.144.0 版）及以上版本设置默认模型：主代理以及 `planner/researcher/reviewer`（规划、检索和复核代理）使用 `gpt-5.6-sol`（推理模型）和 `high`（高推理强度），`coder/runner`（编码和运行代理）使用 `gpt-5.6-terra`（执行模型）和 `max`（最大推理强度）。初始化和更新只维护两个带 Trellis 标记的配置块，分别保存顶层默认值和平台表配置；未标记的用户配置会原样保留并与受管块合并，用户自行选择的项目模型在更新和卸载时都不会被当成 Trellis 默认值删除。旧版 `Codex`（代码代理）只显示兼容警告，不阻止初始化。
 
 `codex.dispatch_mode: inline`（Codex 主会话路由）是显式兼容模式，只改变普通 Trellis 提示路由，不会绕过已启用的 Hermes 写入和结束门禁，也不会提供操作系统隔离。
 

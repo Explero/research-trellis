@@ -2,6 +2,8 @@ export const CODEX_CONFIG_BLOCK_START = "# TRELLIS:CODEX_CONFIG:START";
 export const CODEX_CONFIG_BLOCK_END = "# TRELLIS:CODEX_CONFIG:END";
 export const CODEX_MODEL_BLOCK_START = "# TRELLIS:CODEX_MODEL_DEFAULTS:START";
 export const CODEX_MODEL_BLOCK_END = "# TRELLIS:CODEX_MODEL_DEFAULTS:END";
+export const CODEX_TABLES_BLOCK_START = "# TRELLIS:CODEX_TABLES:START";
+export const CODEX_TABLES_BLOCK_END = "# TRELLIS:CODEX_TABLES:END";
 
 const LEGACY_MODEL_LINE = /^\s*model\s*=\s*"gpt-5\.6-sol"\s*$/;
 const LEGACY_REASONING_LINE = /^\s*model_reasoning_effort\s*=\s*"high"\s*$/;
@@ -54,6 +56,8 @@ function hasAnyTrellisMarker(content: string): boolean {
     CODEX_CONFIG_BLOCK_END,
     CODEX_MODEL_BLOCK_START,
     CODEX_MODEL_BLOCK_END,
+    CODEX_TABLES_BLOCK_START,
+    CODEX_TABLES_BLOCK_END,
   ].some((marker) => content.includes(marker));
 }
 
@@ -202,7 +206,139 @@ function mergeWholeConfigBlock(
     nextBlock = preserveCustomModelBlock(nextBlock, existingBlock);
   }
 
+  const legacyWholeBlock = existingBlock
+    .split(/\r?\n/)
+    .some((line) => TABLE_HEADER.test(line));
+  const tables = markerRange(
+    template,
+    CODEX_TABLES_BLOCK_START,
+    CODEX_TABLES_BLOCK_END,
+  );
+  if (legacyWholeBlock && tables) {
+    nextBlock += `\n\n${template.slice(tables.start, tables.end)}`;
+  }
   return replaceRange(existing, current, nextBlock);
+}
+
+function mergeTablesBlock(existing: string, template: string): string {
+  const current = markerRange(
+    existing,
+    CODEX_TABLES_BLOCK_START,
+    CODEX_TABLES_BLOCK_END,
+  );
+  const replacement = markerRange(
+    template,
+    CODEX_TABLES_BLOCK_START,
+    CODEX_TABLES_BLOCK_END,
+  );
+  if (!current || !replacement) return existing;
+  return replaceRange(
+    existing,
+    current,
+    managedTablesForExisting(template, existing),
+  );
+}
+
+function tableHeaders(content: string): Set<string> {
+  return new Set(
+    content
+      .split(/\r?\n/)
+      .filter((line) => TABLE_HEADER.test(line))
+      .map((line) => line.trim()),
+  );
+}
+
+function managedTablesForExisting(template: string, existing: string): string {
+  const templateRange = markerRange(
+    template,
+    CODEX_TABLES_BLOCK_START,
+    CODEX_TABLES_BLOCK_END,
+  );
+  if (!templateRange) return "";
+  const currentRange = markerRange(
+    existing,
+    CODEX_TABLES_BLOCK_START,
+    CODEX_TABLES_BLOCK_END,
+  );
+  const external = currentRange
+    ? replaceRange(existing, currentRange, "")
+    : existing;
+  const existingHeaders = tableHeaders(external);
+  if (existingHeaders.size === 0) {
+    return template.slice(templateRange.start, templateRange.end);
+  }
+
+  const lines = template
+    .slice(templateRange.start, templateRange.end)
+    .split(/\r?\n/);
+  const sections: string[][] = [];
+  for (let index = 0; index < lines.length; index += 1) {
+    if (!TABLE_HEADER.test(lines[index])) continue;
+    let end = index + 1;
+    while (
+      end < lines.length &&
+      !TABLE_HEADER.test(lines[end]) &&
+      lines[end] !== CODEX_TABLES_BLOCK_END
+    ) {
+      end += 1;
+    }
+    if (!existingHeaders.has(lines[index].trim())) {
+      sections.push(lines.slice(index, end));
+    }
+    index = end - 1;
+  }
+  return [
+    CODEX_TABLES_BLOCK_START,
+    ...sections.flat(),
+    CODEX_TABLES_BLOCK_END,
+  ].join("\n");
+}
+
+function firstTableLine(lines: string[]): number {
+  const index = lines.findIndex((line) => TABLE_HEADER.test(line));
+  return index < 0 ? lines.length : index;
+}
+
+function withoutProjectDocDefault(block: string): string {
+  return block
+    .split(/\r?\n/)
+    .filter((line) => !/^\s*project_doc_fallback_filenames\s*=/.test(line))
+    .join("\n");
+}
+
+function mergeUnmarkedConfig(
+  existing: string,
+  template: string,
+): string | null {
+  const topRange = markerRange(
+    template,
+    CODEX_CONFIG_BLOCK_START,
+    CODEX_CONFIG_BLOCK_END,
+  );
+  const tablesRange = markerRange(
+    template,
+    CODEX_TABLES_BLOCK_START,
+    CODEX_TABLES_BLOCK_END,
+  );
+  if (!topRange || !tablesRange) return null;
+
+  const lines = existing.split(/\r?\n/);
+  const tableAt = firstTableLine(lines);
+  const userTop = lines.slice(0, tableAt).join("\n").trim();
+  const userTables = lines.slice(tableAt).join("\n").trim();
+  let managedTop = template.slice(topRange.start, topRange.end);
+  if (topLevelModelAssignments(userTop).length > 0) {
+    managedTop = removeModelBlock(managedTop);
+  }
+  if (/^\s*project_doc_fallback_filenames\s*=/m.test(userTop)) {
+    managedTop = withoutProjectDocDefault(managedTop);
+  }
+  const managedTables = managedTablesForExisting(template, existing);
+  return (
+    [userTop, managedTop.trim(), userTables, managedTables.trim()]
+      .filter(Boolean)
+      .join("\n\n") + "\n"
+  );
 }
 
 function mergeModelDefaultsBlock(
@@ -245,9 +381,10 @@ export function mergeTrellisCodexConfig(
 ): CodexConfigMergeResult {
   const wholeBlock = mergeWholeConfigBlock(existing, template);
   if (wholeBlock !== null) {
+    const merged = mergeTablesBlock(wholeBlock, template);
     return {
-      content: wholeBlock,
-      changed: wholeBlock !== existing,
+      content: merged,
+      changed: merged !== existing,
       migratedLegacyDefaults: false,
     };
   }
@@ -273,8 +410,12 @@ export function mergeTrellisCodexConfig(
       migratedLegacyDefaults: true,
     };
   }
-
-  return { content: existing, changed: false, migratedLegacyDefaults: false };
+  const merged = mergeUnmarkedConfig(existing, template);
+  return {
+    content: merged ?? existing,
+    changed: merged !== null && merged !== existing,
+    migratedLegacyDefaults: false,
+  };
 }
 
 export function isLegacyCodexDefaultMigration(
@@ -290,25 +431,10 @@ export function isTrellisCodexConfigMerge(
   existing: string,
   candidate: string,
 ): boolean {
-  const blockKinds = [
-    [CODEX_CONFIG_BLOCK_START, CODEX_CONFIG_BLOCK_END],
-    [CODEX_MODEL_BLOCK_START, CODEX_MODEL_BLOCK_END],
-  ] as const;
-
-  for (const [startMarker, endMarker] of blockKinds) {
-    const current = markerRange(existing, startMarker, endMarker);
-    const replacement = markerRange(candidate, startMarker, endMarker);
-    if (!current || !replacement) continue;
-    if (
-      existing.slice(0, current.start) ===
-        candidate.slice(0, replacement.start) &&
-      existing.slice(current.end) === candidate.slice(replacement.end)
-    ) {
-      return true;
-    }
-  }
-
-  return isLegacyCodexDefaultMigration(existing, candidate);
+  return (
+    stripTrellisCodexConfig(existing) === stripTrellisCodexConfig(candidate) ||
+    isLegacyCodexDefaultMigration(existing, candidate)
+  );
 }
 
 function removeLegacyDefaultLines(content: string): string {
@@ -360,6 +486,15 @@ export function stripTrellisCodexConfig(content: string): string {
         ),
       );
     }
+  }
+
+  const tablesBlock = markerRange(
+    result,
+    CODEX_TABLES_BLOCK_START,
+    CODEX_TABLES_BLOCK_END,
+  );
+  if (tablesBlock) {
+    result = replaceRange(result, tablesBlock, "");
   }
 
   result = removeLegacyDefaultLines(result);

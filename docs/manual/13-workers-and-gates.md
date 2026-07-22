@@ -81,7 +81,7 @@ profile: evidence
 
 ### 派发与结果防火墙
 
-1. 每次派发先创建 dispatch（派发）。命令会绑定当前 `hermes_revision`（Hermes 修订号），并同时写入兼容的 `task_card`（任务卡）。`coder`（编码代理）和 `runner`（运行代理）必须绑定当前工作包。`reviewer:quality/evidence/claim/statistics`（质量、证据、主张或统计复核）还必须用 `parent_job_id`（父工作编号）绑定被审查的具体工作；`reviewer:closure/safety`（关闭或独立安全复核）可以保持任务级。
+1. 每次派发先创建 dispatch（派发）。命令会绑定当前 `hermes_revision`（Hermes 修订号），并同时写入兼容的 `task_card`（任务卡）。`coder`（编码代理）和 `runner`（运行代理）必须绑定当前工作包。测试、构建或代码验证 runner 必须用 `parent_job_id`（父工作编号）绑定被检查的 coder；独立实验 runner 可以不绑定。`reviewer:quality/evidence/claim/statistics`（质量、证据、主张或统计复核）也必须绑定被审查的具体工作；`reviewer:closure/safety`（关闭或独立安全复核）可以保持任务级。
 
 ```bash
 JOB="job-$(date -u +%Y%m%d-%H%M%S)-coder"
@@ -123,6 +123,7 @@ python3 ./.trellis/scripts/hermes/jobs.py resume --task "$TASK" --job-id "$JOB"
 
 - 同一工作树不能同时存在多个未结束的 `coder`（编码代理）或 `runner`（运行代理）；
 - 结果中的改动文件必须落在任务卡允许范围内，且不能命中禁止范围；
+- `coder`（编码代理）可以按任务卡修改实现文件；规划、检索和复核角色只能写当前任务下各自的分析、研究或审查记录目录；`runner`（运行代理）不能通过编辑工具修改文件；
 - 配置了心跳间隔的结果需要已有检查点；
 - `runner`（运行代理）成功只接受已有 `run_refs`（运行引用），不能把成功输出写成证据；
 - `reviewer:evidence/claim`（证据或主张复核）只能提出判断，不能批准事实或人工记录；需要独立复核的记录必须显式绑定被审工作，旧记录只在同一工作包只有一个候选时兼容；

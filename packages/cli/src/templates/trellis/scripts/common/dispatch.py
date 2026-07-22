@@ -225,6 +225,7 @@ def create_dispatch(
         allowed_files,
     )
     _validate_handoff_file_boundary(task_dir, repo_root, allowed_files, handoff_writer)
+    _validate_role_write_scope(task_dir, repo_root, role, allowed_files)
     _validate_work_package(task, role, work_package, allow_task_handoff=handoff_writer)
     refs = _normalize_refs(
         task_dir,
@@ -1469,6 +1470,34 @@ def _validate_handoff_file_boundary(
         )
 
 
+def _validate_role_write_scope(
+    task_dir: Path,
+    repo_root: Path,
+    role: str,
+    allowed_files: list[str],
+) -> None:
+    if role == "coder" or not allowed_files:
+        return
+    task_ref = _repo_relative(task_dir, repo_root)
+    roots = {
+        "planner": [f"{task_ref}/hermes/analysis"],
+        "researcher": [f"{task_ref}/research", f"{task_ref}/hermes/research"],
+        "reviewer": [f"{task_ref}/hermes/reviews"],
+        "runner": [],
+    }.get(role, [])
+    invalid = [
+        pattern
+        for pattern in allowed_files
+        if not any(pattern == root or pattern.startswith(root + "/") for root in roots)
+    ]
+    if invalid:
+        raise DispatchError(
+            "role_write_scope",
+            f"{role} allowed_files may only target its task-scoped record directory",
+            invalid,
+        )
+
+
 def _validate_parent_job(
     task_dir: Path,
     task: dict[str, Any],
@@ -1482,11 +1511,28 @@ def _validate_parent_job(
 ) -> None:
     """Bind formal review work to one existing job in the same package."""
     requires_parent = role == "reviewer" and profile not in INDEPENDENT_REVIEWER_PROFILES
+    if role == "runner" and profile in {"test", "build"}:
+        requires_parent = True
+    if role == "runner" and profile == "validation" and parent_job_id is None:
+        dispatch_dir = task_dir / "hermes" / "dispatches"
+        for candidate_path in dispatch_dir.glob("*.dispatch.json"):
+            try:
+                candidate = json.loads(candidate_path.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError):
+                continue
+            if (
+                isinstance(candidate, dict)
+                and candidate.get("role") == "coder"
+                and candidate.get("work_package") == work_package
+                and candidate.get("status") != "superseded"
+            ):
+                requires_parent = True
+                break
     if parent_job_id is None:
         if requires_parent:
             raise DispatchError(
                 "missing_parent_job",
-                "reviewer dispatch requires parent_job_id unless it is closure or safety review",
+                f"{role}:{profile} dispatch requires parent_job_id for the work being checked",
             )
         return
     _validate_job_id(parent_job_id)

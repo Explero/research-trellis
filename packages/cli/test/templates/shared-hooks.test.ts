@@ -2428,7 +2428,7 @@ describe.skipIf(!hasPython())("hermes runtime guard hook", () => {
     "trellis-code-architecture-review",
     "trellis-merge-review",
     "trellis-improve-codebase-architecture",
-  ])("treats %s as a non-main review gate subagent", (subagentType) => {
+  ])("keeps %s inside the reviewer write boundary", (subagentType) => {
     writeHermesWorkerRecords([
       taskCard("job-review", "reviewer"),
       heartbeat("job-review"),
@@ -2447,27 +2447,30 @@ describe.skipIf(!hasPython())("hermes runtime guard hook", () => {
 
     expect(result.status).toBe(0);
     const decision = parseDecision(result);
-    expect(decision.permissionDecision).not.toBe("deny");
-    expect(decision.additionalContext).toContain("Hermes Runtime");
+    expect(decision.permissionDecision).toBe("deny");
+    expect(decision.permissionDecisionReason).toContain(
+      "reviewer cannot write implementation files",
+    );
   });
 
-  it("treats common subagent identity fields as non-main requests", () => {
-    for (const identity of [
-      { subagent_type: "coder" },
-      { subagentType: "builder" },
-      { subagent: "runner" },
-      { agent_role: "hermes-coder" },
-      { agent_role: "hermes-scientist" },
-      { agent_role: "scientist" },
-      { agent_role: "claim-reviewer" },
-      { agent_role: "research/scout" },
-      { subagent_type: "trellis-implement" },
-      { subagent_type: "trellis-spec-review" },
-      { subagent_type: "trellis-code-architecture-review" },
-    ]) {
+  it("binds common subagent identity fields to their task-card role", () => {
+    const identities: [Record<string, string>, string][] = [
+      [{ subagent_type: "coder" }, "coder"],
+      [{ subagentType: "builder" }, "coder"],
+      [{ subagent: "runner" }, "runner"],
+      [{ agent_role: "hermes-coder" }, "coder"],
+      [{ agent_role: "hermes-scientist" }, "planner"],
+      [{ agent_role: "scientist" }, "planner"],
+      [{ agent_role: "claim-reviewer" }, "reviewer"],
+      [{ agent_role: "research/scout" }, "researcher"],
+      [{ subagent_type: "trellis-implement" }, "coder"],
+      [{ subagent_type: "trellis-spec-review" }, "reviewer"],
+      [{ subagent_type: "trellis-code-architecture-review" }, "reviewer"],
+    ];
+    for (const [identity, role] of identities) {
       writeHermesWorkerRecords([
-        taskCard("job-coder", "coder"),
-        heartbeat("job-coder"),
+        taskCard("job-role", role),
+        heartbeat("job-role"),
       ]);
 
       const result = runHermesRuntimeGuard(repoRoot, {
@@ -2483,9 +2486,36 @@ describe.skipIf(!hasPython())("hermes runtime guard hook", () => {
 
       expect(result.status).toBe(0);
       const decision = parseDecision(result);
-      expect(decision.permissionDecision).not.toBe("deny");
-      expect(decision.additionalContext).toContain("Hermes Runtime");
+      if (role === "coder") {
+        expect(decision.permissionDecision).not.toBe("deny");
+        expect(decision.additionalContext).toContain("Hermes Runtime");
+      } else {
+        expect(decision.permissionDecision).toBe("deny");
+        expect(decision.permissionDecisionReason).not.toContain(
+          "main agent firewall",
+        );
+      }
     }
+  });
+
+  it("allows reviewer records only inside the task review directory", () => {
+    writeHermesWorkerRecords([
+      taskCard("job-review", "reviewer", {
+        allowed_files: [`.trellis/tasks/${taskName}/hermes/reviews/**`],
+      }),
+      heartbeat("job-review"),
+    ]);
+    const result = runHermesRuntimeGuard(repoRoot, {
+      cwd: repoRoot,
+      hook_event_name: "PreToolUse",
+      agent_role: "reviewer",
+      tool_name: "Write",
+      tool_input: {
+        file_path: `.trellis/tasks/${taskName}/hermes/reviews/quality.md`,
+      },
+      session_id: "test-session",
+    });
+    expect(parseDecision(result).permissionDecision).not.toBe("deny");
   });
 
   it("denies main-agent writes without an active task while keeping read-only git allowed", () => {
