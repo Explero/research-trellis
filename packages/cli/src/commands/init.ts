@@ -638,7 +638,7 @@ function getBlankProjectBootstrapPrd(pythonCmd: string): string {
 
 ## 工作方式
 
-- 这是一次需要方案讨论的启动任务。先完成聚焦讨论，再记录 \`closure.py grill --complete\`。
+- 这是一次需要方案讨论的启动任务。先完成聚焦讨论，把 Decision、Rationale、Evidence、Alternatives 和 Failure Conditions 五项写入本任务的 \`prd.md\`，再记录 \`closure.py grill --complete --decision-ref prd.md\`。
 - 讨论完成后，创建一个新的普通任务；它应有明确的 \`intent\`（目标）、\`definition_of_done\`（完成定义）和 1–4 个以结果为单位的工作包。
 - 首个任务应验证一个最小结果，例如固定样例上的可重复输出、基线比较或数据读取链路；不要把“搭完整平台”作为首个任务。
 - 启动任务只负责建立项目合同和首个任务，不负责实现该任务。
@@ -653,7 +653,7 @@ function getBlankProjectBootstrapPrd(pythonCmd: string): string {
 ## 完成方式
 
 \`\`\`bash
-${pythonCmd} ./.trellis/scripts/closure.py grill --task 00-bootstrap-guidelines --complete
+${pythonCmd} ./.trellis/scripts/closure.py grill --task 00-bootstrap-guidelines --complete --decision-ref prd.md
 ${pythonCmd} ./.trellis/scripts/closure.py validate --task 00-bootstrap-guidelines
 ${pythonCmd} ./.trellis/scripts/closure.py package-start --task 00-bootstrap-guidelines --package-id WP1
 ${pythonCmd} ./.trellis/scripts/closure.py package-check --task 00-bootstrap-guidelines --package-id WP1

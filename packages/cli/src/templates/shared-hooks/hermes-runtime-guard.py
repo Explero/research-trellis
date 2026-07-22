@@ -9,7 +9,6 @@ from __future__ import annotations
 import json
 import os
 import re
-import shlex
 import subprocess
 import sys
 from fnmatch import fnmatchcase
@@ -63,106 +62,7 @@ SUBAGENT_IDENTITIES = {
     "hermes_claim_reviewer",
     "hermes_scientist",
 }
-INLINE_SCRIPT_FLAGS = {
-    "python": {"-c"},
-    "python3": {"-c"},
-    "node": {"-e", "--eval", "-p", "--print"},
-    "nodejs": {"-e", "--eval", "-p", "--print"},
-    "perl": {"-e"},
-    "ruby": {"-e"},
-}
-INLINE_SCRIPT_FLAG_PREFIXES = {
-    "node": ("--eval=", "--print="),
-    "nodejs": ("--eval=", "--print="),
-}
-INLINE_SCRIPT_SHORT_EVAL_FLAGS = {
-    "python": {"c"},
-    "python3": {"c"},
-    "node": {"e", "p"},
-    "nodejs": {"e", "p"},
-    "perl": {"e", "E"},
-    "ruby": {"e"},
-}
-INLINE_SCRIPT_SHORT_COMBO_FLAGS = {
-    "node": {"e", "p"},
-    "nodejs": {"e", "p"},
-    "perl": {"e", "E", "w"},
-    "ruby": {"e", "w"},
-}
-INLINE_FILE_API_MARKERS = (
-    "require('fs')",
-    'require("fs")',
-    "require('node:fs')",
-    'require("node:fs")',
-    "node:fs",
-    "from 'fs'",
-    'from "fs"',
-    "from 'node:fs'",
-    'from "node:fs"',
-    "from os import",
-    "import os",
-    "from shutil import",
-    "import shutil",
-    "from pathlib import",
-    "import pathlib",
-    "open(",
-    "Path(",
-    "write_text(",
-    "write_bytes(",
-    ".write(",
-    ".unlink(",
-    ".copyFile(",
-    ".rename(",
-    ".mkdir(",
-    "os.remove(",
-    "os.unlink(",
-    "os.rename(",
-    "os.mkdir(",
-    "os.makedirs(",
-    "shutil.copyfile(",
-    "shutil.copy(",
-    "shutil.move(",
-    "shutil.rmtree(",
-    "writeFile(",
-    "appendFile(",
-    "copyFile(",
-    "rename(",
-    "mkdir(",
-    "rm(",
-    "unlink(",
-    "unlink ",
-    "writeFileSync(",
-    "appendFileSync(",
-    "copyFileSync(",
-    "renameSync(",
-    "rename ",
-    "mkdirSync(",
-    "rmSync(",
-    "unlinkSync(",
-    "fs.rm(",
-    "fs.unlink(",
-    "fs.writeFile(",
-    "fs.appendFile(",
-    "fs.copyFile(",
-    "fs.rename(",
-    "fs.mkdir(",
-    "fs.promises.copyFile",
-    "fs.promises.rename",
-    "fs.promises.mkdir",
-    "FileUtils",
-    "FileUtils.cp(",
-    "FileUtils.copy(",
-    "FileUtils.mv(",
-    "FileUtils.mkdir(",
-    "FileUtils.mkdir_p(",
-    "FileUtils.rm(",
-    "FileUtils.rm_rf(",
-    "FileUtils.touch(",
-    "File.delete(",
-    "File.rename(",
-    "Dir.mkdir(",
-    "File::Copy",
-)
+BASH_EXECUTION_ROLES = {"coder", "runner"}
 
 
 def find_trellis_root(start: Path) -> Path | None:
@@ -513,299 +413,39 @@ def is_main_agent_request(data: dict[str, Any]) -> bool:
     return True
 
 
-def shell_tokens(command: str) -> list[str] | None:
-    try:
-        return shlex.split(command, posix=True)
-    except ValueError:
-        return None
+def is_main_bash_allowed(command: str) -> bool:
+    """Allow only simple coordinator inspection and Hermes control commands.
 
-
-def has_shell_control(command: str, tokens: list[str]) -> bool:
-    control_tokens = {
-        "|",
-        "||",
-        "&",
-        "&&",
-        "<",
-        ">",
-        ">>",
-        "1>",
-        "1>>",
-        "2>",
-        "2>>",
-        "&>",
-        "&>>",
-    }
-    if "\n" in command or ";" in command or "`" in command or "$(" in command:
-        return True
-    return any(
-        token in control_tokens
-        or token.startswith((">", ">>", "1>", "1>>", "2>", "2>>", "&>", "&>>", "<"))
-        for token in tokens
+    This is intentionally a small prefix check, not a shell parser. Hermes uses
+    role routing and task records for coordination; it does not try to infer
+    every effect of arbitrary scripts.
+    """
+    normalized = command.strip().replace("\\", "/")
+    # This is a coordinator convenience allowlist, not a shell-security
+    # parser. Compound or expanded commands are never control-plane commands.
+    if not normalized or any(marker in normalized for marker in (";", "&", "|", ">", "<", "`", "$", "\n")):
+        return False
+    prefixes = (
+        "git status",
+        "git diff",
+        "git log",
+        "cat .trellis/tasks/",
+        "cat .ai/records/",
+        "jq ",
+        "python ./.trellis/scripts/task.py ",
+        "python3 ./.trellis/scripts/task.py ",
+        "python .trellis/scripts/task.py ",
+        "python3 .trellis/scripts/task.py ",
+        "python ./.trellis/scripts/closure.py audit ",
+        "python3 ./.trellis/scripts/closure.py audit ",
+        "python .trellis/scripts/closure.py audit ",
+        "python3 .trellis/scripts/closure.py audit ",
+        "python ./.trellis/scripts/hermes/dispatch.py ",
+        "python3 ./.trellis/scripts/hermes/dispatch.py ",
+        "python .trellis/scripts/hermes/dispatch.py ",
+        "python3 .trellis/scripts/hermes/dispatch.py ",
     )
-
-
-def is_allowed_record_jsonl_path(raw_path: str) -> bool:
-    path = raw_path.strip().replace("\\", "/")
-    while path.startswith("./"):
-        path = path[2:]
-    if path.startswith("/") or ".." in path.split("/"):
-        return False
-    return (
-        re.fullmatch(r"\.trellis/tasks/[^/]+/hermes/[^/]+\.jsonl", path) is not None
-        or re.fullmatch(r"\.ai/records/[^/]+\.jsonl", path) is not None
-    )
-
-
-def is_safe_git_pathspec(raw_path: str) -> bool:
-    path = raw_path.strip().replace("\\", "/")
-    while path.startswith("./"):
-        path = path[2:]
-    if not path or path == "." or path.startswith("/") or path.startswith(":"):
-        return False
-    if any(char in path for char in "*?[]{}$~`()"):
-        return False
-    parts = path.split("/")
-    if any(part in {"", ".", ".."} for part in parts):
-        return False
-    for part in parts:
-        lower_part = part.lower()
-        if (
-            lower_part == "env"
-            or ".env" in lower_part
-            or lower_part.endswith(".env")
-        ):
-            return False
-    return True
-
-
-def split_git_options_and_paths(
-    args: list[str],
-    allowed_options: set[str],
-    required_options: set[str] | None = None,
-    *,
-    require_paths: bool = False,
-) -> tuple[set[str], list[str]] | None:
-    seen_separator = False
-    seen_options: set[str] = set()
-    paths: list[str] = []
-    for arg in args:
-        if seen_separator:
-            paths.append(arg)
-            continue
-        if arg == "--":
-            seen_separator = True
-            continue
-        if arg in allowed_options:
-            seen_options.add(arg)
-            continue
-        return None
-
-    if required_options is not None and not (seen_options & required_options):
-        return None
-    if require_paths and not paths:
-        return None
-    if any(not is_safe_git_pathspec(path) for path in paths):
-        return None
-    return seen_options, paths
-
-
-def is_readonly_git_command(tokens: list[str]) -> bool:
-    if len(tokens) < 2 or tokens[0] != "git":
-        return False
-    subcommand = tokens[1]
-    args = tokens[2:]
-    if subcommand == "status":
-        allowed_status_options = {
-            "--short",
-            "-s",
-            "-sb",
-            "--branch",
-            "-b",
-            "--porcelain",
-            "--porcelain=v1",
-            "--porcelain=v2",
-            "--show-stash",
-            "--ahead-behind",
-            "--no-ahead-behind",
-        }
-        short_status_options = {
-            "--short",
-            "-s",
-            "-sb",
-            "--porcelain",
-            "--porcelain=v1",
-            "--porcelain=v2",
-        }
-        return (
-            split_git_options_and_paths(
-                args,
-                allowed_status_options,
-                short_status_options,
-                require_paths=True,
-            )
-            is not None
-        )
-    if subcommand == "diff":
-        allowed_diff_options = {
-            "--name-only",
-            "--stat",
-            "--cached",
-            "--staged",
-            "--no-renames",
-        }
-        return (
-            split_git_options_and_paths(
-                args,
-                allowed_diff_options,
-                {"--name-only", "--stat"},
-                require_paths=True,
-            )
-            is not None
-        )
-    if subcommand == "log":
-        allowed_log_options = {"--oneline", "--stat"}
-        return (
-            split_git_options_and_paths(
-                args,
-                allowed_log_options,
-                {"--oneline", "--stat"},
-                require_paths=True,
-            )
-            is not None
-        )
-    return False
-
-
-def is_readonly_record_cat(tokens: list[str]) -> bool:
-    if not tokens or tokens[0] != "cat":
-        return False
-    operands = [token for token in tokens[1:] if not token.startswith("-")]
-    return bool(operands) and all(is_allowed_record_jsonl_path(token) for token in operands)
-
-
-def is_readonly_record_jq(tokens: list[str]) -> bool:
-    if not tokens or tokens[0] != "jq":
-        return False
-    file_reading_options = {
-        "-f",
-        "--from-file",
-        "--slurpfile",
-        "--rawfile",
-        "--argfile",
-    }
-    if any(
-        token in file_reading_options
-        or token.startswith(("--from-file=", "--slurpfile=", "--rawfile=", "--argfile="))
-        for token in tokens[1:]
-    ):
-        return False
-
-    positional: list[str] = []
-    index = 1
-    while index < len(tokens):
-        token = tokens[index]
-        if token == "--":
-            positional.extend(tokens[index + 1 :])
-            break
-        if token in {"--arg", "--argjson"}:
-            index += 3
-            continue
-        if token in {"--indent", "-L"}:
-            index += 2
-            continue
-        if token.startswith("-") and token != "-":
-            index += 1
-            continue
-        positional.append(token)
-        index += 1
-
-    if len(positional) < 2:
-        return False
-
-    file_operands = positional[1:]
-    return bool(file_operands) and all(
-        is_allowed_record_jsonl_path(token) for token in file_operands
-    )
-
-
-def is_main_control_bash(command: str) -> bool:
-    tokens = shell_tokens(command)
-    if not tokens or has_shell_control(command, tokens):
-        return False
-    index = 0
-    executable = command_basename(tokens[index]).casefold()
-    if executable not in {"python", "python3", "py"}:
-        return False
-    index += 1
-    if executable == "py" and index < len(tokens) and tokens[index] == "-3":
-        index += 1
-    if index + 1 < len(tokens) and tokens[index] == "-X":
-        index += 2
-    if index >= len(tokens):
-        return False
-    script = tokens[index].replace("\\", "/")
-    while script.startswith("./"):
-        script = script[2:]
-    index += 1
-    if index >= len(tokens):
-        return False
-    allowed: dict[str, set[str]] = {
-        ".trellis/scripts/hermes/dispatch.py": {
-            "create", "validate", "show", "run", "apply", "list", "status", "schema", "supersede",
-        },
-        ".trellis/scripts/closure.py": {
-            "status", "next", "capsule", "validate", "package-start", "package-check",
-            "package-done", "package-block", "audit", "repair", "amend", "close",
-        },
-        ".trellis/scripts/task.py": {"current", "archive", "finish"},
-    }
-    return tokens[index] in allowed.get(script, set())
-
-
-def is_main_readonly_bash(command: str) -> bool:
-    tokens = shell_tokens(command)
-    if not tokens or has_shell_control(command, tokens):
-        return False
-    return (
-        is_readonly_git_command(tokens)
-        or is_readonly_record_cat(tokens)
-        or is_readonly_record_jq(tokens)
-        or is_main_control_bash(command)
-    )
-
-
-def is_runner_bash_work(command: str) -> bool:
-    tokens = shell_tokens(command) or []
-    if not tokens:
-        return True
-    command_name = tokens[0]
-    if command_name in {"npm", "pnpm", "yarn", "pytest", "rm"}:
-        return True
-    if command_name == "go" and len(tokens) > 1 and tokens[1] == "test":
-        return True
-    if command_name == "cargo" and len(tokens) > 1 and tokens[1] == "test":
-        return True
-    if command_name == "git" and len(tokens) > 1 and tokens[1] in {"add", "commit", "push"}:
-        return True
-    return "pytest" in tokens
-
-
-def main_agent_bash_denial(command: str) -> str:
-    next_step = (
-        "dispatch a runner subagent"
-        if is_runner_bash_work(command)
-        else "dispatch the appropriate researcher or planner subagent"
-    )
-    return (
-        "Hermes Runtime: main agent firewall denied Bash. Main agent is "
-        "coordinator only and may run only read-only routing commands: "
-        "git status --short -- <path>, git diff --name-only/--stat -- <path>, "
-        "git log --oneline/--stat -- <path>, "
-        "cat/jq against RecordBus JSONL, or parameterized Hermes "
-        "dispatch/closure/task control-plane commands. "
-        f"Next step: {next_step} with a task_card."
-    )
+    return normalized.startswith(prefixes)
 
 
 def main_agent_firewall_reason(data: dict[str, Any]) -> str | None:
@@ -820,15 +460,14 @@ def main_agent_firewall_reason(data: dict[str, Any]) -> str | None:
     if tool_name != "Bash":
         return None
     command = bash_command_from_tool_input(data.get("tool_input", {}))
-    if command is None:
-        return (
-            "Hermes Runtime: main agent firewall denied Bash because the "
-            "command could not be parsed. Next step: dispatch a runner "
-            "subagent with a task_card."
-        )
-    if is_main_readonly_bash(command):
+    if command and is_main_bash_allowed(command):
         return None
-    return main_agent_bash_denial(command)
+    return (
+        "Hermes Runtime: main agent firewall denied Bash. Main agent may inspect "
+        "task state or use Hermes control commands, but implementation, tests, "
+        "and experiments must be delegated to a runner subagent or the appropriate "
+        "specialist subagent."
+    )
 
 
 def no_active_task_tool_denial(tool_name: str) -> str:
@@ -837,185 +476,6 @@ def no_active_task_tool_denial(tool_name: str) -> str:
         f"{tool_name} by default. Select an active task and record a "
         "task_card before running write or execution tools."
     )
-
-
-def looks_like_bash_write(command: str) -> bool:
-    write_markers = (
-        ">",
-        "tee ",
-        "write_text",
-        "write_bytes",
-        ".write(",
-        ".unlink(",
-        ".copyFile(",
-        ".rename(",
-        ".mkdir(",
-        "open(",
-        "os.remove(",
-        "os.unlink(",
-        "os.rename(",
-        "os.mkdir(",
-        "os.makedirs(",
-        "shutil.copyfile(",
-        "shutil.copy(",
-        "shutil.move(",
-        "shutil.rmtree(",
-        "writeFileSync(",
-        "appendFileSync(",
-        "copyFileSync(",
-        "renameSync(",
-        "mkdirSync(",
-        "copyFile(",
-        "rename(",
-        "mkdir(",
-        "rmSync(",
-        "unlinkSync(",
-        "FileUtils.cp(",
-        "FileUtils.copy(",
-        "FileUtils.mv(",
-        "FileUtils.mkdir(",
-        "FileUtils.mkdir_p(",
-        "FileUtils.rm(",
-        "FileUtils.rm_rf(",
-        "FileUtils.touch(",
-        "File.delete(",
-        "File.rename(",
-        "Dir.mkdir(",
-        "File::Copy",
-        "Path(",
-        "touch ",
-        "mkdir ",
-        "rm ",
-        "mv ",
-        "cp ",
-        "sed -i",
-        "perl -pi",
-        "cat <<",
-    )
-    return any(marker in command for marker in write_markers)
-
-
-def command_basename(token: str) -> str:
-    return Path(token).name
-
-
-def inline_script_code(tokens: list[str], interpreter_index: int) -> str | None:
-    interpreter = command_basename(tokens[interpreter_index])
-    flags = INLINE_SCRIPT_FLAGS.get(interpreter)
-    if flags is None:
-        return None
-    prefixes = INLINE_SCRIPT_FLAG_PREFIXES.get(interpreter, ())
-    short_eval_flags = INLINE_SCRIPT_SHORT_EVAL_FLAGS.get(interpreter, set())
-    short_combo_flags = INLINE_SCRIPT_SHORT_COMBO_FLAGS.get(
-        interpreter,
-        short_eval_flags,
-    )
-    index = interpreter_index + 1
-    while index < len(tokens):
-        token = tokens[index]
-        for prefix in prefixes:
-            if token.startswith(prefix):
-                return token[len(prefix) :]
-        for flag in flags:
-            if token == flag:
-                if index + 1 >= len(tokens):
-                    return ""
-                return tokens[index + 1]
-        if token.startswith("-") and not token.startswith("--") and token != "-":
-            short_options = token[1:]
-            if (
-                len(short_options) > 1
-                and any(option in short_eval_flags for option in short_options)
-                and all(option in short_combo_flags for option in short_options)
-            ):
-                if index + 1 >= len(tokens):
-                    return ""
-                return tokens[index + 1]
-            if short_options and short_options[0] in short_eval_flags:
-                return short_options[1:]
-        index += 1
-    return None
-
-
-def inline_script_has_unparsed_file_api(tokens: list[str], interpreter_index: int) -> bool:
-    code = inline_script_code(tokens, interpreter_index)
-    if code is None:
-        return False
-    if not code.strip():
-        return True
-    return any(marker in code for marker in INLINE_FILE_API_MARKERS)
-
-
-def add_bash_target(targets: list[str], root: Path, value: str) -> None:
-    if value in {"-", "/dev/null"}:
-        return
-    if value.startswith("&"):
-        return
-    add_unique_target(targets, root, value)
-
-
-def is_shell_separator(token: str) -> bool:
-    return token in {"|", "||", "&", "&&", ";"} or token.endswith(";")
-
-
-def extract_bash_targets(root: Path, command: str) -> tuple[list[str], str | None]:
-    try:
-        tokens = shlex.split(command, posix=True)
-    except ValueError as exc:
-        return [], f"cannot safely parse Bash write targets: {exc}"
-
-    if any(command_basename(token) == "ln" for token in tokens):
-        return [], "link creation is not allowed for Hermes dispatches"
-
-    targets: list[str] = []
-    redirect_tokens = {">", ">>", "1>", "1>>", "2>", "2>>", "&>", "&>>", ">|"}
-    redirect_prefix = re.compile(r"^(?:\d?>{1,2}|&>{1,2}|\|>)(.+)$")
-    write_like_but_unparsed = False
-
-    index = 0
-    while index < len(tokens):
-        token = tokens[index]
-        if token in redirect_tokens:
-            if index + 1 >= len(tokens):
-                return targets, "cannot safely parse Bash write targets: missing redirect target"
-            add_bash_target(targets, root, tokens[index + 1])
-            index += 2
-            continue
-        match = redirect_prefix.match(token)
-        if match:
-            add_bash_target(targets, root, match.group(1))
-            index += 1
-            continue
-        if token == "tee":
-            tee_index = index + 1
-            found_tee_target = False
-            seen_tee_separator = False
-            while tee_index < len(tokens):
-                candidate = tokens[tee_index]
-                if is_shell_separator(candidate):
-                    break
-                if not seen_tee_separator and candidate == "--":
-                    seen_tee_separator = True
-                    tee_index += 1
-                    continue
-                if not seen_tee_separator and candidate.startswith("-"):
-                    tee_index += 1
-                    continue
-                add_bash_target(targets, root, candidate)
-                found_tee_target = True
-                tee_index += 1
-            if not found_tee_target:
-                return targets, "cannot safely parse Bash write targets: missing tee target"
-            index = tee_index
-            continue
-        if command_basename(token) in INLINE_SCRIPT_FLAGS:
-            if inline_script_has_unparsed_file_api(tokens, index):
-                write_like_but_unparsed = True
-        index += 1
-
-    if write_like_but_unparsed:
-        return targets, "cannot safely parse Bash write targets from write-like command"
-    return targets, None
 
 
 def extract_job_id_from_tool_input(value: Any) -> str | None:
@@ -1190,6 +650,29 @@ def completed_coder_results(
     return results
 
 
+def completed_noncode_results(
+    records: list[dict[str, Any]],
+    root: Path,
+) -> list[dict[str, Any]]:
+    """Return completed research/configuration results when code work is absent."""
+    cards = task_cards_by_job(records, root)
+    results: list[dict[str, Any]] = []
+    for record in records:
+        if record.get("type") != "result" or not is_completion_handoff(record):
+            continue
+        job_id = record_job_id(record)
+        card = cards.get(job_id or "")
+        if card is None:
+            continue
+        role = card.get("role")
+        profile = card.get("profile")
+        if role in {"planner", "researcher", "runner"} or (
+            role == "coder" and profile == "configuration"
+        ):
+            results.append(record)
+    return results
+
+
 def result_covers_changed_files(result: dict[str, Any], changed_files: list[str]) -> bool:
     if not changed_files:
         return True
@@ -1231,6 +714,58 @@ def stop_completion_reason(
     task: str,
     records: list[dict[str, Any]],
 ) -> str | None:
+    changed_files = git_changed_files(root)
+    cards = task_cards_by_job(records, root)
+    code_cards = [
+        card for card in cards.values()
+        if card.get("role") == "coder"
+        and card.get("profile") in {"implementation", "tests", "repair"}
+    ]
+    # The repository may already contain unrelated user changes. Route Stop by
+    # the current task's cards, not by global worktree cleanliness.
+    if not code_cards:
+        research_results = completed_noncode_results(records, root)
+        if not research_results:
+            return (
+                "Hermes Runtime: Stop requires a completed planner, researcher, "
+                "runner, or configuration result before completion."
+            )
+        run_manifest_path = root / ".trellis" / "tasks" / task / "hermes" / "run_manifest.jsonl"
+        if run_manifest_path.exists():
+            validate_run_manifest = run_runtime(
+                root,
+                [str(runtime_root / "validate.py"), "--task", task, "--kind", "run_manifest"],
+            )
+            if validate_run_manifest.returncode != 0:
+                return (
+                    "Hermes Runtime: run manifest is invalid; inspect task "
+                    "Hermes logs locally."
+                )
+        run_manifests = read_run_manifest_index(root, task)
+        for result in research_results:
+            job_id = record_job_id(result)
+            card = cards.get(job_id or "")
+            if job_id is None or card is None:
+                continue
+            if card.get("role") == "runner" and not runner_result_has_passing_test(
+                result, run_manifests
+            ):
+                continue
+            review_records = related_records(
+                records,
+                cards,
+                job_id,
+                "reviewer",
+                {"checkpoint", "result"},
+                {"quality", "evidence", "claim", "safety", "closure", "statistics"},
+            )
+            if review_records:
+                return None
+        return (
+            "Hermes Runtime: Stop requires a related independent reviewer record; "
+            "formal runner work also requires a successful run manifest."
+        )
+
     coder_results = completed_coder_results(records, root)
     if not coder_results:
         return (
@@ -1238,7 +773,6 @@ def stop_completion_reason(
             "worker_records.jsonl before completion."
         )
 
-    changed_files = git_changed_files(root)
     matching_results = [
         result for result in coder_results if result_covers_changed_files(result, changed_files)
     ]
@@ -1263,7 +797,6 @@ def stop_completion_reason(
                 "Hermes logs locally."
             )
 
-    cards = task_cards_by_job(records, root)
     run_manifests = read_run_manifest_index(root, task)
     for result in matching_results:
         job_id = record_job_id(result)
@@ -1314,9 +847,6 @@ def guard_tool_input_permissions(
     tool_name = str(data.get("tool_name") or "")
     tool_input = data.get("tool_input", {})
     if tool_name == "Bash":
-        command = bash_command_from_tool_input(tool_input)
-        if command is None:
-            return "Hermes Runtime: cannot safely parse Bash tool_input; denying by default."
         agent_id = data.get("agent_id")
         if isinstance(agent_id, str) and agent_id:
             scripts_dir = root / ".trellis" / "scripts"
@@ -1332,17 +862,9 @@ def guard_tool_input_permissions(
             except Exception:
                 return "Hermes Runtime: Bash caller has no valid dispatch binding."
             role = str(bound_dispatch.get("role") or "")
-            if role in {"planner", "researcher"}:
+            if role not in BASH_EXECUTION_ROLES:
                 return f"Hermes Runtime: {role} dispatch cannot execute Bash."
-            if role == "reviewer" and not is_readonly_git_command(shell_tokens(command) or []):
-                return "Hermes Runtime: reviewer Bash is limited to scoped read-only git inspection."
-        target_files, parse_error = extract_bash_targets(root, command)
-        if parse_error is not None:
-            return f"Hermes Runtime: {parse_error}; denying by default."
-        if not target_files and not looks_like_bash_write(command):
-            return None
-        if not target_files:
-            return "Hermes Runtime: cannot safely parse Bash write targets; denying by default."
+        return None
     else:
         target_files = collect_tool_target_files(root, tool_name, tool_input)
     if not target_files:

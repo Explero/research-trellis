@@ -365,6 +365,18 @@ describe("update() integration", () => {
     expect(fs.readFileSync(targetFull, "utf-8")).toBe(templateContent);
   });
 
+  it("preserves an untracked root CLAUDE.md during force update", async () => {
+    const existing = "# Project-owned Claude rules\n";
+    writeProjectFile("CLAUDE.md", existing);
+    await init({ yes: true, force: true, claude: true });
+    expect(readHashesV2(hashFilePath())).not.toHaveProperty("CLAUDE.md");
+
+    await update({ force: true });
+
+    expect(readProjectFile("CLAUDE.md")).toBe(existing);
+    expect(readHashesV2(hashFilePath())).not.toHaveProperty("CLAUDE.md");
+  });
+
   it("#4bb auto-updates the Claude subagent hook when the installed template is older but unmodified", async () => {
     await init({ yes: true, force: true, claude: true });
 

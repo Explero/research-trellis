@@ -91,9 +91,9 @@ max_journal_lines: 2000
 # Hermes Agent Context Firewall
 #-------------------------------------------------------------------------------
 # Claude uses approved Agent hooks for enforced prompt replacement and result
-# sanitization. Codex native custom agents are advisory; strict mode invokes
-# codex exec with the bundled result schema. Lean warns without a live
-# heartbeat, standard requires hooks or strict, and publication fails closed.
+# sanitization. Codex custom agents use the same compact dispatch and result
+# contract in the current project workspace. Closure requirements remain based
+# on recorded evidence and review, not an isolated execution mode.
 #
 # hermes:
-#   codex_mode: native  # native (advisory) | strict (enforced)
+#   codex_mode: native

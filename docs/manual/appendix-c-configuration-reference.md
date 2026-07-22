@@ -25,7 +25,7 @@
 | `packages`（包列表） | 多包项目路径和类型 |
 | `codex.dispatch_mode`（Codex 调度模式） | 旧 Trellis 实现/检查代理的路由设置；不会把 Hermes 原生派发升级为强门禁 |
 
-`.trellis/hermes/config.yaml`（科研全局配置）定义记录位置、任务卡规则、运行命令、审批边界和 `context_firewall`（上下文防火墙）。正式平台只有 `claude`（Claude）与 `codex`（Codex）：Claude 依赖钩子强制替换，`Codex native`（Codex 原生派发）仅提供建议，`Codex strict`（Codex 严格模式）通过统一派发命令执行。
+`.trellis/hermes/config.yaml`（科研全局配置）定义记录位置、任务卡规则、运行命令、审批边界和 `context_firewall`（上下文防火墙）。正式平台只有 `claude`（Claude）与 `codex`（Codex）：Claude 可依赖钩子替换，Codex 使用同一套紧凑派发和结果文件。
 
 防火墙相关环境变量：
 

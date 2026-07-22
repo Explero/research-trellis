@@ -20,9 +20,7 @@ The main agent must not run the write command. Create a validated
 ```
 
 The worker receives the current `task.json` and runs
-`closure.py handoff --task <task>`. It returns a normal Result Envelope. After
-that result is confirmed, the deterministic closure code rewrites the handoff
-with the new task revision.
+`closure.py handoff --task <task>`. It returns a normal Result Envelope.
 
 Read the sanitized worker result, then report the generated `HANDOFF.md` path,
 current phase, current work package, blockers, and next action. Keep the chat
@@ -33,6 +31,7 @@ For a legacy task without closure fields, do not invent a Hermes handoff. Report
 ## Boundaries
 
 - Writing a handoff does not complete, close, archive, approve, or amend the task.
+- `task.json` remains the source of truth; a handoff is a recovery summary, not a gate.
 - Do not load full chat history or unrelated task files to create the handoff.
 - The dedicated handoff writer is the one exception: it may only write the
   current task's `HANDOFF.md` and must not change task state or other files.

@@ -77,9 +77,6 @@ function writeExperimentConfig(taskDir: string): void {
       '  shell: "bash"',
       "allowed_commands:",
       '  - "python3"',
-      "sandbox:",
-      '  mode: "none"',
-      "  required: false",
       'artifact_dir: ".trellis/tasks/01-test/hermes/runs"',
       "",
     ].join("\n"),
@@ -106,9 +103,6 @@ function writeExperimentConfigWithAllowedCommands(
       '  shell: "bash"',
       "allowed_commands:",
       ...allowedCommands.map((command) => `  - "${command}"`),
-      "sandbox:",
-      '  mode: "none"',
-      "  required: false",
       'artifact_dir: ".trellis/tasks/01-test/hermes/runs"',
       "",
     ].join("\n"),
@@ -116,57 +110,68 @@ function writeExperimentConfigWithAllowedCommands(
   );
 }
 
-function writeFakeDocker(root: string): { binDir: string; logPath: string } {
-  const binDir = path.join(root, "fake-bin");
-  const logPath = path.join(root, "fake-docker-argv.json");
-  fs.mkdirSync(binDir, { recursive: true });
-  fs.writeFileSync(
-    path.join(binDir, "docker"),
+
+function sha256Text(value: string): string {
+  return `sha256:${createHash("sha256").update(value).digest("hex")}`;
+}
+
+function writeRunnerCard(taskDir: string, jobId: string): void {
+  writeJsonl(path.join(taskDir, "hermes", "worker_records.jsonl"), [
+    {
+      type: "task_card",
+      id: `tc-${jobId}`,
+      timestamp: "2026-06-29T00:00:00Z",
+      job_id: jobId,
+      role: "runner",
+      worktree_id: "main",
+      status: "queued",
+      allowed_files: ["**"],
+      forbidden_files: [],
+      heartbeat_interval: "1s",
+      timeout_at: "2099-01-01T00:00:00Z",
+      checkpoint: "not-started",
+      resume_from: "task_card",
+      record_uri: ".trellis/tasks/01-test/hermes/worker_records.jsonl",
+      evidence_refs: [],
+      risk_flags: [],
+    },
+  ]);
+}
+
+function markDataExploration(taskDir: string): void {
+  writeJson(path.join(taskDir, "task.json"), {
+    id: "01-test",
+    status: "in_progress",
+    research_route: "exploration",
+    research_change_fields: ["dataset"],
+  });
+}
+
+function appendDataPreflight(
+  taskDir: string,
+  hash: string,
+  checksContent: string,
+): { manifestPath: string; checksPath: string } {
+  const manifestPath = "data/input-manifest.json";
+  const checksPath = "data/checks.yaml";
+  const root = path.resolve(taskDir, "../../../");
+  fs.mkdirSync(path.join(root, "data"), { recursive: true });
+  fs.writeFileSync(path.join(root, manifestPath), '{"rows":2}\n', "utf-8");
+  fs.writeFileSync(path.join(root, checksPath), checksContent, "utf-8");
+  fs.appendFileSync(
+    path.join(taskDir, "hermes", "experiment.yaml"),
     [
-      "#!/usr/bin/env python3",
-      "import json",
-      "import os",
-      "import subprocess",
-      "import sys",
-      `log_path = ${JSON.stringify(logPath)}`,
-      "args = sys.argv[1:]",
-      "with open(log_path, 'w', encoding='utf-8') as handle:",
-      "    json.dump(args, handle)",
-      "if len(args) < 7 or args[0:2] != ['run', '--rm']:",
-      "    sys.exit(64)",
-      "index = 2",
-      "host_root = None",
-      "container_root = None",
-      "workdir = None",
-      "while index < len(args):",
-      "    if args[index] in ['-v', '--volume']:",
-      "        host_root, container_root = args[index + 1].split(':', 1)",
-      "        index += 2",
-      "    elif args[index] in ['-w', '--workdir']:",
-      "        workdir = args[index + 1]",
-      "        index += 2",
-      "    else:",
-      "        break",
-      "if host_root is None or container_root is None or workdir is None:",
-      "    sys.exit(65)",
-      "if index >= len(args):",
-      "    sys.exit(66)",
-      "command = args[index + 1:]",
-      "host_cwd = host_root",
-      "if workdir != container_root:",
-      "    host_cwd = os.path.join(host_root, os.path.relpath(workdir, container_root))",
-      "result = subprocess.run(command, cwd=host_cwd)",
-      "sys.exit(result.returncode)",
+      "data_preflight:",
+      '  source: "fixture"',
+      '  version: "v1"',
+      `  input_manifest: "${manifestPath}"`,
+      `  hash: "${hash}"`,
+      `  checks_ref: "${checksPath}"`,
       "",
     ].join("\n"),
     "utf-8",
   );
-  fs.chmodSync(path.join(binDir, "docker"), 0o755);
-  return { binDir, logPath };
-}
-
-function sha256Text(value: string): string {
-  return `sha256:${createHash("sha256").update(value).digest("hex")}`;
+  return { manifestPath, checksPath };
 }
 
 describe("Hermes runtime scripts", () => {
@@ -661,6 +666,135 @@ describe("Hermes runtime scripts", () => {
     )).toBe("");
   });
 
+  it("keeps ordinary experiment validation free of data_preflight", () => {
+    writeExperimentConfig(taskDir);
+
+    const validate = runHermes(tmpDir, "experiment.py", [
+      "validate",
+      "--task",
+      "01-test",
+    ]);
+
+    expect(validate.status).toBe(0);
+  });
+
+  it("blocks a data-changing exploration before runner command execution when data_preflight is missing", () => {
+    markDataExploration(taskDir);
+    writeExperimentConfig(taskDir);
+    writeRunnerCard(taskDir, "job-data-preflight-missing");
+
+    const run = runHermes(tmpDir, "runner.py", [
+      "run",
+      "--task",
+      "01-test",
+      "--job-id",
+      "job-data-preflight-missing",
+      "--checkpoint",
+      "data-preflight",
+      "--summary",
+      "validate data before execution",
+      "--",
+      "python3",
+      "-c",
+      "import pathlib; pathlib.Path('should-not-run.txt').write_text('bad')",
+    ]);
+
+    expect(run.status).toBe(1);
+    expect(run.stderr).toContain("data_preflight is required");
+    expect(fs.existsSync(path.join(tmpDir, "should-not-run.txt"))).toBe(false);
+    expect(fs.existsSync(path.join(taskDir, "hermes", "run_manifest.jsonl"))).toBe(false);
+  });
+
+  it("rejects a data_preflight hash that does not match its input manifest", () => {
+    markDataExploration(taskDir);
+    writeExperimentConfig(taskDir);
+    appendDataPreflight(
+      taskDir,
+      `sha256:${"0".repeat(64)}`,
+      "schema: checked\nmissing: checked\nduplicates: checked\nsplit_leakage: not_applicable\n",
+    );
+
+    const validate = runHermes(tmpDir, "experiment.py", [
+      "validate",
+      "--task",
+      "01-test",
+    ]);
+
+    expect(validate.status).toBe(1);
+    expect(validate.stderr).toContain("data_preflight hash mismatch");
+  });
+
+  it("rejects data_preflight checks with a missing required check", () => {
+    markDataExploration(taskDir);
+    writeExperimentConfig(taskDir);
+    const manifestContent = '{"rows":2}\n';
+    appendDataPreflight(
+      taskDir,
+      sha256Text(manifestContent),
+      "schema: checked\nmissing: checked\nduplicates: checked\n",
+    );
+
+    const validate = runHermes(tmpDir, "experiment.py", [
+      "validate",
+      "--task",
+      "01-test",
+    ]);
+
+    expect(validate.status).toBe(1);
+    expect(validate.stderr).toContain("split_leakage must be checked or not_applicable");
+  });
+
+  it("accepts valid data_preflight and records its files as runner inputs", () => {
+    markDataExploration(taskDir);
+    writeExperimentConfig(taskDir);
+    const manifestContent = '{"rows":2}\n';
+    const refs = appendDataPreflight(
+      taskDir,
+      sha256Text(manifestContent),
+      "schema: checked\nmissing: checked\nduplicates: checked\nsplit_leakage: not_applicable\n",
+    );
+    writeRunnerCard(taskDir, "job-data-preflight-valid");
+
+    const run = runHermes(tmpDir, "runner.py", [
+      "run",
+      "--task",
+      "01-test",
+      "--job-id",
+      "job-data-preflight-valid",
+      "--checkpoint",
+      "data-preflight",
+      "--summary",
+      "run with validated data",
+      "--input",
+      refs.manifestPath,
+      "--input",
+      refs.checksPath,
+      "--output",
+      "data-run.txt",
+      "--",
+      "python3",
+      "-c",
+      "import pathlib; pathlib.Path('data/input-manifest.json').write_text('{\"rows\":99}\\n'); pathlib.Path('data-run.txt').write_text('ok')",
+    ]);
+
+    expect(run.status).toBe(0);
+    const manifest = fs
+      .readFileSync(path.join(taskDir, "hermes", "run_manifest.jsonl"), "utf-8")
+      .trim()
+      .split("\n")
+      .map((line) => JSON.parse(line) as Record<string, unknown>);
+    expect(manifest).toHaveLength(1);
+    expect(manifest[0].inputs).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ path: refs.manifestPath, hash: sha256Text(manifestContent) }),
+        expect.objectContaining({ path: refs.checksPath }),
+      ]),
+    );
+    expect(sha256Text(fs.readFileSync(path.join(tmpDir, refs.manifestPath), "utf-8"))).not.toBe(
+      sha256Text(manifestContent),
+    );
+  });
+
   it("rejects worker results when there is no task_card", () => {
     fs.writeFileSync(
       path.join(taskDir, "hermes", "worker_records.jsonl"),
@@ -1017,6 +1151,62 @@ describe("Hermes runtime scripts", () => {
     expect(validate.status).toBe(1);
     expect(validate.stderr).toContain("coder review handoff requires runner result");
     expect(validate.stderr).toContain("coder review handoff requires reviewer");
+  });
+
+  it("accepts a configuration handoff without inventing code test records", () => {
+    writeJsonl(path.join(taskDir, "hermes", "worker_records.jsonl"), [
+      {
+        type: "task_card",
+        id: "tc-20260629-000000-config",
+        timestamp: "2026-06-29T00:00:00Z",
+        job_id: "job-config",
+        role: "coder",
+        profile: "configuration",
+        worktree_id: "main",
+        status: "queued",
+        allowed_files: [".trellis/tasks/01-test/HANDOFF.md"],
+        forbidden_files: [],
+        heartbeat_interval: "5m",
+        timeout_at: "2099-01-01T00:00:00Z",
+        checkpoint: "not-started",
+        resume_from: "task_card",
+        record_uri: ".trellis/tasks/01-test/hermes/worker_records.jsonl",
+        evidence_refs: [],
+        risk_flags: [],
+      },
+      {
+        type: "checkpoint",
+        id: "cp-20260629-000100-config",
+        timestamp: "2026-06-29T00:01:00Z",
+        job_id: "job-config",
+        checkpoint: "handoff-written",
+        resume_from: "return result",
+        evidence_refs: [],
+        open_items: [],
+      },
+      {
+        type: "result",
+        id: "rs-20260629-000200-config",
+        timestamp: "2026-06-29T00:02:00Z",
+        job_id: "job-config",
+        status: "done",
+        summary: "wrote task handoff",
+        changed_files: [".trellis/tasks/01-test/HANDOFF.md"],
+        evidence_refs: [],
+        risk_flags: [],
+        handoff: "review",
+      },
+    ]);
+
+    const validate = runHermes(tmpDir, "validate.py", [
+      "--task",
+      "01-test",
+      "--kind",
+      "worker",
+    ]);
+
+    expect(validate.status).toBe(0);
+    expect(validate.stdout).toContain("valid");
   });
 
   it("rejects coder review handoff when runner has no result record", () => {
@@ -1665,7 +1855,7 @@ describe("Hermes runtime scripts", () => {
     });
   });
 
-  it("runner wraps a long command with heartbeats and a replayable manifest", () => {
+  it("runner uses local execution for legacy sandbox configs and records a replayable manifest", () => {
     const workerRecords = [
       {
         type: "task_card",
@@ -1691,6 +1881,11 @@ describe("Hermes runtime scripts", () => {
       workerRecords.map((record) => JSON.stringify(record)).join("\n") + "\n",
     );
     writeExperimentConfig(taskDir);
+    fs.appendFileSync(
+      path.join(taskDir, "hermes", "experiment.yaml"),
+      'sandbox:\n  mode: "container"\n  required: true\n',
+      "utf-8",
+    );
 
     const run = runHermes(tmpDir, "runner.py", [
       "run",
@@ -1984,7 +2179,7 @@ describe("Hermes runtime scripts", () => {
     ).toBe(false);
   });
 
-  it("runner run does not pass common secret env vars to subprocess or run_manifest", () => {
+  it("runner inherits the project runtime environment without recording it", () => {
     const workerRecords = [
       {
         type: "task_card",
@@ -2044,7 +2239,7 @@ describe("Hermes runtime scripts", () => {
     expect(result.status).toBe(0);
     expect(
       fs.readFileSync(path.join(tmpDir, "env-output.txt"), "utf-8"),
-    ).toBe("missing");
+    ).toBe("test-secret-value");
     const manifest = fs.readFileSync(
       path.join(taskDir, "hermes", "run_manifest.jsonl"),
       "utf-8",
@@ -2053,417 +2248,6 @@ describe("Hermes runtime scripts", () => {
     expect(manifest).not.toContain("test-secret-value");
   });
 
-  it("runner rejects sandbox.required=true when sandbox mode is none", () => {
-    writeJsonl(path.join(taskDir, "hermes", "worker_records.jsonl"), [
-      {
-        type: "task_card",
-        id: "tc-20260629-000000-demo",
-        timestamp: "2026-06-29T00:00:00Z",
-        job_id: "job-runner-sandbox-none",
-        role: "runner",
-        worktree_id: "main",
-        status: "queued",
-        allowed_files: ["**"],
-        forbidden_files: [],
-        heartbeat_interval: "1s",
-        timeout_at: "2099-01-01T00:00:00Z",
-        checkpoint: "not-started",
-        resume_from: "task_card",
-        record_uri: ".trellis/tasks/01-test/hermes/worker_records.jsonl",
-        evidence_refs: [],
-        risk_flags: [],
-      },
-    ]);
-    fs.writeFileSync(
-      path.join(taskDir, "hermes", "experiment.yaml"),
-      [
-        'question: "Does the command run?"',
-        'hypothesis: "The command should not run without a sandbox."',
-        'dataset: "unit fixture"',
-        'model: "test runner"',
-        "metrics:",
-        '  - "exit_code"',
-        "seed: 1",
-        "environment:",
-        '  os: "ubuntu-24.04"',
-        '  shell: "bash"',
-        "allowed_commands:",
-        '  - "python3"',
-        "sandbox:",
-        '  mode: "none"',
-        "  required: true",
-        'artifact_dir: ".trellis/tasks/01-test/hermes/runs"',
-        "",
-      ].join("\n"),
-      "utf-8",
-    );
-
-    const run = runHermes(tmpDir, "runner.py", [
-      "run",
-      "--task",
-      "01-test",
-      "--job-id",
-      "job-runner-sandbox-none",
-      "--checkpoint",
-      "command-running",
-      "--summary",
-      "run without sandbox",
-      "--",
-      "python3",
-      "-c",
-      "import pathlib; pathlib.Path('should-not-run.txt').write_text('bad', encoding='utf-8')",
-    ]);
-
-    expect(run.status).toBe(1);
-    expect(run.stderr).toContain("sandbox.required=true");
-    expect(run.stderr).toContain("mode=none");
-    expect(fs.existsSync(path.join(tmpDir, "should-not-run.txt"))).toBe(false);
-    expect(
-      fs.existsSync(path.join(taskDir, "hermes", "run_manifest.jsonl")),
-    ).toBe(false);
-  });
-
-  it("runner rejects unavailable container sandbox with an explicit error", () => {
-    writeJsonl(path.join(taskDir, "hermes", "worker_records.jsonl"), [
-      {
-        type: "task_card",
-        id: "tc-20260629-000000-demo",
-        timestamp: "2026-06-29T00:00:00Z",
-        job_id: "job-runner-sandbox-container",
-        role: "runner",
-        worktree_id: "main",
-        status: "queued",
-        allowed_files: ["**"],
-        forbidden_files: [],
-        heartbeat_interval: "1s",
-        timeout_at: "2099-01-01T00:00:00Z",
-        checkpoint: "not-started",
-        resume_from: "task_card",
-        record_uri: ".trellis/tasks/01-test/hermes/worker_records.jsonl",
-        evidence_refs: [],
-        risk_flags: [],
-      },
-    ]);
-    fs.writeFileSync(
-      path.join(taskDir, "hermes", "experiment.yaml"),
-      [
-        'question: "Does the command run in a container?"',
-        'hypothesis: "Missing container runtime fails closed."',
-        'dataset: "unit fixture"',
-        'model: "test runner"',
-        "metrics:",
-        '  - "exit_code"',
-        "seed: 1",
-        "environment:",
-        '  os: "ubuntu-24.04"',
-        '  shell: "bash"',
-        "allowed_commands:",
-        '  - "python3"',
-        "sandbox:",
-        '  mode: "container"',
-        "  required: true",
-        '  image: "python:3.12-slim"',
-        `  command: "${path.join(tmpDir, "__missing_hermes_container_runtime__", "docker")}"`,
-        'artifact_dir: ".trellis/tasks/01-test/hermes/runs"',
-        "",
-      ].join("\n"),
-      "utf-8",
-    );
-
-    const run = runHermes(tmpDir, "runner.py", [
-      "run",
-      "--task",
-      "01-test",
-      "--job-id",
-      "job-runner-sandbox-container",
-      "--checkpoint",
-      "command-running",
-      "--summary",
-      "run container sandbox",
-      "--",
-      "python3",
-      "-c",
-      "print('should not run')",
-    ]);
-
-    expect(run.status).toBe(1);
-    expect(run.stderr).toContain("sandbox mode container");
-    expect(run.stderr).toContain("not available");
-  });
-
-  it("runner rejects container sandbox images that look like docker flags", () => {
-    writeJsonl(path.join(taskDir, "hermes", "worker_records.jsonl"), [
-      {
-        type: "task_card",
-        id: "tc-20260629-000000-demo",
-        timestamp: "2026-06-29T00:00:00Z",
-        job_id: "job-runner-sandbox-image",
-        role: "runner",
-        worktree_id: "main",
-        status: "queued",
-        allowed_files: ["**"],
-        forbidden_files: [],
-        heartbeat_interval: "1s",
-        timeout_at: "2099-01-01T00:00:00Z",
-        checkpoint: "not-started",
-        resume_from: "task_card",
-        record_uri: ".trellis/tasks/01-test/hermes/worker_records.jsonl",
-        evidence_refs: [],
-        risk_flags: [],
-      },
-    ]);
-    fs.writeFileSync(
-      path.join(taskDir, "hermes", "experiment.yaml"),
-      [
-        'question: "Does the command run in a container?"',
-        'hypothesis: "Docker flags must not be accepted as images."',
-        'dataset: "unit fixture"',
-        'model: "test runner"',
-        "metrics:",
-        '  - "exit_code"',
-        "seed: 1",
-        "environment:",
-        '  os: "ubuntu-24.04"',
-        '  shell: "bash"',
-        "allowed_commands:",
-        '  - "python3"',
-        "sandbox:",
-        '  mode: "container"',
-        "  required: true",
-        '  image: "--network=host"',
-        'artifact_dir: ".trellis/tasks/01-test/hermes/runs"',
-        "",
-      ].join("\n"),
-      "utf-8",
-    );
-    const fakeDocker = writeFakeDocker(tmpDir);
-
-    const run = runHermes(
-      tmpDir,
-      "runner.py",
-      [
-        "run",
-        "--task",
-        "01-test",
-        "--job-id",
-        "job-runner-sandbox-image",
-        "--checkpoint",
-        "command-running",
-        "--summary",
-        "run container sandbox",
-        "--",
-        "python3",
-        "-c",
-        "print('should not run')",
-      ],
-      {
-        env: {
-          ...process.env,
-          PATH: `${fakeDocker.binDir}${path.delimiter}${process.env.PATH ?? ""}`,
-        },
-      },
-    );
-
-    expect(run.status).toBe(1);
-    expect(run.stderr).toContain("sandbox.image");
-    expect(fs.existsSync(fakeDocker.logPath)).toBe(false);
-  });
-
-  it("runner rejects container sandbox commands with docker global options", () => {
-    writeJsonl(path.join(taskDir, "hermes", "worker_records.jsonl"), [
-      {
-        type: "task_card",
-        id: "tc-20260629-000000-demo",
-        timestamp: "2026-06-29T00:00:00Z",
-        job_id: "job-runner-sandbox-command",
-        role: "runner",
-        worktree_id: "main",
-        status: "queued",
-        allowed_files: ["**"],
-        forbidden_files: [],
-        heartbeat_interval: "1s",
-        timeout_at: "2099-01-01T00:00:00Z",
-        checkpoint: "not-started",
-        resume_from: "task_card",
-        record_uri: ".trellis/tasks/01-test/hermes/worker_records.jsonl",
-        evidence_refs: [],
-        risk_flags: [],
-      },
-    ]);
-    fs.writeFileSync(
-      path.join(taskDir, "hermes", "experiment.yaml"),
-      [
-        'question: "Does the command run in a container?"',
-        'hypothesis: "Docker global options must not be accepted."',
-        'dataset: "unit fixture"',
-        'model: "test runner"',
-        "metrics:",
-        '  - "exit_code"',
-        "seed: 1",
-        "environment:",
-        '  os: "ubuntu-24.04"',
-        '  shell: "bash"',
-        "allowed_commands:",
-        '  - "python3"',
-        "sandbox:",
-        '  mode: "container"',
-        "  required: true",
-        '  image: "python:3.12-slim"',
-        '  command: "docker --context test"',
-        'artifact_dir: ".trellis/tasks/01-test/hermes/runs"',
-        "",
-      ].join("\n"),
-      "utf-8",
-    );
-    const fakeDocker = writeFakeDocker(tmpDir);
-
-    const run = runHermes(
-      tmpDir,
-      "runner.py",
-      [
-        "run",
-        "--task",
-        "01-test",
-        "--job-id",
-        "job-runner-sandbox-command",
-        "--checkpoint",
-        "command-running",
-        "--summary",
-        "run container sandbox",
-        "--",
-        "python3",
-        "-c",
-        "print('should not run')",
-      ],
-      {
-        env: {
-          ...process.env,
-          PATH: `${fakeDocker.binDir}${path.delimiter}${process.env.PATH ?? ""}`,
-        },
-      },
-    );
-
-    expect(run.status).toBe(1);
-    expect(run.stderr).toContain("sandbox.command");
-    expect(fs.existsSync(fakeDocker.logPath)).toBe(false);
-  });
-
-  it("runner runs required container sandbox through docker run with the repo mounted", () => {
-    writeJsonl(path.join(taskDir, "hermes", "worker_records.jsonl"), [
-      {
-        type: "task_card",
-        id: "tc-20260629-000000-demo",
-        timestamp: "2026-06-29T00:00:00Z",
-        job_id: "job-runner-sandbox-docker",
-        role: "runner",
-        worktree_id: "main",
-        status: "queued",
-        allowed_files: ["**"],
-        forbidden_files: [],
-        heartbeat_interval: "1s",
-        timeout_at: "2099-01-01T00:00:00Z",
-        checkpoint: "not-started",
-        resume_from: "task_card",
-        record_uri: ".trellis/tasks/01-test/hermes/worker_records.jsonl",
-        evidence_refs: [],
-        risk_flags: [],
-      },
-    ]);
-    fs.mkdirSync(path.join(tmpDir, "workspace"), { recursive: true });
-    fs.writeFileSync(
-      path.join(taskDir, "hermes", "experiment.yaml"),
-      [
-        'question: "Does the command run in a container?"',
-        'hypothesis: "The container runner writes the expected artifact."',
-        'dataset: "unit fixture"',
-        'model: "test runner"',
-        "metrics:",
-        '  - "exit_code"',
-        "seed: 1",
-        "environment:",
-        '  os: "ubuntu-24.04"',
-        '  shell: "bash"',
-        "allowed_commands:",
-        '  - "python3"',
-        "sandbox:",
-        '  mode: "container"',
-        "  required: true",
-        '  image: "python:3.12-slim"',
-        'artifact_dir: ".trellis/tasks/01-test/hermes/runs"',
-        "",
-      ].join("\n"),
-      "utf-8",
-    );
-    const fakeDocker = writeFakeDocker(tmpDir);
-
-    const run = runHermes(
-      tmpDir,
-      "runner.py",
-      [
-        "run",
-        "--task",
-        "01-test",
-        "--job-id",
-        "job-runner-sandbox-docker",
-        "--checkpoint",
-        "command-running",
-        "--summary",
-        "run container sandbox",
-        "--cwd",
-        "workspace",
-        "--output",
-        "container-output.txt",
-        "--",
-        "python3",
-        "-c",
-        "import pathlib; pathlib.Path('container-output.txt').write_text('container ok', encoding='utf-8')",
-      ],
-      {
-        env: {
-          ...process.env,
-          PATH: `${fakeDocker.binDir}${path.delimiter}${process.env.PATH ?? ""}`,
-        },
-      },
-    );
-
-    expect(run.status).toBe(0);
-    expect(
-      fs.readFileSync(path.join(tmpDir, "workspace", "container-output.txt"), "utf-8"),
-    ).toBe("container ok");
-
-    const dockerArgs = JSON.parse(
-      fs.readFileSync(fakeDocker.logPath, "utf-8"),
-    ) as string[];
-    expect(dockerArgs.slice(0, 2)).toEqual(["run", "--rm"]);
-    expect(dockerArgs).toEqual(
-      expect.arrayContaining([
-        "-v",
-        `${tmpDir}:/workspace`,
-        "-w",
-        "/workspace/workspace",
-        "python:3.12-slim",
-        "python3",
-      ]),
-    );
-
-    const manifestRows = fs
-      .readFileSync(path.join(taskDir, "hermes", "run_manifest.jsonl"), "utf-8")
-      .trim()
-      .split("\n")
-      .map((line) => JSON.parse(line) as Record<string, unknown>);
-    expect(manifestRows[0]).toMatchObject({
-      job_id: "job-runner-sandbox-docker",
-      cwd: "workspace",
-      exit_code: 0,
-      sandbox: {
-        mode: "container",
-        image: "python:3.12-slim",
-      },
-    });
-    expect(manifestRows[0].command).toEqual(
-      expect.arrayContaining(["python3", "-c"]),
-    );
-  });
 
   it("runner replay passes when output hashes match", () => {
     const output = "stable output";

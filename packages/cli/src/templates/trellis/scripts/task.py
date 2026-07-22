@@ -24,7 +24,6 @@ Usage:
 from __future__ import annotations
 
 import argparse
-import re
 import subprocess
 import sys
 
@@ -215,7 +214,7 @@ def cmd_start(args: argparse.Namespace) -> int:
         if is_closure_task(task_data):
             phase = task_data.get("hermes_phase")
             if phase == "planning":
-                errors, _ = validate_closure(task_data)
+                errors, _ = validate_closure(task_data, full_path)
                 detail = "; ".join(errors[:3]) if errors else "plan has not been validated"
                 print(colored(
                     f"Error: Closure task is not ready: {detail}",
@@ -306,27 +305,20 @@ def cmd_finish(args: argparse.Namespace) -> int:
     if task_json_path.is_file():
         task_data = read_json(task_json_path)
         if isinstance(task_data, dict):
-            from common.closure import is_closure_task
+            from common.closure import ClosureError, is_closure_task, write_handoff
 
             if is_closure_task(task_data) and task_data.get("closure_state") != "closed":
-                revision = task_data.get("hermes_revision")
-                handoff_path = task_json_path.parent / "HANDOFF.md"
-                fresh_handoff = (
-                    isinstance(revision, int)
-                    and not isinstance(revision, bool)
-                    and handoff_path.is_file()
-                    and not handoff_path.is_symlink()
-                    and re.search(
-                        rf"<!--\s*hermes-handoff-revision:\s*{revision}\s*-->",
-                        handoff_path.read_text(encoding="utf-8", errors="replace")[:512],
-                    ) is not None
-                )
-                if not fresh_handoff:
+                try:
+                    handoff_path = write_handoff(task_json_path.parent, task_data, repo_root)
                     print(colored(
-                        "Open Hermes task requires a current HANDOFF.md from the dedicated handoff subagent before finish.",
-                        Colors.RED,
+                        f"✓ Handoff updated: {handoff_path.relative_to(repo_root)}",
+                        Colors.GREEN,
                     ))
-                    return 1
+                except (ClosureError, OSError):
+                    print(colored(
+                        "Warning: could not update HANDOFF.md; task state remains in task.json.",
+                        Colors.YELLOW,
+                    ))
 
     cleared = clear_active_task(repo_root)
 

@@ -16,6 +16,10 @@
 
 ## 操作步骤
 
+每个新的可执行任务都先由主代理分析 intent（意图）、scope（范围）、definition of done（完成定义）、科研协议影响、风险和最小工作包拆分。已有任务的后续请求先分成三类：范围内续接继续当前工作包；低风险计划变化使用 `amend`（修改计划）；新假设、模型功能架构、数据、指标、基线或主张范围变化进入 exploration（探索）并重新校验。范围内补充不能重新生成整套工作包。
+
+协作判断固定为三档：普通可逆任务直接执行，不增加讨论或记录步骤；存在有限不确定性时，明确关键假设后继续；只有高风险研究变化才暂停讨论并由用户批准科研取舍。判断以事实和证据为先，应保留不确定性和有依据的异议。证据冲突或关键假设失效时，把任务标记为 `blocked`（阻塞），再通过批准的 `amend`（修改计划）更新研究协议。提示词不能替代结构化记录，也不能让每个任务都进入 `grill`（方案讨论）。
+
 1. 创建任务：
 
 ```bash
@@ -76,6 +80,15 @@ python3 ./.trellis/scripts/closure.py amend --task "$TASK" \
 ```
 
 数据集、研究假设、数据切分、指标定义、基线、主张范围和任务范围属于高风险字段，必须增加 `--approved-by human/root`（人工批准）。变更直接写入 `task.json`（任务状态），同时向 `task-events.jsonl`（任务事件）追加 `plan_amended`（计划已修改）记录；变更后重新运行 closure 校验。正式研究仍可额外使用 Hermes `plan_change`（研究计划变更记录）保存更完整的提案和审阅链。
+
+新完成的高风险 exploration（探索）讨论还需要引用已有决策记录：
+
+```bash
+python3 ./.trellis/scripts/closure.py grill --task "$TASK" --complete \
+  --decision-ref design.md
+```
+
+引用必须位于仓库或当前任务内。记录至少包含 `Decision`（决定）、`Rationale`（理由）、`Evidence`（证据）、`Alternatives`（备选方案）和 `Failure Conditions`（失效条件）。事件和 Task Capsule（任务胶囊）只显示引用，不加载正文。旧任务已有 `grill_completed=true`（已完成讨论）但没有引用时继续运行并给出警告；研究协议再次修改后必须重新记录。普通 delivery（确定性交付）和 execution（冻结协议执行）没有这一门禁。
 
 ## 预期结果
 

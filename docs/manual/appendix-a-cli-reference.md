@@ -45,7 +45,7 @@ python3 ./.trellis/scripts/task.py archive "$TASK" --no-commit
 | --- | --- | --- |
 | `continue`（继续） | 恢复活动任务 | 无直接写入 |
 | `status`（状态） | 显示阶段、工作包、阻塞和下一动作 | 只读 |
-| `handoff`（交接） | 派发受限子代理写入 `HANDOFF.md`（交接摘要） | 只更新交接文件 |
+| `handoff`（交接） | 生成或下发子代理编写 `HANDOFF.md`（交接摘要） | 只更新交接文件 |
 | `finish-work`（收尾） | 审计、关闭并归档满足条件的任务 | 可能归档 |
 | `start`（启动） | 兼容无自动启动钩子的环境 | 无直接写入 |
 
@@ -67,7 +67,7 @@ python3 ./.trellis/scripts/closure.py package-block --task "$TASK" --reason "阻
 python3 ./.trellis/scripts/closure.py amend --task "$TASK" --field <field> --value <value> --reason <reason>
 python3 ./.trellis/scripts/closure.py audit --task "$TASK"
 python3 ./.trellis/scripts/closure.py repair --task "$TASK"
-python3 ./.trellis/scripts/closure.py handoff --task "$TASK"  # 仅交接子代理执行
+python3 ./.trellis/scripts/closure.py handoff --task "$TASK"
 python3 ./.trellis/scripts/closure.py close --task "$TASK"
 ```
 
@@ -94,13 +94,13 @@ Agent Context Firewall（代理上下文防火墙）统一命令：
 python3 ./.trellis/scripts/hermes/dispatch.py create --task "$TASK" --role <role> --profile <profile> --objective <text>
 python3 ./.trellis/scripts/hermes/dispatch.py validate --task "$TASK" --job-id <job>
 python3 ./.trellis/scripts/hermes/dispatch.py show --task "$TASK" --job-id <job> --prompt
-python3 ./.trellis/scripts/hermes/dispatch.py run --task "$TASK" --job-id <job> --platform codex --mode strict
+python3 ./.trellis/scripts/hermes/dispatch.py run --task "$TASK" --job-id <job> --platform codex
 python3 ./.trellis/scripts/hermes/dispatch.py apply --task "$TASK" --job-id <job> --result result.json
 python3 ./.trellis/scripts/hermes/dispatch.py list --task "$TASK"
 python3 ./.trellis/scripts/hermes/dispatch.py status --task "$TASK" --job-id <job>
 ```
 
-`create`（创建）会同时生成派发文件和任务卡；`validate`（校验）检查修订号与边界；`show`（显示）默认不读取 raw trace（原始跟踪）；`run`（运行）的 `Codex native`（Codex 原生）为建议性，`strict`（严格）才执行结构化包装；`apply`（应用）保存原始结果后只写入净化结果并更新 `next_action`（下一动作）。
+`create`（创建）会同时生成派发文件和任务卡；`validate`（校验）检查修订号与边界；`show`（显示）默认不读取 raw trace（原始跟踪）；`run`（运行）在当前项目工作区使用紧凑派发协议；`apply`（应用）保存原始结果后只写入净化结果并更新 `next_action`（下一动作）。
 
 高风险入口包括 `research-trellis init --force`（强制初始化）、`research-trellis update --force`（强制更新）、`research-trellis uninstall --yes`（确认卸载）、`research-trellis channel rm`（删除频道）、高风险 `closure.py amend`（计划变更）和 `task.py archive`（归档任务，默认可能提交）。
 

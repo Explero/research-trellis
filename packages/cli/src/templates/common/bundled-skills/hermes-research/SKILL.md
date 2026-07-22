@@ -7,11 +7,17 @@ description: "Use for Hermes research tasks that need append-only evidence, clai
 
 Use this skill when a task asks for Hermes research discipline, evidence ledgers, claim review, human approval records, or state-machine-aware research progress.
 
+The main agent triggers it for formal experiments and structured research
+records. `runner` owns commands, manifests, artifacts, and raw observations;
+`reviewer:evidence` and `reviewer:statistics` judge sufficiency and quality;
+`reviewer:claim` proposes claim disposition. Command success and a single run
+never become accepted evidence or a durable claim by themselves.
+
 ## Read First
 
 1. Resolve the active Hermes task.
 2. Create a validated dispatch bound to the current `hermes_revision`.
-3. Pass only its `job_id` to Claude Agent, or use Codex strict `dispatch.py run`.
+3. Pass only its `job_id` to Claude Agent; Codex uses the same compact dispatch protocol.
 4. Read at most three direct references named by the canonical dispatch.
 5. Accept only the validated Result Envelope; raw traces never enter chat.
 
@@ -64,7 +70,7 @@ Runtime helpers are available under `.trellis/scripts/hermes/`:
 - `python3 ./.trellis/scripts/hermes/dispatch.py create --task <task> --role <role> --profile <profile> --objective <text>`
 - `python3 ./.trellis/scripts/hermes/dispatch.py validate --task <task> --job-id <job>`
 - `python3 ./.trellis/scripts/hermes/dispatch.py show --task <task> --job-id <job> --prompt`
-- `python3 ./.trellis/scripts/hermes/dispatch.py run --task <task> --job-id <job> --platform codex --mode strict`
+- `python3 ./.trellis/scripts/hermes/dispatch.py run --task <task> --job-id <job> --platform codex`
 - `python3 ./.trellis/scripts/hermes/dispatch.py apply --task <task> --job-id <job> --result <file>`
 - `python3 ./.trellis/scripts/hermes/dispatch.py list --task <task>`
 - `python3 ./.trellis/scripts/hermes/record.py append --task <task> --record-type worker --json '<json>'`

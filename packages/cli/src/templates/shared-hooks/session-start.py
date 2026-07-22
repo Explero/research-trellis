@@ -576,7 +576,7 @@ def _get_task_status(trellis_dir: Path, input_data: dict) -> str:
         return (
             f"Status: PLANNING\nTask: {task_title}\n"
             f"Present: {present_line}\n"
-            "Next-Action: Load `trellis-brainstorm` and write `prd.md`. Stay in planning."
+            "Next-Action: Analyze intent, scope, done criteria and research route; load `trellis-brainstorm` only if requirements remain unresolved. Stay in planning."
         )
 
     if task_status == "planning":

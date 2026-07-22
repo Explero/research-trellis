@@ -38,7 +38,7 @@ def record_firewall_heartbeat(
     job_id: str | None = None,
     session_id: str | None = None,
 ) -> bool:
-    if platform not in SUPPORTED_PLATFORMS or mechanism not in {"hooks", "strict"}:
+    if platform not in SUPPORTED_PLATFORMS or mechanism != "hooks":
         return False
     if mechanism == "hooks" and hooks_disabled():
         return False
@@ -85,7 +85,7 @@ def firewall_health(
             continue
         record_platform = value.get("platform")
         record_mechanism = value.get("mechanism")
-        if record_platform not in SUPPORTED_PLATFORMS or record_mechanism not in {"hooks", "strict"}:
+        if record_platform not in SUPPORTED_PLATFORMS or record_mechanism != "hooks":
             continue
         age = (now - timestamp).total_seconds() if timestamp is not None else None
         if timestamp is None or age is None or age < -5 or age > _heartbeat_ttl():
@@ -124,7 +124,6 @@ def firewall_health(
         "hard_gate": bool(deduped),
         "advisory_signals": {
             "hooks_env": os.environ.get("TRELLIS_HOOKS_ACTIVE") == "1",
-            "codex_strict_env": os.environ.get("TRELLIS_CODEX_STRICT") == "1",
         },
     }
 
@@ -148,21 +147,11 @@ def closure_mode_gate(
         session_id=session_id,
     )
     active = health["active"]
-    if mode == "lean":
-        if not active:
-            return [], [
-                "Lean context firewall is advisory because no fresh hook or strict heartbeat is active."
-            ]
-        return [], []
     if active:
         return [], []
-    if mode == "publication":
-        return [
-            "publication requires an active Claude hook or Codex strict context-firewall heartbeat"
-        ], []
-    return [
-        "standard requires an active hook heartbeat or Codex strict execution"
-    ], []
+    return [], [
+        "No active context-firewall hook was detected; use the validated dispatch and Result Envelope protocol."
+    ]
 
 
 def _parse_timestamp(value: Any) -> datetime | None:

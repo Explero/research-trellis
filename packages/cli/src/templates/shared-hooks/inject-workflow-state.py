@@ -71,9 +71,6 @@ PROJECT_CONTEXT_REFS = (
     ("Project constraints", "CONSTRAINTS.md", "fixed boundaries and approvals"),
 )
 
-_HANDOFF_REVISION_RE = re.compile(r"<!--\s*hermes-handoff-revision:\s*(\d+)\s*-->")
-
-
 def _build_project_context_index(root: Path) -> str:
     """List main-agent project inputs without loading the documents themselves."""
     project_dir = root / ".trellis" / "project"
@@ -244,6 +241,7 @@ def _build_task_resume_notice(
         "<task-resume>",
         f"Active task: {task_label}; phase={phase_label}; current package={current_package}; next={action}",
         f"Before planning, dispatching, or continuing work, read {task_ref}/task.json.",
+        "Classify this request as an in-scope continuation, a bounded plan change, or a new task. Do not regenerate existing work packages for an in-scope continuation.",
     ]
     if handoff_notice:
         lines.append(handoff_notice)
@@ -254,22 +252,16 @@ def _build_task_resume_notice(
     return "\n".join(lines)
 
 
-def _handoff_state(task_dir: Path, revision: object) -> tuple[str, str | None]:
-    """Return a fresh handoff marker or a compact stale/missing explanation."""
+def _handoff_state(task_dir: Path) -> tuple[str, str | None]:
+    """Return a lightweight marker for an optional handoff summary."""
     handoff = task_dir / "HANDOFF.md"
     if not handoff.is_file():
-        return "missing", "No current HANDOFF.md exists; use the Task Capsule and task state."
-    if not isinstance(revision, int) or isinstance(revision, bool) or revision < 0:
-        return "invalid-task-revision", "Ignore HANDOFF.md until task.json has a valid Hermes revision."
+        return "missing", None
     try:
-        prefix = handoff.read_text(encoding="utf-8", errors="replace")[:512]
-        marker = _HANDOFF_REVISION_RE.search(prefix)
         stamp = handoff.stat().st_mtime_ns
     except OSError:
-        return "unreadable", "HANDOFF.md could not be read; use task.json as the source of truth."
-    if marker is None or int(marker.group(1)) != revision:
-        return f"stale:{marker.group(1) if marker else 'legacy'}:{stamp}", "HANDOFF.md is stale for this task revision; do not rely on it. Regenerate it before a handoff."
-    return f"fresh:{revision}:{stamp}", None
+        return "unreadable", None
+    return f"available:{stamp}", None
 
 
 def _context_reset_requested(input_data: dict) -> bool:
@@ -308,6 +300,7 @@ def _closure_turn_context(root: Path, input_data: dict) -> tuple[str, str | None
             is_closure_task,
             research_route_rule,
             research_route_summary,
+            skill_route_guidance,
         )
     except Exception:
         return None
@@ -319,6 +312,7 @@ def _closure_turn_context(root: Path, input_data: dict) -> tuple[str, str | None
     next_action = closure_next_action(data)
     route_summary = research_route_summary(data)
     route_rule = research_route_rule(data)
+    skill_route = skill_route_guidance(data)
     key = getattr(active, "context_key", None)
     anchor_path = root / ".trellis" / ".runtime" / "sessions" / f"{key}.json" if isinstance(key, str) and key else None
     anchor: dict = {}
@@ -331,18 +325,18 @@ def _closure_turn_context(root: Path, input_data: dict) -> tuple[str, str | None
     context_reset = _context_reset_requested(input_data)
     if context_reset:
         previous = None
-    handoff_marker, handoff_problem = _handoff_state(task_dir, revision)
+    handoff_marker, handoff_problem = _handoff_state(task_dir)
     seen_handoff_marker = previous.get("handoff_marker") if isinstance(previous, dict) else None
     if handoff_marker == seen_handoff_marker:
         handoff_notice = None
-    elif handoff_problem:
-        handoff_notice = handoff_problem
-    else:
+    elif handoff_marker.startswith("available:"):
         try:
             handoff_ref = task_dir.relative_to(root).as_posix()
         except ValueError:
             handoff_ref = ".trellis/tasks/" + task_dir.name
-        handoff_notice = f"Read {handoff_ref}/HANDOFF.md once before continuing; it matches the current task revision."
+        handoff_notice = f"If this session resumes after a pause or handoff, read {handoff_ref}/HANDOFF.md once. task.json remains the source of truth."
+    else:
+        handoff_notice = handoff_problem
     resume_notice = _build_task_resume_notice(
         root,
         task_dir,
@@ -358,6 +352,7 @@ def _closure_turn_context(root: Path, input_data: dict) -> tuple[str, str | None
         "phase": phase,
         "next_action": next_action,
         "route": route_summary,
+        "skill_route": skill_route,
         "handoff_marker": handoff_marker,
     }
     if anchor_path:
@@ -367,9 +362,7 @@ def _closure_turn_context(root: Path, input_data: dict) -> tuple[str, str | None
             anchor_path.write_text(json.dumps(anchor, ensure_ascii=False) + "\n", encoding="utf-8")
         except OSError:
             pass
-    force_capsule = context_reset or (
-        handoff_marker.startswith("fresh:") and handoff_marker != seen_handoff_marker
-    )
+    force_capsule = context_reset
     if (
         isinstance(previous, dict)
         and previous.get("task") == task_id
@@ -377,7 +370,7 @@ def _closure_turn_context(root: Path, input_data: dict) -> tuple[str, str | None
         and not force_capsule
     ):
         return (
-            f"<workflow-state>\nHermes closure task: {task_id}; anchor revision {revision} remains active.\n{route_summary}\nRoute rule: {route_rule}\n</workflow-state>",
+            f"<workflow-state>\nHermes closure task: {task_id}; anchor revision {revision} remains active.\n{route_summary}\nRoute rule: {route_rule}\nSkill route: {skill_route}.\n</workflow-state>",
             None,
             resume_notice,
         )
@@ -389,13 +382,14 @@ def _closure_turn_context(root: Path, input_data: dict) -> tuple[str, str | None
         if previous.get("route") != current["route"]:
             changes.append(route_summary)
         changes.append("Route rule: " + route_rule)
+        changes.append("Skill route: " + skill_route + ".")
         return (
             "<workflow-state>\n" + "\n".join(changes) + "\n</workflow-state>",
             build_capsule(task_dir, data, root),
             resume_notice,
         )
     return (
-        f"<workflow-state>\nHermes closure task: {task_id}; phase={phase}.\n{route_summary}\nRoute rule: {route_rule}\nNext: {next_action}\n</workflow-state>",
+        f"<workflow-state>\nHermes closure task: {task_id}; phase={phase}.\n{route_summary}\nRoute rule: {route_rule}\nSkill route: {skill_route}.\nNext: {next_action}\n</workflow-state>",
         build_capsule(task_dir, data, root),
         resume_notice,
     )

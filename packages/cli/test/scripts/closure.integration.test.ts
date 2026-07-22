@@ -32,6 +32,7 @@ interface TestTask {
   research_route?: string;
   research_change_fields?: string[];
   grill_completed?: boolean;
+  decision_ref?: string | null;
 }
 
 function hasPython(): boolean {
@@ -188,6 +189,37 @@ function plan(root: string, doneWhen: string[], extra: string[] = []) {
   return run(root, ...args);
 }
 
+function writeDecisionRecord(
+  taskDir: string,
+  filename = "design.md",
+  marker = "DECISION_BODY_MUST_NOT_BE_IN_CAPSULE",
+): string {
+  fs.writeFileSync(
+    path.join(taskDir, filename),
+    [
+      "# Research Decision",
+      "",
+      "## Decision",
+      marker,
+      "",
+      "## Rationale",
+      "The choice follows the current research objective.",
+      "",
+      "## Evidence",
+      "Repository evidence supports this bounded choice.",
+      "",
+      "## Alternatives",
+      "Keep the previous protocol.",
+      "",
+      "## Failure Conditions",
+      "Conflicting evidence or a failed critical assumption.",
+      "",
+    ].join("\n"),
+    "utf-8",
+  );
+  return filename;
+}
+
 function planTwoExplicitPackages(root: string) {
   return plan(root, ["Result A", "Result B"], [
     "--package",
@@ -261,12 +293,56 @@ describe.skipIf(!hasPython())("Lean Research Closure CLI", () => {
     expect(blocked.status).toBe(1);
     expect(blocked.stderr).toContain("completed grill");
 
-    expect(run(root, "grill", "--complete").status).toBe(0);
+    const missingDecision = run(root, "grill", "--complete");
+    expect(missingDecision.status).not.toBe(0);
+    expect(missingDecision.stderr).toContain("--decision-ref");
+
+    const decisionRef = writeDecisionRecord(taskDir);
+    expect(
+      run(root, "grill", "--complete", "--decision-ref", decisionRef).status,
+    ).toBe(0);
     expect(run(root, "validate").status).toBe(0);
     const capsule = run(root, "capsule");
     expect(capsule.stdout).toContain("Route: exploration");
     expect(capsule.stdout).toContain("Research changes: model_architecture");
     expect(capsule.stdout).toContain("Grill: complete");
+    expect(capsule.stdout).toContain("Decision ref: design.md");
+    expect(capsule.stdout).not.toContain("DECISION_BODY_MUST_NOT_BE_IN_CAPSULE");
+    const events = fs
+      .readFileSync(path.join(taskDir, "hermes", "task-events.jsonl"), "utf-8")
+      .trim()
+      .split("\n")
+      .map((line) => JSON.parse(line) as Record<string, unknown>);
+    expect(events.find((event) => event.event_type === "grill_completed")).toMatchObject({
+      decision_ref: "design.md",
+    });
+  });
+
+  it("keeps legacy completed grills without decision_ref compatible with a warning", () => {
+    writeTask(taskDir, baseTask({
+      intent: "Preserve a legacy exploration task",
+      definition_of_done: ["Legacy result is verified"],
+      research_route: "exploration",
+      research_change_fields: ["dataset"],
+      grill_completed: true,
+      work_packages: [
+        {
+          id: "WP1",
+          title: "Legacy result",
+          outcome: "Legacy result is verified",
+          done_when: ["Legacy result is verified"],
+          evidence_required: [],
+          depends_on: [],
+          status: "pending",
+          evidence_refs: [],
+          blocker: null,
+        },
+      ],
+    }));
+
+    const result = run(root, "validate");
+    expect(result.status).toBe(0);
+    expect(result.stderr).toContain("legacy completed grill has no decision_ref");
   });
 
   it("automatically routes recorded research changes to exploration", () => {
@@ -631,7 +707,7 @@ describe.skipIf(!hasPython())("Lean Research Closure CLI", () => {
     expect(fs.existsSync(taskDir)).toBe(true);
   });
 
-  it("requires a current handoff before an open task session can finish", () => {
+  it("updates a handoff before an open task session finishes", () => {
     expect(plan(root, ["Result A"]).status).toBe(0);
     const sessions = path.join(root, ".trellis", ".runtime", "sessions");
     fs.mkdirSync(sessions, { recursive: true });
@@ -639,22 +715,13 @@ describe.skipIf(!hasPython())("Lean Research Closure CLI", () => {
       path.join(sessions, "closure-test-session.json"),
       `${JSON.stringify({ current_task: ".trellis/tasks/demo" })}\n`,
     );
-    const blocked = runTask(root, "finish");
-    expect(blocked.status).toBe(1);
-    expect(blocked.stdout).toContain("dedicated handoff subagent");
-    expect(fs.existsSync(path.join(taskDir, "HANDOFF.md"))).toBe(false);
-
-    const task = readTask(taskDir);
-    fs.writeFileSync(
-      path.join(taskDir, "HANDOFF.md"),
-      `<!-- hermes-handoff-revision: ${task.hermes_revision} -->\n`,
-    );
     const result = runTask(root, "finish");
     expect(result.status).toBe(0);
-    expect(result.stdout).not.toContain("Handoff updated");
+    expect(result.stdout).toContain("Handoff updated");
+    expect(fs.existsSync(path.join(taskDir, "HANDOFF.md"))).toBe(true);
   });
 
-  it("writes revision-bound handoffs from validated task results only", () => {
+  it("writes handoffs from validated task results only", () => {
     expect(plan(root, ["Result A"]).status).toBe(0);
     fs.mkdirSync(path.join(taskDir, "hermes", "dispatches"), { recursive: true });
     fs.mkdirSync(path.join(root, "src"), { recursive: true });
@@ -696,27 +763,13 @@ describe.skipIf(!hasPython())("Lean Research Closure CLI", () => {
 
     expect(run(root, "handoff").status).toBe(0);
     const handoff = fs.readFileSync(path.join(taskDir, "HANDOFF.md"), "utf-8");
-    expect(handoff).toContain(
-      `<!-- hermes-handoff-revision: ${readTask(taskDir).hermes_revision} -->`,
-    );
+    expect(handoff).toContain("# Task Handoff");
     expect(handoff).not.toContain("- src/owned.ts");
     expect(handoff).not.toContain("src/forged.ts");
     expect(handoff).not.toContain("unrelated.txt");
     expect(handoff).toContain("job-1: confirmed result integrity check failed");
   });
 
-  it("refuses to replace a handoff symlink", () => {
-    if (process.platform === "win32") return;
-    expect(plan(root, ["Result A"]).status).toBe(0);
-    const sentinel = path.join(root, "sentinel.md");
-    fs.writeFileSync(sentinel, "do not overwrite\n");
-    fs.symlinkSync(sentinel, path.join(taskDir, "HANDOFF.md"));
-
-    const result = run(root, "handoff");
-    expect(result.status).toBe(1);
-    expect(result.stderr).toContain("crosses a symlink");
-    expect(fs.readFileSync(sentinel, "utf-8")).toBe("do not overwrite\n");
-  });
 
   it("derives next action from current closure state instead of stale task text", () => {
     expect(plan(root, ["Result A"]).status).toBe(0);
@@ -743,7 +796,7 @@ describe.skipIf(!hasPython())("Lean Research Closure CLI", () => {
     expect(result.stdout.length).toBeLessThan(800);
   });
 
-  it("strongly warns when lean closure runs without hooks or strict heartbeat", () => {
+  it("warns when lean closure runs without a context hook", () => {
     expect(plan(root, ["Result A"]).status).toBe(0);
     expect(run(root, "validate").status).toBe(0);
     const result = spawnSync(
@@ -756,7 +809,7 @@ describe.skipIf(!hasPython())("Lean Research Closure CLI", () => {
       },
     );
     expect(result.stdout).toContain("warnings:");
-    expect(result.stdout).toContain("advisory");
+    expect(result.stdout).toContain("validated dispatch");
   });
 
   it("repairs only the first gap and preserves completed packages", () => {
@@ -874,8 +927,83 @@ describe.skipIf(!hasPython())("Lean Research Closure CLI", () => {
     expect(task.research_change_fields).toEqual(["dataset"]);
     expect(task.grill_completed).toBe(false);
     expect(run(root, "validate").status).toBe(1);
-    expect(run(root, "grill", "--complete").status).toBe(0);
+    const decisionRef = writeDecisionRecord(taskDir);
+    expect(
+      run(root, "grill", "--complete", "--decision-ref", decisionRef).status,
+    ).toBe(0);
     expect(run(root, "validate").status).toBe(0);
+  });
+
+  it("preserves the completed decision until a research amendment is applied", () => {
+    expect(
+      plan(root, ["Research result is verified"], [
+        "--route",
+        "exploration",
+        "--research-change",
+        "dataset",
+      ]).status,
+    ).toBe(0);
+    const decisionRef = writeDecisionRecord(taskDir);
+    expect(
+      run(root, "grill", "--complete", "--decision-ref", decisionRef).status,
+    ).toBe(0);
+    expect(run(root, "validate").status).toBe(0);
+
+    const taskWithInvalidNestedTarget = readTask(taskDir);
+    taskWithInvalidNestedTarget.meta.research_contract = { dataset: "dataset-v1" };
+    writeTask(taskDir, taskWithInvalidNestedTarget);
+
+    const denied = run(
+      root,
+      "amend",
+      "--field",
+      "split",
+      "--value",
+      "split-v2",
+      "--reason",
+      "unapproved split change",
+    );
+    expect(denied.status).toBe(1);
+    expect(readTask(taskDir)).toMatchObject({
+      decision_ref: decisionRef,
+      grill_completed: true,
+    });
+
+    const invalid = run(
+      root,
+      "amend",
+      "--field",
+      "dataset.version",
+      "--value",
+      "v2",
+      "--reason",
+      "invalid nested dataset change",
+      "--approved-by",
+      "human/root",
+    );
+    expect(invalid.status).toBe(1);
+    expect(readTask(taskDir)).toMatchObject({
+      decision_ref: decisionRef,
+      grill_completed: true,
+    });
+
+    const approved = run(
+      root,
+      "amend",
+      "--field",
+      "split",
+      "--value",
+      "split-v2",
+      "--reason",
+      "approved split change",
+      "--approved-by",
+      "human/root",
+    );
+    expect(approved.status).toBe(0);
+    expect(readTask(taskDir)).toMatchObject({
+      decision_ref: null,
+      grill_completed: false,
+    });
   });
 
   it("treats functional model architecture changes as high risk", () => {
@@ -1067,33 +1195,6 @@ describe.skipIf(!hasPython())("Lean Research Closure CLI", () => {
     expect(readTask(taskDir).closure_state).toBe("open");
   });
 
-  it("does not close publication mode when hooks are explicitly disabled", () => {
-    expect(
-      plan(root, ["Publication result verified"], ["--mode", "publication"])
-        .status,
-    ).toBe(0);
-    expect(run(root, "validate").status).toBe(0);
-    completeCurrent(root, "ev-1");
-    const result = spawnSync(
-      PYTHON,
-      [".trellis/scripts/closure.py", "close", "--task", "demo"],
-      {
-        cwd: root,
-        encoding: "utf-8",
-        env: {
-          ...process.env,
-          TRELLIS_HOOKS: "0",
-          TRELLIS_HOOKS_ACTIVE: "1",
-        },
-      },
-    );
-    expect(result.status).toBe(1);
-    expect(result.stdout).toContain("context firewall");
-    const task = readTask(taskDir);
-    expect(task.status).toBe("in_progress");
-    expect(task.closure_state).toBe("open");
-    expect(task.hermes_phase).not.toBe("closed");
-  });
 
   it("keeps legacy non-Hermes archive behavior", () => {
     const legacyRoot = fs.mkdtempSync(

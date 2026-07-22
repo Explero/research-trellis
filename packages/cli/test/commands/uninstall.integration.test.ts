@@ -201,6 +201,17 @@ describe("uninstall() integration", () => {
     expect(fs.existsSync(userHookDir)).toBe(true);
   });
 
+  it("preserves a project-owned root CLAUDE.md on uninstall", async () => {
+    const existing = "# Project-owned Claude rules\n";
+    fs.writeFileSync(path.join(tmpDir, "CLAUDE.md"), existing, "utf-8");
+    await init({ yes: true, claude: true, force: true });
+    expect(loadHashes(tmpDir)).not.toHaveProperty("CLAUDE.md");
+
+    await uninstall({ yes: true });
+
+    expect(fs.readFileSync(path.join(tmpDir, "CLAUDE.md"), "utf-8")).toBe(existing);
+  });
+
   it("#8a empty managed sub-dirs and root dir are pruned (kilo: no structured config)", async () => {
     // Kilo has no hooks.json/settings.json/config.toml/package.json — every
     // manifest file is opaque and gets deleted, so the entire .kilocode/

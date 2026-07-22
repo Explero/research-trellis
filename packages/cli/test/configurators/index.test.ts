@@ -339,6 +339,7 @@ describe("collectPlatformTemplates", () => {
       if (result) {
         const managedPaths = getPlatformManagedPaths(id);
         for (const [filePath] of result) {
+          if (id === "claude-code" && filePath === "CLAUDE.md") continue;
           expect(
             managedPaths.some(
               (managedPath) =>
@@ -358,6 +359,12 @@ describe("collectPlatformTemplates", () => {
         expect(result.size).toBeGreaterThan(0);
       }
     }
+  });
+
+  it("tracks the Claude-only root thin entry", () => {
+    const claude = collectPlatformTemplates("claude-code");
+    expect(claude?.get("CLAUDE.md")).toContain("AGENTS.md");
+    expect(collectPlatformTemplates("codex")?.has("CLAUDE.md")).toBe(false);
   });
 
   it("tracks bundled trellis-meta files for every skill-writing platform", () => {

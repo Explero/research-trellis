@@ -1,8 +1,8 @@
 # Hermes research overlay config.
 
-hermes_version: "0.1.0-mvp"
-runtime_scope: "deployment candidate hardening"
-runtime_boundary: "not an OS sandbox"
+hermes_version: "0.7.1-beta.0"
+runtime_scope: "lightweight research collaboration"
+runtime_boundary: "runs directly in the project workspace"
 
 # Task-scoped Hermes records are the source of truth for research work.
 records_dir: ".trellis/tasks/{task}/hermes"
@@ -66,7 +66,6 @@ context_firewall:
   raw_trace_publish: false
   claude_mode: "hooks-enforced"
   codex_native: "advisory"
-  codex_strict: "codex exec --output-schema --json -o"
 
 async_workers:
   heartbeat_interval: "5m"
@@ -77,16 +76,12 @@ async_workers:
 
 runtime:
   scripts_dir: ".trellis/scripts/hermes"
-  sandbox:
-    mode: "none"
-    required: false
-    note: "Local fail-closed checks only; not an OS sandbox."
   commands:
     append_record: "python3 ./.trellis/scripts/hermes/record.py append --task {task} --record-type worker --json '{json}'"
     dispatch_create: "python3 ./.trellis/scripts/hermes/dispatch.py create --task {task} --role {role} --profile {profile} --objective {objective}"
     dispatch_validate: "python3 ./.trellis/scripts/hermes/dispatch.py validate --task {task} --job-id {job_id}"
     dispatch_show: "python3 ./.trellis/scripts/hermes/dispatch.py show --task {task} --job-id {job_id}"
-    dispatch_run_codex_strict: "python3 ./.trellis/scripts/hermes/dispatch.py run --task {task} --job-id {job_id} --platform codex --mode strict"
+    dispatch_run: "python3 ./.trellis/scripts/hermes/dispatch.py run --task {task} --job-id {job_id} --platform {platform}"
     dispatch_list: "python3 ./.trellis/scripts/hermes/dispatch.py list --task {task}"
     validate_worker: "python3 ./.trellis/scripts/hermes/validate.py --task {task} --kind worker"
     init_experiment: "python3 ./.trellis/scripts/hermes/experiment.py init --task {task}"

@@ -16,6 +16,14 @@
 
 ## 操作步骤
 
+### 科研协作触发
+
+主代理以事实和证据为先，不以同意用户为目标；应明确重要假设、不确定性和有依据的异议，科研取舍仍由用户批准。普通可逆任务直接执行，有限不确定性声明假设后执行，只有高风险研究变化才暂停讨论。证据冲突或关键假设失效时进入 `blocked`（阻塞），通过人工批准的 `amend`（修改）更新协议后继续。
+
+高风险 exploration（探索）完成 `grill-me`（方案讨论）后，必须用 `decision_ref`（决策记录引用）指向已有 `prd.md`（需求文档）或 `design.md`（设计文档）。记录包含决定、理由、证据、备选方案和失效条件，派发事件与 Task Capsule（任务胶囊）只传引用。提示词不能替代该记录；旧完成标记没有引用时仅警告，普通任务不新增讨论门禁。
+
+只有 exploration 且研究变化包含 `dataset`（数据集）、`split`（数据切分）或 `preprocessing`（预处理）时，运行代理才检查任务级 `data_preflight`（数据预检）。其他任务的角色派发、运行和复核步骤保持不变。
+
 ### 五个角色
 
 `Role`（角色）决定权限、工具和责任边界。`Profile`（模式）决定这个角色本次具体做什么。模式不是新的子代理，也没有单独的平台代理模板。
@@ -35,6 +43,24 @@
 - `coder`（编码代理）：`implementation`（实现）、`tests`（测试）、`configuration`（配置）、`repair`（修复）。
 - `runner`（运行代理）：`experiment`（实验）、`test`（测试）、`build`（构建）、`validation`（验证）。
 - `reviewer`（复核代理）：`quality`（质量）、`evidence`（证据）、`claim`（主张）、`safety`（安全）、`closure`（关闭）、`statistics`（统计）。
+
+### 科研技能路由
+
+技能由主代理按实际需要触发，不设每轮固定数量，也不要求组成完整流水线。多个技能确有依赖时按顺序使用，前一步结果通过文件引用复用。
+
+| 场景 | 主代理动作 | 执行角色 |
+| --- | --- | --- |
+| 新任务 | 分析意图、范围、完成定义、科研分流和 1–4 个结果型工作包 | 复杂设计可由 `planner`（规划代理）提供候选 |
+| 需求不清楚 | 按需触发 `brainstorm`（问题梳理） | 主代理与用户讨论，`researcher`（检索代理）补资料 |
+| 关键科研决策 | 按需触发 `grill-me`（方案讨论） | 主代理与用户讨论，`planner` 比较方案但不批准 |
+| 代码工作包 | 触发 `before-dev`（开发前准备），任务明确选择时才使用 TDD | `coder`（编码代理）实现，`runner`（运行代理）执行测试 |
+| 工程验收 | 触发代码检查 | `runner` 执行，`reviewer:quality`（质量复核）独立判断 |
+| 正式实验 | 触发 `hermes-research`（科研记录） | `runner` 登记运行，证据或统计由对应 `reviewer` 复核 |
+| 重复技术失败 | 触发 `break-loop`（失败归因） | `planner:root_cause`（根因分析）判断，`coder` 执行限定修复 |
+| 交接或收尾 | 请求交接、关闭审查和最终验证 | `coder:configuration` 写交接，`reviewer:closure` 审计，`runner` 验证和归档 |
+| 稳定知识 | 关闭前评估一次 `update-spec`（更新规范） | `coder:configuration` 写入，`reviewer` 核对证据 |
+
+纯实验、文献和证据任务不触发代码技能。代码测试通过不等于科研证据充分；正常的负实验结果也不进入技术调试循环。
 
 三个最小示例：
 
@@ -72,7 +98,7 @@ python3 ./.trellis/scripts/hermes/dispatch.py validate --task "$TASK" --job-id "
 
 ```bash
 python3 ./.trellis/scripts/hermes/dispatch.py run --task "$TASK" \
-  --job-id "$JOB" --platform codex --mode strict
+  --job-id "$JOB" --platform codex
 ```
 
 4. 返回必须是单个 `Result Envelope`（结果信封）JSON，包含 `uncertainties`（不确定项），其中 `conclusion`（结论）最多 1200 字符。非法 JSON、长日志、完整差异、搜索过程、敏感信息和越界改动会被拒绝；raw trace（原始跟踪）只保存在 `.trellis/.runtime/hermes-traces/`（本地运行目录）。
@@ -102,7 +128,7 @@ python3 ./.trellis/scripts/hermes/jobs.py resume --task "$TASK" --job-id "$JOB"
 
 7. 在支持并启用 `Hermes`（科研工作流）运行时钩子的平台中，`PreToolUse`（工具使用前）门禁会限制主代理直接写入和执行，并按任务卡检查工作代理目标文件；`Stop`（结束）门禁读取记录、运行清单和当前文件差异，不会在结束时重新运行测试。当前内置完整运行时门禁只在 `Claude Code`（Claude 代码工具）和已启用钩子的 `Codex`（代码代理）配置中注册。
 
-当前 `Stop`（结束）完成检查偏向代码任务：它要求编码结果覆盖当前非 `.trellis/`（工作流目录）差异，并有相关的成功运行清单和质量复核记录。纯研究任务也可能触发这个要求，这是测试版的已知限制。
+`Stop`（结束）按实际工作类型检查：存在实现代码改动时要求编码结果、成功运行清单和独立质量复核；没有代码改动的实验、检索或规划工作要求对应角色结果和独立复核，正式运行还必须引用成功的运行清单。它不会为了纯研究任务强制创建编码结果。
 
 ### 证据整理工具
 
@@ -144,7 +170,7 @@ python3 ./.trellis/scripts/hermes/evidence.py summary --task "$TASK"
 - 钩子未触发：检查平台配置；环境变量 `TRELLIS_HOOKS=0`（关闭钩子）或 `TRELLIS_DISABLE_HOOKS=1`（禁用钩子）会直接关闭门禁。
 - 角色或模式组合无效：只使用本页五个正式角色及其模式，不要把模式写成新角色。
 - 旧角色出现弃用提示：按迁移表更新派发配置；历史 `JSONL`（逐行 JSON）记录不需要重写。
-- 子代理读取内容过多：确认 Claude 只传 `job_id`（工作编号），或 Codex 使用 strict（严格）包装器；引用不能超过 3 个。
+- 子代理读取内容过多：确认 Claude 只传 `job_id`（工作编号），Codex 使用紧凑派发；引用不能超过 3 个。
 - 门禁与任务类型不匹配：保留失败记录并由人工决定调整流程，不要把门禁当作安全认证。
 
 ## 验证记录

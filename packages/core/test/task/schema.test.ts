@@ -29,6 +29,7 @@ describe("emptyTaskRecord", () => {
     expect(record.research_route).toBe("delivery");
     expect(record.research_change_fields).toEqual([]);
     expect(record.grill_completed).toBe(false);
+    expect(record.decision_ref).toBeNull();
     expect(record.constraints).toEqual({
       excluded_platforms: [],
       excluded_paths: [],
@@ -121,6 +122,7 @@ describe("taskRecordSchema", () => {
       "research_route",
       "research_change_fields",
       "grill_completed",
+      "decision_ref",
       "constraints",
       "work_packages",
       "current_work_package",

@@ -18,7 +18,7 @@ import {
 } from "../types/ai-tools.js";
 
 // Platform configurators
-import { configureClaude } from "./claude.js";
+import { CLAUDE_THIN_ENTRY, configureClaude } from "./claude.js";
 import { configureCursor } from "./cursor.js";
 import { configureOpenCode, collectOpenCodeTemplates } from "./opencode.js";
 import { configureCodex } from "./codex.js";
@@ -182,6 +182,7 @@ const PLATFORM_FUNCTIONS: Record<AITool, PlatformFunctions> = {
         `.claude/${settings.targetPath}`,
         resolvePlaceholders(settings.content),
       );
+      files.set("CLAUDE.md", CLAUDE_THIN_ENTRY);
       return files;
     },
   },

@@ -1,6 +1,6 @@
 # Hermes on Trellis 科研化改造总计划
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use `superpowers:subagent-driven-development`（子代理驱动开发） or `superpowers:executing-plans`（执行计划） to implement this plan task-by-task. Steps should be tracked with checkbox syntax in later implementation issues.
+> **状态：历史设计记录。** 本文保留早期讨论，不是当前运行规范；其中关于容器、沙箱、严格隔离和额外安全门禁的内容已不再采用。当前行为以中文手册、任务胶囊、Lean Closure 和本地工作流预检为准。
 
 **Goal:** 把 Trellis 从任务协作脚手架，改造成可审计、可复现、可评估的科研实验框架。
 

@@ -157,7 +157,7 @@ def _build_hermes_main_agent_boot_guard(trellis_dir: Path) -> str:
 Source: .trellis/hermes/HERMES_MAIN_AGENT_BOOT_GUARD.md. Read it before governance-sensitive work; keep this SessionStart payload compact.
 Role: Main Agent / Main Pilot coordinates Hermes state, bounded subagent routing, record validation, handoff, and human/PI stop points.
 Hard limits: do not directly modify source, metrics, dataset splits, baselines, official evaluation, claim_allowed=true, or main merge unless Hermes state and human/root authority allow it.
-Formal Codex context policy: native is advisory; use validated_dispatch_only through dispatch.py strict mode for enforced work. Keep raw output out of chat.
+Formal Codex context policy: use validated_dispatch_only with the current task dispatch. Keep raw output out of chat.
 Record policy: chat is not completion; completed, failed, blocked, stale, interrupted, or capacity-blocked work needs structured records.
 Claim boundary: keep engineering success, runner success, evidence review, proxy evidence, scientific evidence, claim approval, and merge approval separate.
 </main-agent-boot-guard>"""

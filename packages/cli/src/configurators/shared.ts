@@ -162,7 +162,7 @@ export function resolvePlaceholders(
  * Identical to {@link resolvePlaceholders} except that {@link CMD_REF} is
  * rendered in a platform-neutral form (`` `name` (Trellis command) ``)
  * instead of substituting a platform-specific prefix. This is the only
- * placeholder that varies between platforms in the 5 shared workflow skills
+ * placeholder that varies between platforms in the shared workflow skills
  * (`brainstorm`, `before-dev`, `check`, `break-loop`, `update-spec`), so
  * neutralizing it makes the rendered SKILL.md files byte-identical regardless
  * of which Trellis configurator wrote them — eliminating the
@@ -196,7 +196,7 @@ export function resolvePlaceholdersNeutral(
   result = result.replace(RE_USER_ACTION_LABEL, context.userActionLabel);
   result = result.replace(RE_CLI_FLAG, context.cliFlag);
 
-  // Conditional blocks (resolved per platform — none of the 5 shared skills
+  // Conditional blocks (resolved per platform — none of the shared skills
   // use conditionals, but Codex-only command-as-skill files might in future).
   const flagValues: Record<(typeof CONDITIONAL_FLAGS)[number], boolean> = {
     AGENT_CAPABLE: context.agentCapable,
@@ -433,7 +433,7 @@ export function resolveCommands(ctx: TemplateContext): ResolvedTemplate[] {
 }
 
 /**
- * Resolve only the 5 skill templates with trellis- prefix + SKILL.md frontmatter.
+ * Resolve shared workflow skill templates with trellis- prefix + SKILL.md frontmatter.
  * Used by "both" platforms for the auto-triggered skills.
  */
 export function resolveSkills(ctx: TemplateContext): ResolvedTemplate[] {
@@ -471,7 +471,7 @@ export function resolveSkillsNeutral(ctx: TemplateContext): ResolvedTemplate[] {
 
 /**
  * Same as {@link resolveAllAsSkills} but uses
- * {@link resolvePlaceholdersNeutral} for the 5 shared skills. The 2 command
+ * {@link resolvePlaceholdersNeutral} for the shared skills. The command
  * templates (continue, finish-work) folded into the skill set still resolve
  * `{{CLI_FLAG}}` / `{{PYTHON_CMD}}` per platform — only Codex writes those
  * files into `.agents/skills/`, so byte-identity isn't required there.

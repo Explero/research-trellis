@@ -14,7 +14,7 @@ waits for human/root approval instead of inventing a local decision.
 Before starting a worker, create and validate one dispatch with
 `python3 ./.trellis/scripts/hermes/dispatch.py create`. The command writes the
 dispatch file and its RecordBus `task_card`. Claude Agent calls receive only
-the `job_id`; Codex strict work runs through the same CLI.
+the `job_id`; Codex uses the same compact dispatch and result protocol.
 
 The validated dispatch defines:
 

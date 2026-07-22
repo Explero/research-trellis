@@ -71,7 +71,7 @@ trust_level = "trusted"
 
 `v0.7.1-beta.0`（当前测试版）的 closure 任务仍可在各平台读取 `Task Capsule`（紧凑任务上下文），但可执行的 `Agent Context Firewall`（代理上下文防火墙）只正式支持 `Claude Code`（Claude 代码工具）和 `Codex`（代码代理平台）。其他平台保留原有 Trellis 上下文和代理行为，不宣称具备派发替换、结构化返回或状态确认门禁。
 
-五个正式 `Hermes`（科研工作流）角色模板目前只为 `Claude Code`（Claude 代码工具）和 `Codex`（代码代理平台）提供。`Claude Code`（Claude 代码工具）依赖已批准的 `PreToolUse / SubagentStop / PostToolUse`（工具前、子代理结束、工具后）钩子；`Codex native`（Codex 原生代理）仅为 `advisory`（建议性），`Codex strict`（Codex 严格模式）通过 `codex exec --output-schema --json -o`（结构化执行参数）执行。能力缺失时，`lean`（轻量）警告降级，`standard`（标准）必须有钩子或严格模式，`publication`（发表）拒绝派发和关闭。
+五个正式 `Hermes`（科研工作流）角色模板目前只为 `Claude Code`（Claude 代码工具）和 `Codex`（代码代理平台）提供。`Claude Code`（Claude 代码工具）可使用已批准的 `PreToolUse / SubagentStop / PostToolUse`（工具前、子代理结束、工具后）钩子；`Codex`（代码代理平台）使用相同的紧凑派发与结果契约，直接在当前项目工作区协作。关闭条件仍由任务记录、证据和审计决定。
 
 ## 用户入口
 
@@ -81,13 +81,13 @@ trust_level = "trusted"
 | --- | --- | --- |
 | `continue`（继续任务） | 恢复活动任务 | 读取紧凑任务状态并只推进下一动作 |
 | `status`（查看状态） | 查看阶段、工作包、阻塞和下一动作 | 只读，不会改变任务状态 |
-| `handoff`（写入交接） | 在暂停、切换会话或压缩上下文前生成交接摘要 | 由受限子代理写入 `HANDOFF.md`（交接摘要），不会关闭任务 |
+| `handoff`（写入交接） | 在暂停、切换会话或压缩上下文前生成交接摘要 | 推荐下发子代理写入 `HANDOFF.md`（交接摘要），不会关闭任务 |
 | `finish-work`（完成收尾） | 审计、关闭并归档已完成任务 | closure 任务必须先通过审计和关闭门禁 |
 | `start`（启动会话） | 兼容没有会话开始钩子的环境 | 支持钩子的主会话通常自动完成启动 |
 
 `Claude Code`（Claude 代码工具）和其他原生命令平台会把这些入口显示为平台的命令形式；`Codex`（代码代理平台）使用同名技能入口。命令前缀由平台决定，不应把某个平台的前缀复制到另一个平台。
 
-建议用户主动理解和调用的技能只有 `grill-me`（聚焦讨论）和 `update-spec`（更新规范）。前者用于用户明确要求讨论研究设计、架构或范围，后者用于用户明确要求把已验证经验写入规范；主代理在相同条件出现时也应自动触发对应过程。为保持旧项目兼容和自动路由，平台仍会安装 `brainstorm`（需求讨论）、`before-dev`（开发前准备）、`check`（检查）、`tdd`（测试驱动）、`break-loop`（重复问题分析）和架构审查等内部技能；它们不是日常需要记忆的入口，也不会替代 closure 的状态、审计和关闭门禁。
+建议用户主动理解和调用的技能只有 `grill-me`（聚焦讨论）和 `update-spec`（更新规范）。其他技能按科研阶段和实际工作触发，不设每轮固定数量：需求确有缺口才使用 `brainstorm`（问题梳理）；代码工作包才使用 `before-dev`（开发前准备）和 `check`（代码检查）；`tdd`（测试驱动）必须由用户或任务策略明确选择；`break-loop`（失败归因）只处理重复技术失败；软件架构技能不能代替科研模型设计；正式实验和证据记录使用 `hermes-research`（科研记录）。技能不替代 closure 的状态、审计和关闭门禁。
 
 6. 逐平台能力和限制如下。“子代理”表示仓库会安装对应代理模板；“门禁”专指 `hermes-runtime-guard.py`（Hermes 运行时门禁），不包括只做上下文注入的同名钩子事件。
 
@@ -96,7 +96,7 @@ trust_level = "trusted"
 | `Claude Code`（Claude 代码工具） | `SessionStart + UserPromptSubmit`（会话开始和用户提交） | 正式 Hermes Agent 只传 `job_id`（工作编号），钩子替换提示并净化结果 | 完整 | 需平台读取项目设置；异步 Hermes Agent 被拒绝；环境开关可关闭 |
 | `Cursor`（Cursor 编辑器） | `sessionStart`（会话开始）注入 capsule 和命令行上下文 | 支持；`Task / Subagent`（子代理工具）前推送 | 无 | 没有每轮 capsule；只有平台实际触发 `.cursor/hooks.json`（Cursor 钩子）时才注入 |
 | `OpenCode`（开放代码工具） | `chat.message`（会话消息）注入会话摘要、每轮状态和 capsule | 支持；代理按派发首行自行读取 | 无 | 依赖 OpenCode 插件被实际加载；会话检索功能仍未实现 |
-| `Codex`（代码代理） | `UserPromptSubmit`（用户提交），无会话开始注入 | native（原生）仅建议；strict（严格）由统一派发 CLI 执行 | 写入和结束门禁；严格模式另有结果门禁 | 钩子需用户级开关、项目信任和 `/hooks`（钩子审阅）；发表模式必须使用硬门禁 |
+| `Codex`（代码代理） | `UserPromptSubmit`（用户提交），无会话开始注入 | 使用紧凑派发与结果文件，直接在当前工作区执行 | 任务状态、证据和关闭审计 | 钩子需用户级开关、项目信任和 `/hooks`（钩子审阅） |
 | `Kilo CLI`（Kilo 命令行） | 手动运行 capsule | 无，主会话执行模板 | 无 | 依赖工作流文件和手动读取 |
 | `Kiro Code`（Kiro 代码工具） | 无通用主会话注入 | 支持；`agentSpawn`（代理创建）时推送 | 无 | 只注册代理创建钩子，无会话开始和每轮主会话钩子 |
 | `Gemini CLI`（Gemini 命令行） | `SessionStart + BeforeAgent`（会话开始和代理前） | 支持；代理前置说明拉取 | 无 | 依赖 `.gemini/settings.json`（Gemini 设置）的当前钩子协议 |
@@ -125,7 +125,7 @@ trust_level = "trusted"
 - 版本：`0.7.1-beta.0`（测试版）。
 - 更名前基准提交：`9f7dc8497b4782878d6fa7ac3b63eba5bde507df`。
 - 命令：`rg -n -m 1 "dispatch_mode|agentCapable|hasHooks" packages/cli/src packages/cli/test`（平台能力核对）。
-- 结果：常规平台能力表保留；代理上下文防火墙的正式范围收窄为 Claude Code 和 Codex，并区分 Codex native 与 strict。
+- 结果：常规平台能力表保留；代理上下文防火墙的正式范围收窄为 Claude Code 和 Codex，并使用相同的最小上下文语义。
 - 未验证项：本轮未启动 14 种平台主机，也未访问远程工作流市场。
 
 ## 来源

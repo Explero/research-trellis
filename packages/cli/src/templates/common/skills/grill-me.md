@@ -1,10 +1,17 @@
 # Trellis Grill Me
 
-Use this skill after the initial repository-first clarification pass, when the task still has requirement gaps that only the user can answer.
+The main agent uses this skill after repository-first analysis only when a
+material research decision remains unresolved. Typical triggers are a changed
+hypothesis, functional model architecture, dataset, split, preprocessing,
+objective/loss, metric definition, baseline, claim scope, or explicit user
+request. Task size alone is not a trigger.
 
 ## Purpose
 
-Drive a strict follow-up interview to tighten `prd.md` before implementation starts.
+Resolve the smallest decision needed to make the research contract testable.
+A `planner` may compare methods or experimental designs, but cannot approve a
+high-risk change. The main agent leads user discussion and delegates every task
+artifact update.
 
 This is the Trellis-built-in replacement for external `grill-me` dependency patterns. Do not rely on any local third-party skill path.
 
@@ -13,7 +20,8 @@ This is the Trellis-built-in replacement for external `grill-me` dependency patt
 Use this skill only when:
 - a Trellis task already exists
 - repository-answerable questions have already been resolved through inspection
-- the remaining uncertainty is about product intent, scope, preferences, trade-offs, or risk tolerance
+- the remaining uncertainty is about research intent, scope, method trade-offs,
+  evidence standards, claim boundaries, preferences, or risk tolerance
 
 Do **not** use this skill for questions the codebase can answer directly.
 

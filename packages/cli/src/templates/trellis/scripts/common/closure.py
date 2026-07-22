@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Any
 
 from .firewall import closure_mode_gate
-from .io import file_lock, path_has_symlink, read_json, write_json_atomic, write_text_atomic
+from .io import file_lock, read_json, write_json_atomic, write_text_atomic
 from .paths import FILE_TASK_JSON, get_current_task, get_developer, get_repo_root
 from .task_utils import resolve_task_dir
 
@@ -42,6 +42,13 @@ RESEARCH_ROUTE_LABELS = {
     "delivery": "delivery",
     "execution": "execution",
     "exploration": "exploration",
+}
+DECISION_SECTION_HEADINGS = {
+    "decision": "Decision",
+    "rationale": "Rationale",
+    "evidence": "Evidence",
+    "alternatives": "Alternatives",
+    "failure conditions": "Failure Conditions",
 }
 PACKAGE_STATUSES = {
     "pending",
@@ -165,6 +172,7 @@ def closure_defaults(mode: str = "lean") -> dict[str, Any]:
         "research_route": "delivery",
         "research_change_fields": [],
         "grill_completed": False,
+        "decision_ref": None,
         "constraints": {
             "excluded_platforms": [],
             "excluded_paths": [],
@@ -384,6 +392,53 @@ def research_route_summary(data: dict[str, Any]) -> str:
     )
 
 
+def skill_route_guidance(data: dict[str, Any]) -> str:
+    """Return one compact, phase-aware skill and role routing hint."""
+    phase = str(data.get("hermes_phase") or "planning")
+    route = research_route(data)
+    if phase == "planning":
+        if route == "exploration" and data.get("grill_completed") is not True:
+            return (
+                "main leads a focused grill-me decision; planner may propose options, "
+                "but cannot approve the research change"
+            )
+        return (
+            "main analyzes intent, scope, done criteria and 1-4 outcome packages; "
+            "brainstorm only for unresolved requirements"
+        )
+    if phase == "ready":
+        return (
+            "main starts the next package and dispatches by permission; "
+            "do not preload unrelated skills"
+        )
+    if phase == "running":
+        return (
+            "coder uses before-dev for code work (TDD only when selected); "
+            "runner records formal experiments with hermes-research"
+        )
+    if phase == "review":
+        if data.get("current_work_package"):
+            return (
+                "runner verifies execution and reviewer checks independently; "
+                "trellis-check is only for code work"
+            )
+        return (
+            "reviewer:closure audits completion; main evaluates update-spec only "
+            "for reviewed durable knowledge"
+        )
+    if phase == "blocked":
+        return (
+            "main separates technical failure from a negative research result; "
+            "break-loop is only for repeated technical failure, handoff on pause"
+        )
+    if phase == "closed":
+        return (
+            "main coordinates finish-work; reviewer preserves closure independence "
+            "and runner performs final validation/archive commands"
+        )
+    return "main routes only the skills justified by the current recorded state"
+
+
 def _research_change_fields(data: dict[str, Any]) -> list[str]:
     raw = data.get("research_change_fields")
     if not isinstance(raw, list):
@@ -575,9 +630,11 @@ def plan_closure(
             raise ClosureError("research route must be delivery, execution, or exploration")
         data["research_route"] = research_route_name
         data["grill_completed"] = False
+        data["decision_ref"] = None
     if normalized_research_changes is not None:
         data["research_change_fields"] = normalized_research_changes
         data["grill_completed"] = False
+        data["decision_ref"] = None
     if not _string_list(data.get("definition_of_done")):
         data["definition_of_done"] = parse_prd_definition_of_done(task_dir / "prd.md")
 
@@ -642,6 +699,7 @@ def set_research_route(
         "research_route": research_route(data),
         "research_change_fields": _research_change_fields(data),
         "grill_completed": data.get("grill_completed") is True,
+        "decision_ref": data.get("decision_ref"),
     }
     normalized_research_changes: list[str] | None = None
     if research_change_fields is not None:
@@ -667,12 +725,14 @@ def set_research_route(
     )
     if changed:
         data["grill_completed"] = False
+        data["decision_ref"] = None
     data["next_action"] = closure_next_action(data)
     save_task(task_dir, data)
     after = {
         "research_route": research_route(data),
         "research_change_fields": _research_change_fields(data),
         "grill_completed": data.get("grill_completed") is True,
+        "decision_ref": data.get("decision_ref"),
     }
     append_event(
         task_dir,
@@ -690,6 +750,7 @@ def mark_grill_complete(
     data: dict[str, Any],
     *,
     actor: str,
+    decision_ref: str,
 ) -> None:
     ensure_closure_defaults(data)
     if data.get("hermes_phase") != "planning":
@@ -698,9 +759,11 @@ def mark_grill_complete(
         raise ClosureError("grill completion is only required for exploration")
     if not _research_change_fields(data):
         raise ClosureError("exploration must record at least one research change field")
-    if data.get("grill_completed") is True:
-        return
+    normalized_ref, decision_errors = _validate_decision_ref(task_dir, decision_ref)
+    if decision_errors:
+        raise ClosureError("; ".join(decision_errors))
     data["grill_completed"] = True
+    data["decision_ref"] = normalized_ref
     data["next_action"] = closure_next_action(data)
     save_task(task_dir, data)
     append_event(
@@ -710,15 +773,28 @@ def mark_grill_complete(
         old_state="pending",
         new_state="complete",
         reason="exploration grill completed",
+        extra={"decision_ref": normalized_ref},
     )
 
 
-def validate_closure(data: dict[str, Any]) -> tuple[list[str], list[str]]:
+def validate_closure(
+    data: dict[str, Any],
+    task_dir: Path | None = None,
+) -> tuple[list[str], list[str]]:
     errors: list[str] = []
     warnings: list[str] = []
     if data.get("closure_mode") not in CLOSURE_MODES:
         errors.append("closure_mode must be lean, standard, or publication")
     errors.extend(_validate_research_route(data))
+    if research_route(data) == "exploration" and data.get("grill_completed") is True:
+        decision_ref = data.get("decision_ref")
+        if not isinstance(decision_ref, str) or not decision_ref.strip():
+            warnings.append(
+                "legacy completed grill has no decision_ref; record one at the next research amendment"
+            )
+        elif task_dir is not None:
+            _, decision_errors = _validate_decision_ref(task_dir, decision_ref)
+            errors.extend(decision_errors)
     phase = data.get("hermes_phase")
     closure_state = data.get("closure_state")
     if phase not in HERMES_PHASES:
@@ -914,7 +990,7 @@ def validate_and_ready(
     ensure_closure_defaults(data)
     if data.get("closure_state") == "closed":
         return ["closed tasks must be reopened through closure.py plan"], []
-    errors, warnings = validate_closure(data)
+    errors, warnings = validate_closure(data, task_dir)
     if errors:
         return errors, warnings
     old_phase = str(data.get("hermes_phase") or "planning")
@@ -964,7 +1040,7 @@ def start_package(
     reason: str = "",
 ) -> dict[str, Any]:
     ensure_closure_defaults(data)
-    errors, _ = validate_closure(data)
+    errors, _ = validate_closure(data, task_dir)
     if errors:
         raise ClosureError("plan is not valid: " + "; ".join(errors))
     if data.get("hermes_phase") == "planning":
@@ -1204,7 +1280,7 @@ def audit_closure(
 ) -> dict[str, Any]:
     gaps: list[dict[str, Any]] = []
     warnings: list[str] = []
-    errors, _ = validate_closure(data)
+    errors, _ = validate_closure(data, task_dir)
     for error in errors:
         gaps.append(_gap(None, error, "修正 task.json closure plan 后重新 validate"))
     packages = [item for item in data.get("work_packages") or [] if isinstance(item, dict)]
@@ -1540,7 +1616,6 @@ def amend_plan(
         data["research_change_fields"] = _dedupe(
             [*previous_changes, "model_architecture"]
         )
-        data["grill_completed"] = False
         blocker = "model architecture requires an independent exploration task"
         data["blockers"] = _dedupe([*_string_list(data.get("blockers")), blocker])
         data["closure_state"] = "open"
@@ -1557,11 +1632,12 @@ def amend_plan(
         data["hermes_phase"] = "planning"
         data["status"] = "planning"
         if research_change is not None:
+            data["decision_ref"] = None
+            data["grill_completed"] = False
             data["research_route"] = "exploration"
             data["research_change_fields"] = _dedupe(
                 [*_research_change_fields(data), research_change]
             )
-            data["grill_completed"] = False
             data["next_action"] = closure_next_action(data)
         else:
             data["next_action"] = "Run closure.py validate after the plan amendment."
@@ -1751,6 +1827,9 @@ def build_capsule(task_dir: Path, data: dict[str, Any], root: Path | None = None
     ]
     if current:
         lines.append("Done when: " + _compact_list(_string_list(current.get("done_when")), 3, 240))
+    decision_ref = data.get("decision_ref")
+    if isinstance(decision_ref, str) and decision_ref.strip():
+        lines.append("Decision ref: " + _clip(decision_ref.strip(), 180))
     lines.append(f"Next: {_clip(closure_next_action(data), 180)}")
     lines.append(f"Blockers: {blockers or '-'}")
     refs = _context_refs(task_dir, data, root or get_repo_root())[:3]
@@ -1770,12 +1849,8 @@ def write_handoff(task_dir: Path, data: dict[str, Any], root: Path | None = None
     ])
     changed, integrity_warnings = _task_changed_file_records(task_dir, data)
     failed_attempts = _recent_event_reasons(task_dir, {"package_blocked", "repair_started"})
-    revision = data.get("hermes_revision", 0)
-    if not isinstance(revision, int) or isinstance(revision, bool) or revision < 0:
-        revision = 0
     content = "\n".join(
         [
-            f"<!-- hermes-handoff-revision: {revision} -->",
             "# Task Handoff",
             "",
             "## Current Goal",
@@ -1813,20 +1888,10 @@ def write_handoff(task_dir: Path, data: dict[str, Any], root: Path | None = None
             "",
         ]
     )
-    path = handoff_path(task_dir)
+    path = task_dir / "HANDOFF.md"
     if not write_text_atomic(path, content):
         raise ClosureError("cannot write HANDOFF.md")
     return path
-
-
-def handoff_path(task_dir: Path) -> Path:
-    """Return a safe handoff destination without following symbolic links."""
-    path = task_dir / "HANDOFF.md"
-    if task_dir.is_symlink() or path_has_symlink(path, task_dir):
-        raise ClosureError("HANDOFF.md path crosses a symlink")
-    return path
-
-
 def write_closure_report(task_dir: Path, data: dict[str, Any]) -> Path:
     packages = [item for item in data.get("work_packages") or [] if isinstance(item, dict)]
     results = [
@@ -2077,7 +2142,7 @@ def closure_next_action(data: dict[str, Any]) -> str:
             if not _research_change_fields(data):
                 return "Record research changes with closure.py route before validate."
             if data.get("grill_completed") is not True:
-                return "Record the completed grill with closure.py grill --complete."
+                return "Record the completed grill with closure.py grill --complete --decision-ref <path>."
         if not str(data.get("intent") or "").strip():
             return "Set intent with closure.py plan."
         if not _string_list(data.get("definition_of_done")):
@@ -2273,6 +2338,64 @@ def _context_refs(task_dir: Path, data: dict[str, Any], root: Path) -> list[str]
                 refs.append(value.strip())
     refs.extend(_string_list(data.get("relatedFiles")))
     return _dedupe(refs)
+
+
+def _validate_decision_ref(
+    task_dir: Path,
+    reference: str,
+) -> tuple[str, list[str]]:
+    normalized = reference.replace("\\", "/").strip()
+    if (
+        not normalized
+        or normalized.startswith("/")
+        or re.match(r"^[A-Za-z]:/", normalized)
+        or ".." in Path(normalized).parts
+    ):
+        return normalized, ["decision_ref must be repository- or task-relative"]
+
+    root = get_repo_root(task_dir).resolve()
+    bases = [root] if normalized.startswith(".trellis/") else [task_dir, root]
+    resolved: Path | None = None
+    for base in bases:
+        candidate = (base / normalized).resolve(strict=False)
+        try:
+            candidate.relative_to(root)
+        except ValueError:
+            continue
+        if candidate.is_file():
+            resolved = candidate
+            break
+    if resolved is None:
+        return normalized, [f"decision_ref does not exist inside the repository: {normalized}"]
+
+    try:
+        content = resolved.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
+        return normalized, [f"decision_ref is not readable text: {normalized}"]
+
+    headings = list(re.finditer(r"(?mi)^#{1,6}\s+(.+?)\s*$", content))
+    present: set[str] = set()
+    empty: list[str] = []
+    for index, match in enumerate(headings):
+        key = match.group(1).strip().casefold()
+        canonical = DECISION_SECTION_HEADINGS.get(key)
+        if canonical is None:
+            continue
+        present.add(key)
+        end = headings[index + 1].start() if index + 1 < len(headings) else len(content)
+        if not content[match.end():end].strip():
+            empty.append(canonical)
+    missing = [
+        canonical
+        for key, canonical in DECISION_SECTION_HEADINGS.items()
+        if key not in present
+    ]
+    errors: list[str] = []
+    if missing:
+        errors.append("decision record is missing sections: " + ", ".join(missing))
+    if empty:
+        errors.append("decision record has empty sections: " + ", ".join(empty))
+    return normalized, errors
 
 
 def _read_jsonl_values(path: Path) -> list[dict[str, Any]]:

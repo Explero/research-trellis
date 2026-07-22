@@ -82,6 +82,7 @@ def parser() -> argparse.ArgumentParser:
     grill = subparsers.add_parser("grill", help="Record a completed exploration grill")
     add_common(grill)
     grill.add_argument("--complete", action="store_true")
+    grill.add_argument("--decision-ref", required=True, help="Repository- or task-relative decision record")
 
     validate = subparsers.add_parser("validate", help="Validate plan and enter ready")
     add_common(validate)
@@ -189,8 +190,13 @@ def main(argv: list[str] | None = None) -> int:
             return 0
         if args.command == "grill":
             if not args.complete:
-                raise ClosureError("use grill --complete after the exploration grill")
-            mark_grill_complete(task_dir, data, actor=actor)
+                raise ClosureError("use grill --complete --decision-ref <path> after the exploration grill")
+            mark_grill_complete(
+                task_dir,
+                data,
+                actor=actor,
+                decision_ref=args.decision_ref,
+            )
             print("exploration grill recorded")
             return 0
         if args.command == "validate":

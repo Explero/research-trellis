@@ -203,7 +203,7 @@ node /path/to/research-trellis/packages/cli/bin/trellis.js update
 
 ### 7. Agent Context Firewall
 
-每次正式角色派发先生成绑定 `hermes_revision`（Hermes 修订号）的结构化文件，正文最多 2000 字符、引用最多 3 个。`Claude Code`（Claude 代码工具）钩子只接收 `job_id`（工作编号）并替换长提示；`Codex native`（Codex 原生）仅为建议性，`Codex strict`（Codex 严格模式）使用结构化输出参数执行。
+每次正式角色派发先生成绑定 `hermes_revision`（Hermes 修订号）的结构化文件，正文最多 2000 字符、引用最多 3 个。`Claude Code`（Claude 代码工具）钩子只接收 `job_id`（工作编号）并替换长提示；`Codex`（代码代理平台）使用同一份紧凑派发和结果契约，在当前项目工作区协作。
 
 返回必须包含 `uncertainties`（不确定项），长日志、完整差异和搜索过程不会进入主上下文。原始跟踪保存在 `.trellis/.runtime/`（本地运行目录），成功或失败都会机械更新下一动作，但不会仅凭聊天关闭任务。
 

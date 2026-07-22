@@ -8,6 +8,10 @@
 #
 # Without trust, the [features] block below is loaded but disabled.
 
+# Default coordinator model for this research workflow.
+model = "gpt-5.6-sol"
+model_reasoning_effort = "high"
+
 # Keep AGENTS.md as the primary project instruction file.
 project_doc_fallback_filenames = ["AGENTS.md"]
 
@@ -33,11 +37,7 @@ enabled = true
 max_concurrent_threads_per_session = 3
 min_wait_timeout_ms = 120000
 
-# Native custom-agent dispatch cannot mechanically replace or validate the
-# agent prompt/output, so its Context Firewall authority is advisory only.
-# Use the generated dispatch CLI strict wrapper for enforced Hermes work:
-# python3 ./.trellis/scripts/hermes/dispatch.py run --task <task> --job-id <job> --platform codex --mode strict
+# Native custom-agent dispatch uses the validated Hermes dispatch and Result
+# Envelope files. It works directly in the current project workspace.
 [hermes.context_firewall]
-native_authority = "advisory"
-strict_authority = "enforced"
-strict_runtime = "codex exec --output-schema --json -o"
+native_authority = "protocol"

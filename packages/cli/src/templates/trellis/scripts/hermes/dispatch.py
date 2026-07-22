@@ -24,7 +24,6 @@ from common.dispatch import (
     load_sanitized_result,
     prepare_dispatch_for_agent,
     result_json_schema,
-    run_codex_strict,
     sanitized_summary,
     supersede_dispatch,
     validate_dispatch,
@@ -71,8 +70,8 @@ def build_parser() -> argparse.ArgumentParser:
     _task_arg(run)
     run.add_argument("--job-id", required=True)
     run.add_argument("--platform", choices=["claude", "codex"], required=True)
-    run.add_argument("--mode", choices=["native", "strict"], default="native")
-    run.add_argument("--codex-bin", default="codex")
+    run.add_argument("--mode", choices=["native", "strict"], default="native",
+                     help="strict is retained as a compatibility alias for native")
 
     apply = subparsers.add_parser("apply")
     _task_arg(apply)
@@ -169,16 +168,11 @@ def main(argv: list[str] | None = None) -> int:
                 print(dispatch["body"] if args.prompt else json.dumps(dispatch, ensure_ascii=False, indent=2))
             return 0
         if args.command == "run":
-            if args.platform == "codex" and args.mode == "strict":
-                result, warnings = run_codex_strict(task_dir, task, root, args.job_id, codex_bin=args.codex_bin)
-                for warning in warnings:
-                    print(f"warning: {warning}", file=sys.stderr)
-                if result is None:
-                    dispatch = load_dispatch(task_dir, args.job_id)
-                    _print({"job_id": args.job_id, "status": "advisory", "prompt": dispatch["body"]})
-                else:
-                    _print(sanitized_summary(task_dir, args.job_id))
-                return 0
+            if args.mode == "strict":
+                print(
+                    "warning: strict dispatch is retired; using the current project workspace with native dispatch",
+                    file=sys.stderr,
+                )
             dispatch = prepare_dispatch_for_agent(
                 task_dir,
                 task,
