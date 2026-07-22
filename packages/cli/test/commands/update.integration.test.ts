@@ -345,6 +345,49 @@ describe("update() integration", () => {
     expect(fs.readFileSync(targetFull, "utf-8")).toBe(templateContent);
   });
 
+  it("updates managed Codex settings without resetting a user model", async () => {
+    await init({ yes: true, force: true, codex: true });
+
+    const configRelative = ".codex/config.toml";
+    const configPath = projectFile(configRelative);
+    const customized = readProjectFile(configRelative)
+      .replace('model = "gpt-5.6-sol"', 'model = "gpt-5.6-custom"')
+      .replace(
+        "max_concurrent_threads_per_session = 3",
+        "max_concurrent_threads_per_session = 1",
+      );
+    fs.writeFileSync(configPath, customized);
+
+    await update({});
+
+    const updated = fs.readFileSync(configPath, "utf-8");
+    expect(updated).toContain('model = "gpt-5.6-custom"');
+    expect(updated).toContain("max_concurrent_threads_per_session = 3");
+    expect(readHashesV2(hashFilePath())[configRelative]).toBe(
+      computeHash(updated),
+    );
+  });
+
+  it("migrates the legacy Codex default model pair during update", async () => {
+    await init({ yes: true, force: true, codex: true });
+
+    const configRelative = ".codex/config.toml";
+    const configPath = projectFile(configRelative);
+    const legacy = readProjectFile(configRelative)
+      .replace("# TRELLIS:CODEX_CONFIG:START\n", "")
+      .replace("\n# TRELLIS:CODEX_CONFIG:END", "")
+      .replace("# TRELLIS:CODEX_MODEL_DEFAULTS:START\n", "")
+      .replace("\n# TRELLIS:CODEX_MODEL_DEFAULTS:END", "");
+    fs.writeFileSync(configPath, legacy);
+
+    await update({});
+
+    const migrated = fs.readFileSync(configPath, "utf-8");
+    expect(migrated).toContain("# TRELLIS:CODEX_MODEL_DEFAULTS:START");
+    expect(migrated).toContain("# TRELLIS:CODEX_MODEL_DEFAULTS:END");
+    expect(migrated).not.toContain("# TRELLIS:CODEX_CONFIG:START");
+  });
+
   it("#4b auto-updates Claude implement agent when the installed template is older but unmodified", async () => {
     await init({ yes: true, force: true, claude: true });
 

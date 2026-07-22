@@ -302,24 +302,6 @@ def cmd_finish(args: argparse.Namespace) -> int:
 
     task_json_path = repo_root / current / FILE_TASK_JSON
 
-    if task_json_path.is_file():
-        task_data = read_json(task_json_path)
-        if isinstance(task_data, dict):
-            from common.closure import ClosureError, is_closure_task, write_handoff
-
-            if is_closure_task(task_data) and task_data.get("closure_state") != "closed":
-                try:
-                    handoff_path = write_handoff(task_json_path.parent, task_data, repo_root)
-                    print(colored(
-                        f"✓ Handoff updated: {handoff_path.relative_to(repo_root)}",
-                        Colors.GREEN,
-                    ))
-                except (ClosureError, OSError):
-                    print(colored(
-                        "Warning: could not update HANDOFF.md; task state remains in task.json.",
-                        Colors.YELLOW,
-                    ))
-
     cleared = clear_active_task(repo_root)
 
     print(colored(f"✓ Cleared current task (was: {current})", Colors.GREEN))

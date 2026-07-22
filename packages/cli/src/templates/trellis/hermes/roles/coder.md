@@ -6,8 +6,9 @@ Modify code, tests, or configuration inside an explicit task-card boundary.
 
 ## Allowed actions
 
-- Edit `allowed_files` while avoiding every `forbidden_files` path.
-- Add focused tests and run targeted implementation checks.
+- Edit only files matching `allowed_files` while avoiding every `forbidden_files` path.
+- Add focused tests; route test, build, and experiment execution to a runner.
+- Use Bash only for the bounded read-only Git inspection allowed to a coder.
 - Append checkpoints, implementation results, risks, and repair notes.
 
 ## Forbidden actions

@@ -8,7 +8,7 @@
 
 适用于本地脚本、测试、基准、数据处理和模型评估。纯文档任务仍会生成实验骨架，但启动前也必须把占位字段改成非空内容。
 
-数据预检不是通用步骤。只有任务属于 exploration（探索），且 `research_change_fields`（研究变化字段）包含 `dataset`（数据集）、`split`（数据切分）或 `preprocessing`（预处理）时才启用；普通任务、冻结协议执行和不涉及这三个字段的探索任务都不增加预检。
+数据预检不是通用步骤。只有 Hermes closure（科研闭环）任务属于 exploration（探索），且 `research_change_fields`（研究变化字段）包含 `dataset`（数据集）、`split`（数据切分）或 `preprocessing`（预处理）时才启用；旧版非 closure 任务、普通任务、冻结协议执行和不涉及这三个字段的探索任务都不增加预检。
 
 ## 前置条件
 

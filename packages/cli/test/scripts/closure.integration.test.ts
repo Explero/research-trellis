@@ -707,7 +707,7 @@ describe.skipIf(!hasPython())("Lean Research Closure CLI", () => {
     expect(fs.existsSync(taskDir)).toBe(true);
   });
 
-  it("updates a handoff before an open task session finishes", () => {
+  it("finishes a session without mutating an open task or writing a handoff", () => {
     expect(plan(root, ["Result A"]).status).toBe(0);
     const sessions = path.join(root, ".trellis", ".runtime", "sessions");
     fs.mkdirSync(sessions, { recursive: true });
@@ -717,8 +717,9 @@ describe.skipIf(!hasPython())("Lean Research Closure CLI", () => {
     );
     const result = runTask(root, "finish");
     expect(result.status).toBe(0);
-    expect(result.stdout).toContain("Handoff updated");
-    expect(fs.existsSync(path.join(taskDir, "HANDOFF.md"))).toBe(true);
+    expect(result.stdout).not.toContain("Handoff updated");
+    expect(fs.existsSync(path.join(taskDir, "HANDOFF.md"))).toBe(false);
+    expect(readTask(taskDir).closure_state).toBe("open");
   });
 
   it("writes handoffs from validated task results only", () => {
@@ -764,6 +765,7 @@ describe.skipIf(!hasPython())("Lean Research Closure CLI", () => {
     expect(run(root, "handoff").status).toBe(0);
     const handoff = fs.readFileSync(path.join(taskDir, "HANDOFF.md"), "utf-8");
     expect(handoff).toContain("# Task Handoff");
+    expect(handoff).toContain(`## Task Revision\n${readTask(taskDir).hermes_revision}`);
     expect(handoff).not.toContain("- src/owned.ts");
     expect(handoff).not.toContain("src/forged.ts");
     expect(handoff).not.toContain("unrelated.txt");

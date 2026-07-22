@@ -12,6 +12,120 @@
  * does not matter — we just look for the manifest-relative file path.
  */
 
+import { stripTrellisCodexConfig } from "./codex-config.js";
+
+const LEGACY_CODEX_COMMENTS = new Set([
+  "Project-scoped Codex defaults for Trellis workflows.",
+  "Codex loads this after ~/.codex/config.toml when you work in this project.",
+  "Codex merges this layer after the user-level config when the project",
+  "is marked as a trusted project. To trust this project, add it under",
+  "`[projects]` in ~/.codex/config.toml, e.g.:",
+  '[projects."/abs/path/to/this/repo"]',
+  'trust_level = "trusted"',
+  "Without trust, the [features] block below is loaded but disabled.",
+  "Default coordinator model for this research workflow.",
+  "Default coordinator model for this research workflow. Codex 0.144.0 or",
+  "newer is required to recognize these model and reasoning-effort values.",
+  "Keep AGENTS.md as the primary project instruction file.",
+  "NOTE: Trellis's SessionStart + UserPromptSubmit hooks require opt-in.",
+  "Add the following to your USER-level config at ~/.codex/config.toml",
+  "(not this project file - features.* must be enabled globally):",
+  "[features]",
+  "hooks = true",
+  "codex_hooks = true",
+  "Without this flag, hooks.json is ignored and Trellis context won't",
+  "be injected into Codex sessions.",
+  "Codex hooks (`hooks.json` in this directory) only fire when the user",
+  "has enabled them in their USER-level config: `[features].hooks = true`",
+  "in ~/.codex/config.toml (Codex 0.129+; legacy name: `codex_hooks = true`,",
+  "still works but emits a deprecation warning on 0.129+). Project-level",
+  "config.toml cannot set feature flags; they must be user-level.",
+  "Codex 0.129+ additionally gates each installed hook behind a one-time",
+  "`/hooks` TUI review; until the user approves it, the hook stays inactive.",
+  "multi_agent_v2 forces structured subagent orchestration with the",
+  "instead of cancelling / re-spawning. Incompatible with",
+  "[agents].max_threads (codex will reject the combination).",
+  "NOT auto-enable the feature without it.",
+  "report progress through its task record instead of holding the coordinator.",
+  "short for Trellis subagents that routinely take 2-10 min. Hard",
+  "ceiling is 3,600,000 (1 h).",
+  "Native custom-agent dispatch cannot mechanically replace or validate the",
+  "agent prompt/output, so its Context Firewall authority is advisory only.",
+  "Use the generated dispatch CLI strict wrapper for enforced Hermes work:",
+  "python3 ./.trellis/scripts/hermes/dispatch.py run --task <task> --job-id <job> --platform codex --mode strict",
+  "Native custom-agent dispatch uses the validated Hermes dispatch and Result",
+  "Envelope files. It works directly in the current project workspace.",
+]);
+
+const LEGACY_CODEX_TABLE_VALUES = new Map<string, Set<string>>([
+  [
+    "[features.multi_agent_v2]",
+    new Set([
+      "enabled = true",
+      "max_concurrent_threads_per_session = 6",
+      "min_wait_timeout_ms = 480000",
+      "max_concurrent_threads_per_session = 3",
+      "min_wait_timeout_ms = 120000",
+    ]),
+  ],
+  [
+    "[hermes.context_firewall]",
+    new Set([
+      'native_authority = "advisory"',
+      'strict_authority = "enforced"',
+      'strict_runtime = "codex exec --output-schema --json -o"',
+      'native_authority = "protocol"',
+    ]),
+  ],
+]);
+
+function codexCommentText(line: string): string | null {
+  const trimmed = line.trim();
+  return trimmed.startsWith("#") ? trimmed.replace(/^#+\s?/, "").trim() : null;
+}
+
+function isLegacyCodexComment(comment: string | null): boolean {
+  if (comment === null) return false;
+  return (
+    comment === "" ||
+    LEGACY_CODEX_COMMENTS.has(comment) ||
+    comment.startsWith("(not this project file") ||
+    comment.startsWith("`wait` tool") ||
+    comment.startsWith("`enabled = true`") ||
+    comment.startsWith("- max_concurrent_threads_per_session:") ||
+    comment.startsWith("- min_wait_timeout_ms:")
+  );
+}
+
+function legacyCodexTableEnd(lines: string[], start: number): number | null {
+  const allowedValues = LEGACY_CODEX_TABLE_VALUES.get(lines[start].trim());
+  if (!allowedValues) return null;
+
+  let end = start + 1;
+  let hasValue = false;
+  while (
+    end < lines.length &&
+    !/^\s*\[\[?[^\]]+\]\]?\s*(?:#.*)?$/.test(lines[end])
+  ) {
+    const trimmed = lines[end].trim();
+    if (trimmed.length === 0) {
+      end += 1;
+      continue;
+    }
+    const comment = codexCommentText(lines[end]);
+    if (comment !== null) {
+      if (!isLegacyCodexComment(comment)) return null;
+    } else if (allowedValues.has(trimmed)) {
+      hasValue = true;
+    } else {
+      return null;
+    }
+    end += 1;
+  }
+
+  return hasValue ? end : null;
+}
+
 export interface ScrubResult {
   content: string;
   fullyEmpty: boolean;
@@ -305,73 +419,39 @@ export function scrubPiSettings(content: string): ScrubResult {
 /**
  * Scrub `.codex/config.toml`.
  *
- * The current trellis-emitted file has two distinct chunks:
- * 1. The line `project_doc_fallback_filenames = ["AGENTS.md"]`
- * 2. A multi-line comment block that begins with the marker
- *    `# NOTE: Trellis's SessionStart + UserPromptSubmit hooks require opt-in.`
- *    and continues through `# be injected into Codex sessions.`
- *
- * Plus the leading "Project-scoped Codex defaults" header comments.
- *
- * Strategy: line-based removal. We strip:
- *  - the `project_doc_fallback_filenames = ...` line
- *  - any line that is *only* a comment introduced by trellis (the entire file
- *    as shipped is comments + that one assignment)
- *  - blank lines that surrounded those removals
- *
- * If the user added their own non-trellis lines, they are preserved as-is.
- * "Fully empty" = post-scrub content has no non-whitespace characters.
+ * Explicit Trellis marker blocks are removed as units. A custom model inside
+ * those blocks is retained. Older unmarked Trellis defaults are recognized by
+ * their exact values, so user-owned configuration stays intact.
  */
 export function scrubCodexConfigToml(content: string): ScrubResult {
-  const trellisCommentMarkers = [
-    "Project-scoped Codex defaults for Trellis workflows.",
-    "Codex loads this after ~/.codex/config.toml when you work in this project.",
-    "Keep AGENTS.md as the primary project instruction file.",
-    "NOTE: Trellis's SessionStart + UserPromptSubmit hooks require opt-in.",
-    "Add the following to your USER-level config at ~/.codex/config.toml",
-    "(not this project file — features.* must be enabled globally):",
-    "[features]",
-    "hooks = true",
-    "codex_hooks = true",
-    "Without this flag, hooks.json is ignored and Trellis context won't",
-    "be injected into Codex sessions.",
-  ];
+  const stripped = stripTrellisCodexConfig(content);
+  const lines = stripped.split(/\r?\n/);
+  const kept: string[] = [];
+  let previousBlank = true;
+  for (let index = 0; index < lines.length; index += 1) {
+    const tableEnd = legacyCodexTableEnd(lines, index);
+    if (tableEnd !== null) {
+      index = tableEnd - 1;
+      continue;
+    }
 
-  // A comment line is "trellis-known" if its content (after `#` and spaces)
-  // matches one of the known marker strings exactly OR is an empty `#` line.
-  function isTrellisCommentLine(line: string): boolean {
+    const line = lines[index];
     const trimmed = line.trim();
-    if (!trimmed.startsWith("#")) return false;
-    const inner = trimmed.replace(/^#+\s?/, "").trim();
-    if (inner.length === 0) return true; // bare `#` line inside trellis block
-    return trellisCommentMarkers.some((m) => inner === m);
+    const comment = codexCommentText(line);
+    const trellisLegacyLine =
+      /^\s*project_doc_fallback_filenames\s*=\s*\[\s*"AGENTS\.md"\s*\]\s*$/.test(
+        line,
+      ) || isLegacyCodexComment(comment);
+    if (trellisLegacyLine) continue;
+    const blank = trimmed.length === 0;
+    if (blank && previousBlank) continue;
+    kept.push(line);
+    previousBlank = blank;
   }
-
-  function isTrellisAssignment(line: string): boolean {
-    return /^\s*project_doc_fallback_filenames\s*=/.test(line);
+  while (kept.length > 0 && kept[kept.length - 1].trim() === "") {
+    kept.pop();
   }
-
-  const out: string[] = [];
-  let prevWasBlank = true; // start-of-file counts as blank for collapsing
-
-  for (const rawLine of content.split(/\r?\n/)) {
-    if (isTrellisAssignment(rawLine) || isTrellisCommentLine(rawLine)) {
-      continue; // drop
-    }
-    const isBlank = rawLine.trim().length === 0;
-    if (isBlank && prevWasBlank) {
-      continue; // collapse runs of blanks created by removals
-    }
-    out.push(rawLine);
-    prevWasBlank = isBlank;
-  }
-
-  // Trim trailing blank lines.
-  while (out.length > 0 && out[out.length - 1].trim().length === 0) {
-    out.pop();
-  }
-
-  const result = out.length > 0 ? out.join("\n") + "\n" : "";
+  const result = kept.length > 0 ? `${kept.join("\n")}\n` : "";
   const fullyEmpty = result.trim().length === 0;
   return { content: result, fullyEmpty };
 }

@@ -14,6 +14,7 @@ import {
   scrubPiSettings,
   scrubCodexConfigToml,
 } from "../../src/utils/uninstall-scrubbers.js";
+import { getConfigTemplate } from "../../src/templates/codex/index.js";
 
 const CLAUDE_DELETE_PATHS = [
   ".claude/hooks/session-start.py",
@@ -270,7 +271,8 @@ describe("scrubHooksJson — flat schema", () => {
           {
             type: "command",
             bash: "python3 .github/copilot/hooks/inject-workflow-state.py",
-            powershell: "python3 .github/copilot/hooks/inject-workflow-state.py",
+            powershell:
+              "python3 .github/copilot/hooks/inject-workflow-state.py",
             timeoutSec: 5,
           },
         ],
@@ -464,5 +466,32 @@ project_doc_fallback_filenames = ["AGENTS.md"]
     const { content, fullyEmpty } = scrubCodexConfigToml(newTemplate);
     expect(fullyEmpty).toBe(true);
     expect(content.trim()).toBe("");
+  });
+
+  it("preserves a custom model from the managed config block", () => {
+    const custom = getConfigTemplate().content.replace(
+      'model = "gpt-5.6-sol"',
+      'model = "gpt-5.6-custom"',
+    );
+
+    const { content, fullyEmpty } = scrubCodexConfigToml(custom);
+
+    expect(fullyEmpty).toBe(false);
+    expect(content).toBe(
+      'model = "gpt-5.6-custom"\nmodel_reasoning_effort = "high"\n',
+    );
+  });
+
+  it("removes the current unmarked legacy Codex defaults", () => {
+    const legacy = getConfigTemplate()
+      .content.replace("# TRELLIS:CODEX_CONFIG:START\n", "")
+      .replace("\n# TRELLIS:CODEX_CONFIG:END", "")
+      .replace("# TRELLIS:CODEX_MODEL_DEFAULTS:START\n", "")
+      .replace("\n# TRELLIS:CODEX_MODEL_DEFAULTS:END", "");
+
+    const { content, fullyEmpty } = scrubCodexConfigToml(legacy);
+
+    expect(fullyEmpty).toBe(true);
+    expect(content).toBe("");
   });
 });

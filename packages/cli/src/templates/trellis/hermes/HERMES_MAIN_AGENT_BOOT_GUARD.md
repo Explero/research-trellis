@@ -157,9 +157,10 @@ As Main Agent, you must not directly:
 * overwrite subagent records to make the state look cleaner;
 * rely on previous chat history as the source of truth.
 
-Allowed main-agent shell inspection is intentionally narrow: `git status`,
-`git diff ...`, `git log ...`, and `cat` / `jq` over RecordBus JSONL under
-`.trellis/tasks/<task>/hermes/` or `.ai/records/`.
+Allowed main-agent Bash is intentionally narrow: deterministic `task.py`,
+`dispatch.py`, and listed `closure.py` control commands, plus limited
+read-only `git status`, `git diff`, `git log`, and branch inspection. Prefer
+`Read` for records; `cat` and `jq` are not part of the coordinator surface.
 
 If code must be changed, route the task to a **coder subagent** with explicit allowed files, forbidden files, task scope, and required record output.
 
@@ -204,8 +205,8 @@ subagent_context_policy = validated_dispatch_only
 ```
 
 The main agent creates a validated dispatch and passes only its `job_id` to
-Claude Agent. Codex native dispatch is advisory; enforced Codex work uses the
-strict `dispatch.py run` wrapper. The canonical body contains role/profile,
+Claude Agent. Codex native dispatch is advisory; hooks and deterministic
+records provide the supported gates. The canonical body contains role/profile,
 revision, package, objective, and at most three refs within 2000 characters.
 
 The subagent reads a referenced file only when the assignment needs it. Full
@@ -289,9 +290,10 @@ safety, closure, or statistics. Evidence judgment must not patch code, set
 
 `PreToolUse` is the role firewall. For Claude Agent it accepts only a validated
 `job_id`, rejects async dispatch, and replaces the original prompt with the
-canonical body. `SubagentStop` validates the Result Envelope; `PostToolUse`
-returns only its sanitized summary. Explicit writers still pass through
-`task_card` and file-boundary checks.
+canonical body. `Edit` and `Write` are checked against `allowed_files` before
+they run. Bash has only role and bounded-command authorization; `SubagentStop`
+and `Stop` validate records and closure conditions afterward. These checks are
+not an OS sandbox, malicious-process isolation, or arbitrary-shell defense.
 
 `Stop` is read-only. It reads RecordBus, git diff, and `run_manifest.jsonl`.
 It must not write records or run tests.

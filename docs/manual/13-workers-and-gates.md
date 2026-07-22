@@ -81,7 +81,7 @@ profile: evidence
 
 ### 派发与结果防火墙
 
-1. 每次派发先创建 dispatch（派发）。命令会绑定当前 `hermes_revision`（Hermes 修订号），并同时写入兼容的 `task_card`（任务卡）。`coder`（编码代理）和 `runner`（运行代理）必须绑定当前工作包；任务级 `planner`（规划代理）和 `reviewer`（复核代理）可不绑定。
+1. 每次派发先创建 dispatch（派发）。命令会绑定当前 `hermes_revision`（Hermes 修订号），并同时写入兼容的 `task_card`（任务卡）。`coder`（编码代理）和 `runner`（运行代理）必须绑定当前工作包。`reviewer:quality/evidence/claim/statistics`（质量、证据、主张或统计复核）还必须用 `parent_job_id`（父工作编号）绑定被审查的具体工作；`reviewer:closure/safety`（关闭或独立安全复核）可以保持任务级。
 
 ```bash
 JOB="job-$(date -u +%Y%m%d-%H%M%S)-coder"
@@ -94,7 +94,7 @@ python3 ./.trellis/scripts/hermes/dispatch.py validate --task "$TASK" --job-id "
 
 2. 派发正文最多 2000 字符、直接引用最多 3 个。绝对用户路径、敏感信息、越界或不存在的引用会被拒绝。任务状态变化后，旧派发会返回 `stale_dispatch`（过期派发）。
 
-3. `Claude Code`（Claude 代码工具）的 `Agent`（代理）调用只传 `job_id`（工作编号），钩子会机械替换长提示，并禁止异步派发。`Codex`（代码代理平台）的 native（原生）代理仅为 advisory（建议性）；需要硬门禁时运行：
+3. `Claude Code`（Claude 代码工具）的 `Agent`（代理）调用只传 `job_id`（工作编号），钩子会机械替换长提示，并禁止异步派发。`Codex`（代码代理平台）的派发输入依赖同一协议和结构化文件，属于 advisory（建议性）约束；下面的命令只显示经过校验的紧凑派发，不会创建沙箱或升级成严格执行器：
 
 ```bash
 python3 ./.trellis/scripts/hermes/dispatch.py run --task "$TASK" \
@@ -117,16 +117,18 @@ python3 ./.trellis/scripts/hermes/jobs.py check --task "$TASK"
 python3 ./.trellis/scripts/hermes/jobs.py resume --task "$TASK" --job-id "$JOB"
 ```
 
+测试、构建、实验和验证命令由 `runner`（运行代理）通过 `runner.py run`（登记运行）执行。直接运行 `pnpm test`（运行测试）等命令不会经过运行清单，因此在正式角色门禁下会被拒绝。
+
 6. 当前工作代理校验还会检查：
 
 - 同一工作树不能同时存在多个未结束的 `coder`（编码代理）或 `runner`（运行代理）；
 - 结果中的改动文件必须落在任务卡允许范围内，且不能命中禁止范围；
 - 配置了心跳间隔的结果需要已有检查点；
 - `runner`（运行代理）成功只接受已有 `run_refs`（运行引用），不能把成功输出写成证据；
-- `reviewer:evidence/claim`（证据或主张复核）只能提出判断，不能批准事实或人工记录；
+- `reviewer:evidence/claim`（证据或主张复核）只能提出判断，不能批准事实或人工记录；需要独立复核的记录必须显式绑定被审工作，旧记录只在同一工作包只有一个候选时兼容；
 - 经 `Dispatch Packet`（派发包）确认的编码结果进入 `review`（复核）或 `claim_ready`（待审批）前，需要 `runner:test/build/validation`（运行代理的测试、构建或验证模式）结果，以及 `reviewer:quality/safety`（复核代理的质量或安全模式）记录。证据、主张或关闭复核不能替代代码质量复核。这个派发结果门禁不替代 `package-check`（工作包复核）或 `close`（关闭）的各自收口审计；未经过正式派发的旧任务继续按兼容流程处理。
 
-7. 在支持并启用 `Hermes`（科研工作流）运行时钩子的平台中，`PreToolUse`（工具使用前）门禁会限制主代理直接写入和执行，并按任务卡检查工作代理目标文件；`Stop`（结束）门禁读取记录、运行清单和当前文件差异，不会在结束时重新运行测试。当前内置完整运行时门禁只在 `Claude Code`（Claude 代码工具）和已启用钩子的 `Codex`（代码代理）配置中注册。
+7. 在支持并启用 `Hermes`（科研工作流）运行时钩子的平台中，`PreToolUse`（工具使用前）门禁会限制主代理直接写入和执行，并按任务卡检查工作代理目标文件；`Stop`（结束）门禁读取记录、运行清单和当前文件差异，不会在结束时重新运行测试。Claude 可额外替换 Agent 派发输入并净化返回；Codex 当前只对写入、受控命令和结束条件做机械检查，不能声明为完整输入隔离。两者都不是操作系统沙箱。
 
 `Stop`（结束）按实际工作类型检查：存在实现代码改动时要求编码结果、成功运行清单和独立质量复核；没有代码改动的实验、检索或规划工作要求对应角色结果和独立复核，正式运行还必须引用成功的运行清单。它不会为了纯研究任务强制创建编码结果。
 
@@ -176,7 +178,7 @@ python3 ./.trellis/scripts/hermes/evidence.py summary --task "$TASK"
 ## 验证记录
 
 - 日期：2026-07-16。
-- 版本：`0.7.1`（测试版）。
+- 版本：`0.7.1-beta.0`（测试版）。
 - 更名前基准提交：`9f7dc8497b4782878d6fa7ac3b63eba5bde507df`。
 - 命令：`rg -n -m 1 "PreToolUse|Stop" packages/cli/src/templates/{claude,codex,shared-hooks} packages/cli/test`（钩子与门禁核对）。
 - 结果：五个正式角色、模式校验、旧角色迁移、两平台模板、最小上下文、证据工具和模式感知门禁均有自动化覆盖。

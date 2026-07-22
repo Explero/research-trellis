@@ -32,7 +32,7 @@ python3 ./.trellis/scripts/hermes/record.py append --task "$TASK" --record-type 
 python3 ./.trellis/scripts/hermes/runner.py run --task "$TASK" --job-id "$JOB" --checkpoint evaluate --summary "运行固定数据评估" --input fixtures/input.jsonl --input scripts/evaluate.py --output results/metrics.json -- python3 scripts/evaluate.py
 ```
 
-运行器会写入检查点、心跳、标准输出日志、标准错误日志、运行清单，以及成功结果或失败拒绝记录。
+运行器会在命令启动前记录声明输入的路径、大小和 `SHA-256`（文件摘要），随后写入检查点、心跳、标准输出日志、标准错误日志、运行清单，以及成功结果或失败拒绝记录。即使命令会修改某个输入，清单保留的也是实际启动时读取到的版本。
 
 3. 校验工作代理记录和运行清单：
 

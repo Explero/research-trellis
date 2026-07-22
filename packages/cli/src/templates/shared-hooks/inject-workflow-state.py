@@ -252,16 +252,39 @@ def _build_task_resume_notice(
     return "\n".join(lines)
 
 
-def _handoff_state(task_dir: Path) -> tuple[str, str | None]:
-    """Return a lightweight marker for an optional handoff summary."""
+def _handoff_state(task_dir: Path, current_revision: int) -> tuple[str, str | None]:
+    """Classify an optional recovery summary without treating it as authority."""
     handoff = task_dir / "HANDOFF.md"
     if not handoff.is_file():
         return "missing", None
     try:
         stamp = handoff.stat().st_mtime_ns
-    except OSError:
+        content = handoff.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
         return "unreadable", None
-    return f"available:{stamp}", None
+    match = re.search(r"(?m)^##\s+Task Revision\s*\n\s*(\d+)\s*$", content)
+    if match is None:
+        return (
+            f"legacy:{stamp}",
+            "Legacy HANDOFF.md has no Task Revision. It is only a recovery hint; task.json and the Task Capsule remain authoritative.",
+        )
+    handoff_revision = int(match.group(1))
+    if handoff_revision != current_revision:
+        relation = "older than" if handoff_revision < current_revision else "newer than"
+        return (
+            f"stale:{handoff_revision}:{stamp}",
+            "HANDOFF.md is stale: Task Revision "
+            f"{handoff_revision} is {relation} current revision {current_revision}. "
+            "Use task.json and the Task Capsule; do not read the handoff body as current state.",
+        )
+    try:
+        handoff_ref = task_dir.relative_to(task_dir.parents[2]).as_posix()
+    except (ValueError, IndexError):
+        handoff_ref = f".trellis/tasks/{task_dir.name}"
+    return (
+        f"fresh:{handoff_revision}:{stamp}",
+        f"If this session resumes after a pause or handoff, read {handoff_ref}/HANDOFF.md once if needed. task.json remains the source of truth.",
+    )
 
 
 def _context_reset_requested(input_data: dict) -> bool:
@@ -325,16 +348,11 @@ def _closure_turn_context(root: Path, input_data: dict) -> tuple[str, str | None
     context_reset = _context_reset_requested(input_data)
     if context_reset:
         previous = None
-    handoff_marker, handoff_problem = _handoff_state(task_dir)
+    current_revision = revision if isinstance(revision, int) and not isinstance(revision, bool) else 0
+    handoff_marker, handoff_problem = _handoff_state(task_dir, current_revision)
     seen_handoff_marker = previous.get("handoff_marker") if isinstance(previous, dict) else None
     if handoff_marker == seen_handoff_marker:
         handoff_notice = None
-    elif handoff_marker.startswith("available:"):
-        try:
-            handoff_ref = task_dir.relative_to(root).as_posix()
-        except ValueError:
-            handoff_ref = ".trellis/tasks/" + task_dir.name
-        handoff_notice = f"If this session resumes after a pause or handoff, read {handoff_ref}/HANDOFF.md once. task.json remains the source of truth."
     else:
         handoff_notice = handoff_problem
     resume_notice = _build_task_resume_notice(

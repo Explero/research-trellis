@@ -117,6 +117,10 @@ describe("codex getConfigTemplate", () => {
     expect(config.content).toContain("AGENTS.md");
     expect(config.content).toContain('model = "gpt-5.6-sol"');
     expect(config.content).toContain('model_reasoning_effort = "high"');
+    expect(config.content).toContain("# TRELLIS:CODEX_CONFIG:START");
+    expect(config.content).toContain("# TRELLIS:CODEX_CONFIG:END");
+    expect(config.content).toContain("# TRELLIS:CODEX_MODEL_DEFAULTS:START");
+    expect(config.content).toContain("# TRELLIS:CODEX_MODEL_DEFAULTS:END");
     expect(config.content).toContain('native_authority = "protocol"');
     expect(config.content).not.toContain("strict_authority");
   });

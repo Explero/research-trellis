@@ -54,6 +54,7 @@ RUN_MANIFEST_REQUIRED_FIELDS = [
 ]
 CODER_REVIEW_HANDOFFS = {"review", "claim_ready"}
 TERMINAL_WORKER_RECORD_TYPES = {"result", "rejection", "stalled"}
+INDEPENDENT_REVIEWER_PROFILES = {"closure", "safety"}
 APPROVAL_CHANGE_ID_FIELDS = {
     "change_id",
     "change_ids",
@@ -1171,6 +1172,8 @@ def validate_worker_records(records: list[JsonlRecord]) -> list[str]:
         if len(entries) > 1:
             lines = ", ".join(str(entry.line_number) for entry in entries)
             errors.append(f"duplicate task_card for job_id {job_id}: lines {lines}")
+            continue
+        errors.extend(_parent_job_card_errors(entries[0], task_cards))
 
     active_writers: dict[str, list[JsonlRecord]] = {}
     for job_id, entries in task_cards.items():
@@ -1201,6 +1204,8 @@ def validate_worker_records(records: list[JsonlRecord]) -> list[str]:
         if record_type == "result" and isinstance(job_id, str):
             entries = task_cards.get(job_id, [])
             card = entries[0].value if len(entries) == 1 else None
+            if card is not None:
+                errors.extend(_parent_job_result_errors(entry, card))
             if card and not is_change_set_allowed(card, value.get("changed_files", [])):
                 errors.append(
                     f"line {entry.line_number}: result changed files violate task_card permissions"
@@ -1259,6 +1264,116 @@ def is_coder_review_handoff(record: dict[str, Any]) -> bool:
     )
 
 
+def _parent_job_value(value: dict[str, Any]) -> tuple[bool, str | None]:
+    """Return whether a record uses the new parent field and its valid value."""
+    if "parent_job_id" not in value:
+        return False, None
+    parent = value.get("parent_job_id")
+    if parent is None:
+        return True, None
+    if isinstance(parent, str) and parent.strip():
+        return True, parent.strip()
+    return True, ""
+
+
+def _parent_job_card_errors(
+    entry: JsonlRecord,
+    task_cards: dict[str, list[JsonlRecord]],
+) -> list[str]:
+    card = entry.value
+    job_id = card.get("job_id")
+    if not isinstance(job_id, str) or not job_id:
+        return []
+    explicit, parent_job_id = _parent_job_value(card)
+    role = card.get("role")
+    profile = card.get("profile")
+    if not explicit:
+        return []
+    if parent_job_id == "":
+        return [f"line {entry.line_number}: parent_job_id must be a non-empty string or null"]
+    if (
+        role == "reviewer"
+        and profile not in INDEPENDENT_REVIEWER_PROFILES
+        and parent_job_id is None
+    ):
+        return [
+            f"line {entry.line_number}: reviewer task_card requires parent_job_id unless profile is closure or safety"
+        ]
+    if parent_job_id is None:
+        return []
+    if parent_job_id == job_id:
+        return [f"line {entry.line_number}: parent_job_id cannot equal job_id"]
+    parent_entries = task_cards.get(parent_job_id, [])
+    if len(parent_entries) != 1:
+        return [f"line {entry.line_number}: parent_job_id {parent_job_id} has no unique task_card"]
+    parent = parent_entries[0].value
+    if parent.get("work_package") != card.get("work_package"):
+        return [
+            f"line {entry.line_number}: parent_job_id {parent_job_id} must use the same work_package"
+        ]
+    return []
+
+
+def _parent_job_result_errors(entry: JsonlRecord, card: dict[str, Any]) -> list[str]:
+    explicit_card, card_parent = _parent_job_value(card)
+    explicit_result, result_parent = _parent_job_value(entry.value)
+    if not explicit_card or not explicit_result:
+        return []
+    if result_parent == "":
+        return [f"line {entry.line_number}: result parent_job_id must be a non-empty string or null"]
+    if result_parent != card_parent:
+        return [f"line {entry.line_number}: result parent_job_id does not match task_card"]
+    return []
+
+
+def _legacy_parent_candidates(
+    task_cards: dict[str, list[JsonlRecord]],
+    child_job_id: str,
+    work_package: Any,
+) -> set[str]:
+    candidates: set[str] = set()
+    for candidate_job_id, entries in task_cards.items():
+        if candidate_job_id == child_job_id or len(entries) != 1:
+            continue
+        candidate = entries[0].value
+        if candidate.get("role") == "reviewer":
+            continue
+        if candidate.get("work_package") == work_package:
+            candidates.add(candidate_job_id)
+    return candidates
+
+
+def _record_matches_parent(
+    record: dict[str, Any],
+    card: dict[str, Any],
+    task_cards: dict[str, list[JsonlRecord]],
+    parent_job_id: str,
+) -> bool:
+    explicit_card, card_parent = _parent_job_value(card)
+    explicit_record, record_parent = _parent_job_value(record)
+    parent_entries = task_cards.get(parent_job_id, [])
+    if len(parent_entries) != 1:
+        return False
+    same_package = parent_entries[0].value.get("work_package") == card.get("work_package")
+    if explicit_card:
+        return same_package and card_parent == parent_job_id and (
+            not explicit_record or record_parent == card_parent
+        )
+    if explicit_record:
+        return same_package and record_parent == parent_job_id
+    child_job_id = card.get("job_id")
+    if not isinstance(child_job_id, str):
+        return False
+    # Old records did not carry parent_job_id. Keep compatibility only when
+    # same-package ownership has exactly one possible parent; never infer by
+    # timestamp or result ordering.
+    return _legacy_parent_candidates(
+        task_cards,
+        child_job_id,
+        card.get("work_package"),
+    ) == {parent_job_id}
+
+
 def has_related_record(
     records: list[JsonlRecord],
     task_cards: dict[str, list[JsonlRecord]],
@@ -1283,11 +1398,7 @@ def has_related_record(
             continue
         if profiles is not None and card.get("profile") not in profiles:
             continue
-        if (
-            result_job_id == coder_job_id
-            or card.get("parent_job_id") == coder_job_id
-            or value.get("parent_job_id") == coder_job_id
-        ):
+        if _record_matches_parent(value, card, task_cards, coder_job_id):
             return True
     return False
 
@@ -1313,6 +1424,15 @@ def compatibility_warnings(path: Path, kind: str) -> list[str]:
             seen.add(warning)
             message = f"line {entry.line_number}: {warning}"
             warnings.append(message)
+        role = entry.value.get("role")
+        if role in {"runner", "reviewer"} and "parent_job_id" not in entry.value:
+            message = (
+                f"line {entry.line_number}: legacy task_card has no parent_job_id; "
+                "relationship matching is limited to one unambiguous same-work_package candidate"
+            )
+            if message not in seen:
+                seen.add(message)
+                warnings.append(message)
     return warnings
 
 
@@ -1819,20 +1939,40 @@ def _repo_file(root: Path, value: Any, label: str) -> tuple[Path | None, str | N
     return candidate, None
 
 
-def _task_requires_data_preflight(path: Path) -> bool:
+def _task_requires_data_preflight(path: Path) -> tuple[bool, list[str]]:
     task_path = path.parent.parent / "task.json"
+    if not task_path.is_file():
+        return False, [
+            f"{path}: task.json is missing; formal experiment validation requires task state"
+        ]
+    if has_symlink_component(task_path):
+        return False, [
+            f"{path}: task.json cannot be read through a symlink for formal experiment validation"
+        ]
     try:
-        task = json.loads(task_path.read_text(encoding="utf-8"))
-    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
-        return False
-    if not isinstance(task, dict) or task.get("research_route") != "exploration":
-        return False
+        content = task_path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError) as exc:
+        return False, [f"{path}: task.json cannot be read: {exc}"]
+    try:
+        task = json.loads(content)
+    except json.JSONDecodeError as exc:
+        return False, [f"{path}: task.json contains invalid JSON: {exc.msg}"]
+    if not isinstance(task, dict):
+        return False, [f"{path}: task.json must be a mapping"]
+    # Legacy non-closure tasks keep their existing experiment behavior. Only
+    # closure tasks with an explicit data-changing exploration route require
+    # data_preflight.
+    if not any(key in task for key in ("closure_state", "hermes_phase", "work_packages")):
+        return False, []
+    if task.get("research_route") != "exploration":
+        return False, []
     fields = task.get("research_change_fields")
-    return isinstance(fields, list) and bool(
-        DATA_PREFLIGHT_CHANGE_FIELDS.intersection(
-            item for item in fields if isinstance(item, str)
-        )
-    )
+    normalized_fields = {
+        item.strip().casefold()
+        for item in fields
+        if isinstance(item, str) and item.strip()
+    } if isinstance(fields, list) else set()
+    return bool(DATA_PREFLIGHT_CHANGE_FIELDS.intersection(normalized_fields)), []
 
 
 def _load_preflight_checks(path: Path) -> tuple[dict[str, Any], str | None]:
@@ -1853,7 +1993,9 @@ def validate_data_preflight(
     path: Path,
     experiment: dict[str, Any],
 ) -> tuple[list[Path], list[str]]:
-    required = _task_requires_data_preflight(path)
+    required, task_errors = _task_requires_data_preflight(path)
+    if task_errors:
+        return [], task_errors
     preflight = experiment.get("data_preflight")
     if preflight is None:
         if required:

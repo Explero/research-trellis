@@ -26,7 +26,7 @@
 
 ## 派发上下文
 
-`v0.7.1`（当前版本）开始，主代理先生成 validated dispatch（已验证派发），其中只保留：
+`v0.7.1-beta.0`（当前测试版）开始，主代理先生成 validated dispatch（已验证派发），其中只保留：
 
 1. `job_id`（工作编号）和 `hermes_revision`（Hermes 修订号）；
 2. 当前角色与模式；

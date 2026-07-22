@@ -301,7 +301,11 @@ describe("Agent Context Firewall dispatch CLI", () => {
     expect(create("job-project-coder", "coder").status).toBe(0);
     expect(create("job-project-runner", "runner").status).toBe(0);
     expect(
-      create("job-project-review", "reviewer", ["--profile", "evidence"])
+      create("job-project-review", "reviewer", [
+        "--profile", "evidence",
+        "--work-package", "WP1",
+        "--parent-job-id", "job-project-runner",
+      ])
         .status,
     ).toBe(0);
     expect(
@@ -344,7 +348,9 @@ describe("Agent Context Firewall dispatch CLI", () => {
 
   it("allows planner and reviewer task-level work without a package", () => {
     expect(create("job-planner", "planner").status).toBe(0);
-    expect(create("job-review", "reviewer").status).toBe(0);
+    expect(
+      create("job-review", "reviewer", ["--profile", "closure"]).status,
+    ).toBe(0);
     const review = JSON.parse(
       fs.readFileSync(
         path.join(taskDir, "hermes", "dispatches", "job-review.dispatch.json"),
@@ -631,8 +637,13 @@ describe("Agent Context Firewall dispatch CLI", () => {
   });
 
   it("limits evidence and claim reviewers to proposed judgments", () => {
+    expect(create("job-judgment-source", "runner").status).toBe(0);
     expect(
-      create("job-evidence-judgment", "reviewer", ["--profile", "evidence"]).status,
+      create("job-evidence-judgment", "reviewer", [
+        "--profile", "evidence",
+        "--work-package", "WP1",
+        "--parent-job-id", "job-judgment-source",
+      ]).status,
     ).toBe(0);
     const approved = apply(
       "job-evidence-judgment",
@@ -644,7 +655,11 @@ describe("Agent Context Firewall dispatch CLI", () => {
     expect(approved.stderr).toContain("review_authority_violation");
 
     expect(
-      create("job-claim-judgment", "reviewer", ["--profile", "claim"]).status,
+      create("job-claim-judgment", "reviewer", [
+        "--profile", "claim",
+        "--work-package", "WP1",
+        "--parent-job-id", "job-judgment-source",
+      ]).status,
     ).toBe(0);
     const proposed = apply(
       "job-claim-judgment",
@@ -823,7 +838,14 @@ describe("Agent Context Firewall dispatch CLI", () => {
   });
 
   it("binds blind reviewer reads to allowed refs and rejects worker context", () => {
-    expect(create("job-review-read", "reviewer", ["--profile", "quality"]).status).toBe(0);
+    expect(create("job-review-source", "coder").status).toBe(0);
+    expect(
+      create("job-review-read", "reviewer", [
+        "--profile", "quality",
+        "--work-package", "WP1",
+        "--parent-job-id", "job-review-source",
+      ]).status,
+    ).toBe(0);
     runHook("inject-subagent-context.py", {
       cwd: root,
       tool_name: "Agent",

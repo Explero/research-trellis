@@ -38,6 +38,7 @@ MAX_RESULT_LINES = 80
 MAX_INVALID_RESULTS = 2
 EXECUTION_ROLES = {"coder", "runner"}
 TASK_LEVEL_ROLES = {"planner", "researcher", "reviewer"}
+INDEPENDENT_REVIEWER_PROFILES = {"closure", "safety"}
 PROJECT_CONTEXT_FILES = {
     "background": ".trellis/project/BACKGROUND.md",
     "research_plan": ".trellis/project/RESEARCH_PLAN.md",
@@ -122,6 +123,7 @@ RESULT_FIELDS = {
     "task_revision",
     "role",
     "profile",
+    "parent_job_id",
     "status",
     "conclusion",
     "uncertainties",
@@ -210,6 +212,7 @@ def create_dispatch(
     role = normalized.role
     profile = normalized.profile
     work_package = _normalize_optional_text(spec.get("work_package"))
+    parent_job_id = _normalize_optional_text(spec.get("parent_job_id"))
     constraints = closure_constraints(task)
     allowed_files = _normalize_patterns(spec.get("allowed_files"), "allowed_files")
     forbidden_files = _normalize_patterns(spec.get("forbidden_files"), "forbidden_files")
@@ -245,12 +248,23 @@ def create_dispatch(
         role,
         profile,
         work_package,
+        parent_job_id,
         objective,
     )
     _validate_job_id(job_id)
     path = dispatch_path(task_dir, job_id)
     if path.exists():
         raise DispatchError("duplicate_job", f"dispatch already exists for {job_id}")
+    _validate_parent_job(
+        task_dir,
+        task,
+        repo_root,
+        job_id=job_id,
+        role=role,
+        profile=profile,
+        work_package=work_package,
+        parent_job_id=parent_job_id,
+    )
 
     mode = str(task.get("closure_mode") or "lean")
     gate_errors, gate_warnings = closure_mode_gate(
@@ -283,6 +297,7 @@ def create_dispatch(
         "role": role,
         "profile": profile,
         "work_package": work_package,
+        "parent_job_id": parent_job_id,
         "handoff_writer": handoff_writer,
         "objective": objective,
         "allowed_refs": refs,
@@ -444,6 +459,22 @@ def validate_dispatch(
         )
     if dispatch.get("task_revision") != dispatch.get("hermes_revision"):
         errors.append("task_revision")
+    try:
+        parent_job_id = _normalize_optional_text(dispatch.get("parent_job_id"))
+        if dispatch.get("parent_job_id") != parent_job_id:
+            errors.append("parent_job_id")
+        _validate_parent_job(
+            task_dir,
+            task,
+            repo_root,
+            job_id=str(dispatch.get("job_id") or ""),
+            role=str(dispatch.get("role") or ""),
+            profile=str(dispatch.get("profile") or ""),
+            work_package=_normalize_optional_text(dispatch.get("work_package")),
+            parent_job_id=parent_job_id,
+        )
+    except DispatchError as exc:
+        errors.append(exc.code)
     if dispatch.get("allowed_refs") != dispatch.get("refs"):
         errors.append("allowed_refs")
     if dispatch.get("forbidden") != dispatch.get("forbidden_files"):
@@ -594,6 +625,7 @@ def build_canonical_prompt(dispatch: dict[str, Any]) -> str:
         f"task: {dispatch.get('task_path')} @ revision {dispatch.get('hermes_revision')}",
         f"role: {dispatch.get('role')}:{dispatch.get('profile')}",
         f"work_package: {dispatch.get('work_package') or 'null'}",
+        f"parent_job_id: {dispatch.get('parent_job_id') or 'null'}",
         f"objective: {dispatch.get('objective')}",
         "refs: " + (", ".join(refs) if refs else "none"),
         "allowed_files: " + (", ".join(_string_list(dispatch.get("allowed_files"))) or "none"),
@@ -604,7 +636,7 @@ def build_canonical_prompt(dispatch: dict[str, Any]) -> str:
         "Read only these refs unless the objective names a deterministic ledger check.",
         "For targeted verification, run only the current work package's directed check and record basic evidence; do not claim completion from chat.",
         "Do not include logs, diffs, search history, tool traces, secrets, or absolute user paths.",
-        "Return exactly one JSON object with: schema, job_id, task_revision, role, profile, status(success|failure|blocked), conclusion, evidence_refs, artifact_refs, changed_files, verification, risks, uncertainties, next_action.",
+        "Return exactly one JSON object with: schema, job_id, task_revision, role, profile, parent_job_id when present, status(success|failure|blocked), conclusion, evidence_refs, artifact_refs, changed_files, verification, risks, uncertainties, next_action.",
         f"conclusion must be <= {MAX_CONCLUSION_CHARS} characters; uncertainties is required.",
     ]
     if dispatch.get("blind_review"):
@@ -761,6 +793,10 @@ def validate_result_envelope(
         raise DispatchError("result_revision_mismatch", "result task_revision does not match dispatch")
     if value.get("role") != dispatch.get("role") or value.get("profile") != dispatch.get("profile"):
         raise DispatchError("result_role_mismatch", "result role/profile does not match dispatch")
+    result_parent_job_id = _normalize_optional_text(value.get("parent_job_id"))
+    dispatch_parent_job_id = _normalize_optional_text(dispatch.get("parent_job_id"))
+    if "parent_job_id" in value and result_parent_job_id != dispatch_parent_job_id:
+        raise DispatchError("result_parent_mismatch", "result parent_job_id does not match dispatch")
     if value.get("status") not in {"success", "failure", "blocked"}:
         raise DispatchError("invalid_result_status", "status must be success, failure, or blocked")
     conclusion = _required_text(value.get("conclusion"), "conclusion")
@@ -822,6 +858,7 @@ def validate_result_envelope(
         "task_revision": value["task_revision"],
         "role": value["role"],
         "profile": value["profile"],
+        "parent_job_id": dispatch_parent_job_id,
         "status": value["status"],
         "conclusion": conclusion,
         "uncertainties": uncertainties,
@@ -858,6 +895,7 @@ def sanitized_summary(task_dir: Path, job_id: str) -> dict[str, Any]:
                 "task_revision",
                 "role",
                 "profile",
+                "parent_job_id",
                 "status",
                 "conclusion",
                 "uncertainties",
@@ -880,6 +918,7 @@ def sanitized_summary(task_dir: Path, job_id: str) -> dict[str, Any]:
         "task_revision": dispatch.get("task_revision", dispatch.get("hermes_revision")),
         "role": dispatch.get("role"),
         "profile": dispatch.get("profile"),
+        "parent_job_id": dispatch.get("parent_job_id"),
         "status": "blocked" if status == "blocked" else status,
         "conclusion": "Result envelope was rejected by the context firewall.",
         "uncertainties": [f"invalid_result_attempts={attempts}"],
@@ -907,6 +946,7 @@ def list_dispatches(task_dir: Path) -> list[dict[str, Any]]:
             "role": value.get("role"),
             "profile": value.get("profile"),
             "work_package": value.get("work_package"),
+            "parent_job_id": value.get("parent_job_id"),
             "hermes_revision": value.get("hermes_revision"),
             "status": value.get("status"),
             "invalid_result_attempts": value.get("invalid_result_attempts", 0),
@@ -1012,6 +1052,7 @@ def result_json_schema() -> dict[str, Any]:
             "task_revision": {"type": "integer", "minimum": 0},
             "role": {"type": "string", "enum": ["planner", "researcher", "coder", "runner", "reviewer"]},
             "profile": {"type": "string"},
+            "parent_job_id": {"type": ["string", "null"], "pattern": JOB_ID_RE.pattern},
             "status": {"type": "string", "enum": ["success", "failure", "blocked"]},
             "conclusion": {"type": "string", "maxLength": MAX_CONCLUSION_CHARS},
             "uncertainties": string_array,
@@ -1046,6 +1087,7 @@ def _dispatch_audit(dispatch: dict[str, Any]) -> dict[str, Any]:
             "revision": "pass",
             "role_profile": "pass",
             "work_package": "pass",
+            "parent_job": "pass",
             "refs": "pass",
             "sensitive_content": "pass",
             "absolute_user_path": "pass",
@@ -1057,6 +1099,7 @@ def _dispatch_audit(dispatch: dict[str, Any]) -> dict[str, Any]:
             "ref_count": len(dispatch.get("refs") or []),
             "allowed_file_patterns": len(dispatch.get("allowed_files") or []),
             "forbidden_file_patterns": len(dispatch.get("forbidden_files") or []),
+            "has_parent_job": dispatch.get("parent_job_id") is not None,
         },
         "dispatch_sha256": _stable_hash(dispatch, {"audit"}),
     }
@@ -1073,6 +1116,7 @@ def _sanitized_result(
     sanitized["dispatch_revision"] = dispatch.get("hermes_revision")
     sanitized["role"] = dispatch.get("role")
     sanitized["profile"] = dispatch.get("profile")
+    sanitized["parent_job_id"] = dispatch.get("parent_job_id")
     sanitized["work_package"] = dispatch.get("work_package")
     verification = dict(result.get("verification") or {})
     verification["run_refs"] = list(result.get("run_refs") or [])
@@ -1235,6 +1279,7 @@ def _append_worker_task_card(task_dir: Path, dispatch: dict[str, Any]) -> None:
         "profile": dispatch["profile"],
         "objective": dispatch["objective"],
         "work_package": dispatch["work_package"],
+        "parent_job_id": dispatch["parent_job_id"],
         "hermes_revision": dispatch["hermes_revision"],
         "worktree_id": dispatch["worktree_id"],
         "status": "queued",
@@ -1262,6 +1307,7 @@ def _append_worker_result(
         "id": f"cp-{dispatch['job_id']}",
         "timestamp": now_utc(),
         "job_id": dispatch["job_id"],
+        "parent_job_id": dispatch.get("parent_job_id"),
         "checkpoint": "result-envelope-validated",
         "resume_from": "sanitized result",
         "evidence_refs": result["evidence_refs"],
@@ -1273,6 +1319,7 @@ def _append_worker_result(
         "id": f"rs-{dispatch['job_id']}",
         "timestamp": now_utc(),
         "job_id": dispatch["job_id"],
+        "parent_job_id": dispatch.get("parent_job_id"),
         "status": "done" if result["status"] == "success" else result["status"],
         "summary": result["conclusion"],
         "uncertainties": result["uncertainties"],
@@ -1419,6 +1466,48 @@ def _validate_handoff_file_boundary(
         raise DispatchError(
             "handoff_path_reserved",
             "HANDOFF.md is reserved for the dedicated coder:configuration handoff dispatch",
+        )
+
+
+def _validate_parent_job(
+    task_dir: Path,
+    task: dict[str, Any],
+    repo_root: Path,
+    *,
+    job_id: str,
+    role: str,
+    profile: str,
+    work_package: str | None,
+    parent_job_id: str | None,
+) -> None:
+    """Bind formal review work to one existing job in the same package."""
+    requires_parent = role == "reviewer" and profile not in INDEPENDENT_REVIEWER_PROFILES
+    if parent_job_id is None:
+        if requires_parent:
+            raise DispatchError(
+                "missing_parent_job",
+                "reviewer dispatch requires parent_job_id unless it is closure or safety review",
+            )
+        return
+    _validate_job_id(parent_job_id)
+    if parent_job_id == job_id:
+        raise DispatchError("parent_job_self_reference", "parent_job_id cannot equal job_id")
+    parent = load_dispatch(task_dir, parent_job_id)
+    if parent.get("job_id") != parent_job_id:
+        raise DispatchError("parent_job_invalid", "parent dispatch job_id does not match its record")
+    expected_task_id = str(task.get("id") or task_dir.name)
+    if parent.get("task_id") != expected_task_id:
+        raise DispatchError("parent_job_task_mismatch", "parent dispatch belongs to a different task")
+    if parent.get("task_path") != _repo_relative(task_dir, repo_root):
+        raise DispatchError("parent_job_task_mismatch", "parent dispatch path does not match this task")
+    try:
+        parent_work_package = _normalize_optional_text(parent.get("work_package"))
+    except DispatchError as exc:
+        raise DispatchError("parent_job_invalid", "parent dispatch has an invalid work_package") from exc
+    if parent_work_package != work_package:
+        raise DispatchError(
+            "parent_job_work_package_mismatch",
+            "parent dispatch must use the same work_package",
         )
 
 
@@ -1727,10 +1816,11 @@ def _generated_job_id(
     role: str,
     profile: str,
     work_package: str | None,
+    parent_job_id: str | None,
     objective: str,
 ) -> str:
     payload = json.dumps(
-        [task_name, revision, role, profile, work_package, objective],
+        [task_name, revision, role, profile, work_package, parent_job_id, objective],
         ensure_ascii=False,
         separators=(",", ":"),
     )

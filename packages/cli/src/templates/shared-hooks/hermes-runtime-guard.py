@@ -414,38 +414,205 @@ def is_main_agent_request(data: dict[str, Any]) -> bool:
 
 
 def is_main_bash_allowed(command: str) -> bool:
-    """Allow only simple coordinator inspection and Hermes control commands.
+    """Classify the small coordinator command surface without parsing shell.
 
-    This is intentionally a small prefix check, not a shell parser. Hermes uses
-    role routing and task records for coordination; it does not try to infer
-    every effect of arbitrary scripts.
+    This is deliberately an explicit command matrix, not a shell-security
+    parser. Any shell composition is rejected before the command family is
+    checked. Main agents use Read for records; Bash is only for deterministic
+    task/closure control and narrowly scoped Git inspection.
     """
     normalized = command.strip().replace("\\", "/")
-    # This is a coordinator convenience allowlist, not a shell-security
-    # parser. Compound or expanded commands are never control-plane commands.
-    if not normalized or any(marker in normalized for marker in (";", "&", "|", ">", "<", "`", "$", "\n")):
+    if not normalized or any(
+        marker in normalized
+        for marker in (";", "&", "|", ">", "<", "`", "$", "\n", "\r")
+    ):
         return False
-    prefixes = (
-        "git status",
-        "git diff",
-        "git log",
-        "cat .trellis/tasks/",
-        "cat .ai/records/",
-        "jq ",
-        "python ./.trellis/scripts/task.py ",
-        "python3 ./.trellis/scripts/task.py ",
-        "python .trellis/scripts/task.py ",
-        "python3 .trellis/scripts/task.py ",
-        "python ./.trellis/scripts/closure.py audit ",
-        "python3 ./.trellis/scripts/closure.py audit ",
-        "python .trellis/scripts/closure.py audit ",
-        "python3 .trellis/scripts/closure.py audit ",
-        "python ./.trellis/scripts/hermes/dispatch.py ",
-        "python3 ./.trellis/scripts/hermes/dispatch.py ",
-        "python .trellis/scripts/hermes/dispatch.py ",
-        "python3 .trellis/scripts/hermes/dispatch.py ",
+    tokens = normalized.split()
+    if not tokens:
+        return False
+    if tokens[0] == "git":
+        return is_main_git_read_allowed(tokens)
+    if tokens[0] not in {"python", "python3"} or len(tokens) < 3:
+        return False
+
+    script = tokens[1]
+    while script.startswith("./"):
+        script = script[2:]
+    subcommand = tokens[2]
+    arguments = tokens[3:]
+    if script == ".trellis/scripts/task.py":
+        return is_main_task_command_allowed(subcommand, arguments)
+    if script == ".trellis/scripts/hermes/dispatch.py":
+        return subcommand in {
+            "create",
+            "validate",
+            "show",
+            "run",
+            "apply",
+            "list",
+            "status",
+            "supersede",
+        }
+    if script == ".trellis/scripts/closure.py":
+        return subcommand in {
+            "plan",
+            "route",
+            "grill",
+            "validate",
+            "status",
+            "next",
+            "capsule",
+            "package-start",
+            "package-check",
+            "package-done",
+            "package-block",
+            "amend",
+            "repair",
+            "audit",
+            "close",
+        }
+    return False
+
+
+def is_main_task_command_allowed(subcommand: str, arguments: list[str]) -> bool:
+    """Allow deterministic task coordination, never archive auto-commit."""
+    coordination_commands = {
+        "create",
+        "add-context",
+        "validate",
+        "list-context",
+        "start",
+        "current",
+        "finish",
+        "set-branch",
+        "set-base-branch",
+        "set-scope",
+        "list",
+        "list-archive",
+        "add-subtask",
+        "remove-subtask",
+    }
+    if subcommand in coordination_commands:
+        return True
+    # task.py archive can stage and commit unless this explicit no-write flag
+    # is present. Main may advance the task lifecycle, not write Git history.
+    return subcommand == "archive" and "--no-commit" in arguments
+
+
+def is_main_git_read_allowed(tokens: list[str]) -> bool:
+    """Allow a small, non-writing Git inspection matrix.
+
+    Git accepts many diff options and pathspec forms. We do not try to parse
+    them generally: only the read forms below are coordinator commands.
+    """
+    if len(tokens) < 2:
+        return False
+    command = tokens[1]
+    arguments = tokens[2:]
+    if any(
+        value == "--output"
+        or value.startswith("--output=")
+        or value in {"--ext-diff", "--no-index"}
+        or value.startswith("--ext-diff=")
+        or value.startswith("--no-index=")
+        for value in arguments
+    ):
+        return False
+    if command == "branch":
+        return arguments == ["--show-current"]
+    if command == "status":
+        allowed_options = {
+            "--short",
+            "-s",
+            "--branch",
+            "-b",
+            "--porcelain",
+            "--porcelain=v1",
+            "--porcelain=v2",
+            "--untracked-files=no",
+            "--untracked-files=normal",
+            "--untracked-files=all",
+        }
+        if "--" not in arguments:
+            return all(value in allowed_options for value in arguments)
+        separator = arguments.index("--")
+        options = arguments[:separator]
+        pathspecs = arguments[separator + 1:]
+        return (
+            bool(pathspecs)
+            and all(value in allowed_options for value in options)
+            and all(is_safe_main_git_pathspec(value) for value in pathspecs)
+        )
+    if command == "diff":
+        return is_main_git_diff_allowed(arguments)
+    if command == "log":
+        return is_main_git_log_allowed(arguments)
+    return False
+
+
+def is_main_git_diff_allowed(arguments: list[str]) -> bool:
+    allowed_options = {
+        "--name-only",
+        "--name-status",
+        "--stat",
+        "--summary",
+        "--check",
+        "--cached",
+        "--staged",
+        "--no-ext-diff",
+        "--no-textconv",
+    }
+    if not arguments:
+        return True
+    if "--" not in arguments:
+        return all(value in allowed_options for value in arguments)
+    separator = arguments.index("--")
+    options = arguments[:separator]
+    pathspecs = arguments[separator + 1:]
+    return (
+        bool(pathspecs)
+        and all(value in allowed_options for value in options)
+        and all(is_safe_main_git_pathspec(value) for value in pathspecs)
     )
-    return normalized.startswith(prefixes)
+
+
+def is_main_git_log_allowed(arguments: list[str]) -> bool:
+    allowed_options = {
+        "--oneline",
+        "--decorate",
+        "--no-decorate",
+        "--stat",
+        "--name-only",
+        "--name-status",
+        "--no-ext-diff",
+        "--no-textconv",
+    }
+    for value in arguments:
+        if value == "--":
+            return False
+        if value in allowed_options or value.startswith("--max-count="):
+            continue
+        if value.startswith("-n") and value[2:].isdigit():
+            continue
+        return False
+    return True
+
+
+def is_safe_main_git_pathspec(value: str) -> bool:
+    normalized = value.replace("\\", "/").strip()
+    if (
+        not normalized
+        or normalized.startswith(("/", "../", "./../", ":"))
+        or ".." in Path(normalized).parts
+    ):
+        return False
+    name = Path(normalized).name.casefold()
+    return not (
+        name.startswith(".env")
+        or "credential" in name
+        or "secret" in name
+        or name in {"id_rsa", "id_ed25519"}
+    )
 
 
 def main_agent_firewall_reason(data: dict[str, Any]) -> str | None:
@@ -467,6 +634,44 @@ def main_agent_firewall_reason(data: dict[str, Any]) -> str | None:
         "task state or use Hermes control commands, but implementation, tests, "
         "and experiments must be delegated to a runner subagent or the appropriate "
         "specialist subagent."
+    )
+
+
+def declared_worker_role(data: dict[str, Any]) -> str | None:
+    aliases = {
+        "builder": "coder",
+        "coder": "coder",
+        "hermes_coder": "coder",
+        "trellis_implement": "coder",
+        "runner": "runner",
+        "hermes_runner": "runner",
+    }
+    for value in agent_identity_values(data):
+        normalized = normalized_agent_identity(value)
+        if normalized in aliases:
+            return aliases[normalized]
+    return None
+
+
+def is_worker_bash_command_allowed(role: str, command: str) -> bool:
+    """Allow role-specific commands without attempting to parse a shell."""
+    normalized = command.strip().replace("\\", "/")
+    if not normalized or any(
+        marker in normalized
+        for marker in (";", "&", "|", ">", "<", "`", "$", "\n", "\r")
+    ):
+        return False
+    tokens = normalized.split()
+    if role == "coder":
+        return bool(tokens) and tokens[0] == "git" and is_main_git_read_allowed(tokens)
+    if role != "runner" or len(tokens) < 3 or tokens[0] not in {"python", "python3"}:
+        return False
+    script = tokens[1]
+    while script.startswith("./"):
+        script = script[2:]
+    return (
+        script == ".trellis/scripts/hermes/runner.py"
+        and tokens[2] in {"run", "replay", "validate"}
     )
 
 
@@ -601,6 +806,65 @@ def changed_files_from_record(record: dict[str, Any]) -> list[str]:
     return [item for item in changed if isinstance(item, str) and item.strip()]
 
 
+def _parent_job_value(record: dict[str, Any]) -> tuple[bool, str | None]:
+    if "parent_job_id" not in record:
+        return False, None
+    value = record.get("parent_job_id")
+    if value is None:
+        return True, None
+    if isinstance(value, str) and value.strip():
+        return True, value.strip()
+    return True, ""
+
+
+def _legacy_parent_candidates(
+    cards: dict[str, dict[str, Any]],
+    child_job_id: str,
+    work_package: Any,
+) -> set[str]:
+    return {
+        candidate_job_id
+        for candidate_job_id, candidate in cards.items()
+        if candidate_job_id != child_job_id
+        and candidate.get("role") != "reviewer"
+        and candidate.get("work_package") == work_package
+    }
+
+
+def record_matches_parent(
+    record: dict[str, Any],
+    cards: dict[str, dict[str, Any]],
+    parent_job_id: str,
+) -> bool:
+    child_job_id = record_job_id(record)
+    if child_job_id is None:
+        return False
+    card = cards.get(child_job_id)
+    parent_card = cards.get(parent_job_id)
+    if card is None or parent_card is None:
+        return False
+    explicit_card, card_parent = _parent_job_value(card)
+    explicit_record, record_parent = _parent_job_value(record)
+    if explicit_card:
+        return (
+            card_parent == parent_job_id
+            and (not explicit_record or record_parent == card_parent)
+            and parent_card.get("work_package") == card.get("work_package")
+        )
+    if explicit_record:
+        return (
+            record_parent == parent_job_id
+            and parent_card.get("work_package") == card.get("work_package")
+        )
+    # Legacy records can only use the one same-package candidate. This avoids
+    # inferring relationships from result ordering or timestamps.
+    return _legacy_parent_candidates(
+        cards,
+        child_job_id,
+        card.get("work_package"),
+    ) == {parent_job_id}
+
+
 def related_records(
     records: list[dict[str, Any]],
     cards: dict[str, dict[str, Any]],
@@ -608,6 +872,7 @@ def related_records(
     role: str,
     record_types: set[str],
     profiles: set[str] | None = None,
+    legacy_warnings: list[str] | None = None,
 ) -> list[dict[str, Any]]:
     matches: list[dict[str, Any]] = []
     for record in records:
@@ -621,12 +886,19 @@ def related_records(
             continue
         if profiles is not None and card.get("profile") not in profiles:
             continue
-        if (
-            job_id == coder_job_id
-            or card.get("parent_job_id") == coder_job_id
-            or record.get("parent_job_id") == coder_job_id
-        ):
+        if record_matches_parent(record, cards, coder_job_id):
             matches.append(record)
+            explicit_card, _ = _parent_job_value(card)
+            explicit_record, _ = _parent_job_value(record)
+            if legacy_warnings is not None and not explicit_card and not explicit_record:
+                package = card.get("work_package") or "task-level"
+                legacy_warnings.append(
+                    "Hermes Runtime compatibility warning: legacy job "
+                    f"{job_id} has no parent_job_id and was matched to "
+                    f"{coder_job_id} only because it is the sole non-reviewer "
+                    f"candidate in work_package {package}. New dispatches must "
+                    "record parent_job_id explicitly."
+                )
     return matches
 
 
@@ -713,6 +985,7 @@ def stop_completion_reason(
     runtime_root: Path,
     task: str,
     records: list[dict[str, Any]],
+    legacy_warnings: list[str] | None = None,
 ) -> str | None:
     changed_files = git_changed_files(root)
     cards = task_cards_by_job(records, root)
@@ -758,6 +1031,7 @@ def stop_completion_reason(
                 "reviewer",
                 {"checkpoint", "result"},
                 {"quality", "evidence", "claim", "safety", "closure", "statistics"},
+                legacy_warnings,
             )
             if review_records:
                 return None
@@ -809,6 +1083,7 @@ def stop_completion_reason(
             "runner",
             {"result"},
             {"test", "build", "validation"},
+            legacy_warnings,
         )
         has_passing_test = any(
             runner_result_has_passing_test(runner_result, run_manifests)
@@ -827,6 +1102,7 @@ def stop_completion_reason(
             "reviewer",
             {"checkpoint", "result"},
             {"quality", "safety"},
+            legacy_warnings,
         )
         if not review_records:
             return (
@@ -847,6 +1123,10 @@ def guard_tool_input_permissions(
     tool_name = str(data.get("tool_name") or "")
     tool_input = data.get("tool_input", {})
     if tool_name == "Bash":
+        command = bash_command_from_tool_input(tool_input)
+        if not command:
+            return "Hermes Runtime: Bash command is missing."
+        role: str | None = None
         agent_id = data.get("agent_id")
         if isinstance(agent_id, str) and agent_id:
             scripts_dir = root / ".trellis" / "scripts"
@@ -862,8 +1142,15 @@ def guard_tool_input_permissions(
             except Exception:
                 return "Hermes Runtime: Bash caller has no valid dispatch binding."
             role = str(bound_dispatch.get("role") or "")
-            if role not in BASH_EXECUTION_ROLES:
-                return f"Hermes Runtime: {role} dispatch cannot execute Bash."
+        else:
+            role = declared_worker_role(data)
+        if role not in BASH_EXECUTION_ROLES:
+            return f"Hermes Runtime: {role or 'unbound'} dispatch cannot execute Bash."
+        if not is_worker_bash_command_allowed(role, command):
+            return (
+                "Hermes Runtime: Bash command is outside the role's bounded command surface. "
+                "Use runner.py for registered execution or delegate the work."
+            )
         return None
     else:
         target_files = collect_tool_target_files(root, tool_name, tool_input)
@@ -1351,9 +1638,20 @@ def main() -> int:
                 print(json.dumps(block_payload(event_name, closure_reason), ensure_ascii=False))
                 return 0
             records = read_worker_records(worker_records)
-            reason = stop_completion_reason(root, runtime_root, task, records)
+            legacy_warnings: list[str] = []
+            reason = stop_completion_reason(
+                root,
+                runtime_root,
+                task,
+                records,
+                legacy_warnings,
+            )
             if reason is not None:
                 print(json.dumps(block_payload(event_name, reason), ensure_ascii=False))
+                return 0
+            if legacy_warnings:
+                warning = " ".join(dict.fromkeys(legacy_warnings))
+                print(json.dumps(context_payload(event_name, warning), ensure_ascii=False))
                 return 0
 
     if event_name == "PreToolUse":

@@ -62,13 +62,13 @@
 
 ### P7-P11：deployment candidate hardening（部署候选加固）
 
-当前 P7-P11 只做可验证薄切片：sandbox 配置 fail-closed、provenance
-ledger、local service queue、audit ledger、evaluation quality gate。这里不能
-声称完整 `production ready`（生产就绪）或 OS 级生产平台。
+以下 P7-P11 是历史方案，不再作为当前路线。当前版本保留 provenance
+ledger、audit ledger 和 evaluation quality gate 等轻量记录能力，不继续实现
+sandbox、容器、远程服务或复杂本地队列。
 
 边界约定：
 
-- `not an OS sandbox`（不是操作系统级沙箱）。`container` 模式已有 `Docker`（容器运行时）薄切片，会通过 `docker run --rm`（一次性容器执行命令）挂载仓库并运行白名单命令；它仍不是生产级强隔离。`external` 模式当前只做可用性检查。
+- `container`（容器）和 `external sandbox`（外部沙箱）方案已放弃；运行器直接在真实项目环境执行登记命令。
 - `approval_records` 依赖 `external human/root approval`（外部人工/根权限批准）。
 - `JSONL` 不是不可篡改存储，只是 append-only（追加写）约定。
 - `allowed_commands` 不是 strong command sandbox（强命令沙箱）；允许 `python3` 时仍可执行任意 Python 行为。
@@ -330,9 +330,9 @@ P7 Agent Context Firewall：
 - [x] 新增统一 `dispatch.py`（派发命令），支持创建、校验、显示、运行、列表、应用和状态查询。
 - [x] 派发绑定单调 `hermes_revision`（Hermes 修订号）、当前工作包、五角色模式和最多 3 个引用。
 - [x] Claude Agent 钩子只接受 `job_id`（工作编号），拒绝异步，并在结束时校验和净化结果。
-- [x] Codex native（Codex 原生）明确为建议性；strict（严格）复用结构化执行参数，不增加 SDK、数据库或服务。
+- [x] Codex native（Codex 原生）明确为建议性；旧 strict（严格）参数只保留兼容提示，不再提供独立执行模式。
 - [x] 原始跟踪只写入忽略发布的 `.trellis/.runtime/`（本地运行目录）；主上下文只接收净化摘要。
-- [x] `lean`（轻量）、`standard`（标准）和 `publication`（发表）按钩子或严格模式心跳执行不同门禁。
+- [x] `lean`（轻量）、`standard`（标准）和 `publication`（发表）共享钩子状态提示；模式差异由运行、证据、统计、主张和审批审计决定。
 
 最终验证记录：
 

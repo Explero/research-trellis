@@ -335,6 +335,27 @@ describe("configurePlatform", () => {
     );
   });
 
+  it("configurePlatform('codex') preserves a user-selected model in managed config", async () => {
+    const config = getCodexConfigTemplate();
+    const configPath = path.join(tmpDir, ".codex", config.targetPath);
+    fs.mkdirSync(path.dirname(configPath), { recursive: true });
+    fs.writeFileSync(
+      configPath,
+      config.content
+        .replace('model = "gpt-5.6-sol"', 'model = "gpt-5.6-custom"')
+        .replace(
+          "max_concurrent_threads_per_session = 3",
+          "max_concurrent_threads_per_session = 1",
+        ),
+    );
+
+    await configurePlatform("codex", tmpDir);
+
+    const written = fs.readFileSync(configPath, "utf-8");
+    expect(written).toContain('model = "gpt-5.6-custom"');
+    expect(written).toContain("max_concurrent_threads_per_session = 3");
+  });
+
   it("configurePlatform('codex') resolves PYTHON_CMD in hooks.json", async () => {
     await configurePlatform("codex", tmpDir);
 

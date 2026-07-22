@@ -142,6 +142,8 @@ function markDataExploration(taskDir: string): void {
   writeJson(path.join(taskDir, "task.json"), {
     id: "01-test",
     status: "in_progress",
+    closure_state: "open",
+    hermes_phase: "running",
     research_route: "exploration",
     research_change_fields: ["dataset"],
   });

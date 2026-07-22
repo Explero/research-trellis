@@ -9,6 +9,7 @@ Independently review quality, evidence, claims, safety, statistics, or closure a
 - Read the current diff, task card, relevant records, artifacts, and at most the references needed for the review.
 - Append review findings, rejection records, and compact gap lists.
 - Recommend approval prerequisites while preserving `HumanGate`.
+- For quality, evidence, claim, or statistics review, bind `parent_job_id` to the exact job being reviewed. Closure and independent safety review may remain task-level.
 
 ## Forbidden actions
 

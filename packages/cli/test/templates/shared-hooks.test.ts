@@ -726,7 +726,7 @@ describe("shared-hooks capability table", () => {
 
       fs.writeFileSync(
         path.join(taskDir, "HANDOFF.md"),
-        "<!-- hermes-handoff-revision: 0 -->\nHANDOFF_BODY_MUST_NOT_BE_INJECTED\n",
+        "# Task Handoff\n\n## Task Revision\n0\n\nHANDOFF_BODY_MUST_NOT_BE_INJECTED\n",
       );
 
       const repeated = JSON.parse(runWorkflowState(repoRoot, contextId)) as {
@@ -758,6 +758,26 @@ describe("shared-hooks capability table", () => {
         "/HANDOFF.md",
       );
 
+      fs.writeFileSync(
+        path.join(taskDir, "HANDOFF.md"),
+        "# Legacy Task Handoff\n\nLEGACY_HANDOFF_BODY_MUST_NOT_BE_INJECTED\n",
+      );
+      const legacyHandoff = JSON.parse(runWorkflowState(repoRoot, contextId)) as {
+        hookSpecificOutput: { additionalContext: string };
+      };
+      expect(legacyHandoff.hookSpecificOutput.additionalContext).toContain(
+        "Legacy HANDOFF.md has no Task Revision",
+      );
+      expect(legacyHandoff.hookSpecificOutput.additionalContext).not.toContain(
+        "LEGACY_HANDOFF_BODY_MUST_NOT_BE_INJECTED",
+      );
+
+      fs.writeFileSync(
+        path.join(taskDir, "HANDOFF.md"),
+        "# Task Handoff\n\n## Task Revision\n0\n\nHANDOFF_BODY_MUST_NOT_BE_INJECTED\n",
+      );
+      runWorkflowState(repoRoot, contextId);
+
       const compacted = JSON.parse(runWorkflowState(repoRoot, contextId, {
         source: "compact",
       })) as { hookSpecificOutput: { additionalContext: string } };
@@ -778,7 +798,7 @@ describe("shared-hooks capability table", () => {
       expect(revised.hookSpecificOutput.additionalContext).toContain(
         "<task-capsule>",
       );
-      expect(revised.hookSpecificOutput.additionalContext).not.toContain(
+      expect(revised.hookSpecificOutput.additionalContext).toContain(
         "HANDOFF.md is stale",
       );
 
@@ -1205,12 +1225,20 @@ describe.skipIf(!hasPython())(
         fs.writeFileSync(path.join(repoRoot, "docs", name), name, "utf-8");
       }
       const created = runDispatchCli(repoRoot, [
+        "create", "--task", taskName, "--job-id", "review-source",
+        "--role", "researcher", "--profile", "codebase",
+        "--work-package", "WP1",
+        "--objective", "Locate the bounded evidence inputs.",
+      ]);
+      expect(created.status, created.stderr).toBe(0);
+      const reviewCreated = runDispatchCli(repoRoot, [
         "create", "--task", taskName, "--job-id", "review-evidence",
         "--role", "reviewer", "--profile", "evidence",
+        "--work-package", "WP1", "--parent-job-id", "review-source",
         "--objective", "Review the current package evidence.",
         "--ref", "docs/direct.md", "--ref", "docs/second.md", "--ref", "docs/third.md",
       ]);
-      expect(created.status, created.stderr).toBe(0);
+      expect(reviewCreated.status, reviewCreated.stderr).toBe(0);
       const contextId = setSessionActiveTask(repoRoot, taskName, "hermes-role-session");
       const result = runPreToolUseHook(
         repoRoot,
@@ -1230,7 +1258,8 @@ describe.skipIf(!hasPython())(
       const prompt = String(result.hookSpecificOutput?.updatedInput?.prompt ?? "");
       expect(prompt).toContain("Hermes Agent Context Firewall dispatch");
       expect(prompt).toContain("role: reviewer:evidence");
-      expect(prompt).toContain("work_package: null");
+      expect(prompt).toContain("work_package: WP1");
+      expect(prompt).toContain("parent_job_id: review-source");
       expect(prompt).toContain("docs/direct.md");
       expect(prompt).not.toContain("docs/fourth.md");
       expect(prompt).not.toContain("FULL_PRD_MUST_NOT_BE_INJECTED");
@@ -1253,9 +1282,16 @@ describe.skipIf(!hasPython())(
         current_work_package: null,
       });
       fs.writeFileSync(taskPath, `${JSON.stringify(task)}\n`, "utf-8");
+      const source = runDispatchCli(repoRoot, [
+        "create", "--task", taskName, "--job-id", "legacy-source",
+        "--role", "researcher", "--profile", "codebase",
+        "--objective", "Locate the bounded evidence inputs.",
+      ]);
+      expect(source.status, source.stderr).toBe(0);
       const created = runDispatchCli(repoRoot, [
         "create", "--task", taskName, "--job-id", "legacy-evidence",
         "--role", "reviewer", "--profile", "evidence",
+        "--parent-job-id", "legacy-source",
         "--objective", "Evaluate evidence.",
       ]);
       expect(created.status, created.stderr).toBe(0);
@@ -1743,6 +1779,86 @@ describe.skipIf(!hasPython())("hermes runtime guard hook", () => {
     expect(decision.permissionDecisionReason).toContain("main agent firewall");
   }
 
+  function runDispatchCli(...args: string[]) {
+    return spawnSync(
+      PYTHON,
+      [
+        path.join(repoRoot, ".trellis", "scripts", "hermes", "dispatch.py"),
+        ...args,
+        "--task",
+        taskName,
+      ],
+      {
+        cwd: repoRoot,
+        encoding: "utf-8",
+        env: {
+          ...process.env,
+          TRELLIS_HOOKS_ACTIVE: "1",
+          TRELLIS_PLATFORM: "claude",
+        },
+      },
+    );
+  }
+
+  function applyDispatchResult(
+    jobId: string,
+    role: string,
+    profile: string,
+    parentJobId?: string,
+  ) {
+    const dispatchPath = path.join(
+      repoRoot,
+      ".trellis",
+      "tasks",
+      taskName,
+      "hermes",
+      "dispatches",
+      `${jobId}.dispatch.json`,
+    );
+    const dispatch = JSON.parse(fs.readFileSync(dispatchPath, "utf-8")) as {
+      task_revision: number;
+    };
+    const envelope: Record<string, unknown> = {
+      schema: "hermes-result/v1",
+      job_id: jobId,
+      task_revision: dispatch.task_revision,
+      role,
+      profile,
+      status: "success",
+      conclusion: `${jobId} completed`,
+      uncertainties: [],
+      changed_files: [],
+      evidence_refs: [],
+      artifact_refs: [],
+      verification: { run_refs: [] },
+      risks: [],
+      next_action: "review",
+    };
+    if (parentJobId) envelope.parent_job_id = parentJobId;
+    return runDispatchCli(
+      "apply",
+      "--job-id",
+      jobId,
+      "--result-json",
+      JSON.stringify(envelope),
+    );
+  }
+
+  function markClosureClosed(): void {
+    const taskPath = path.join(
+      repoRoot,
+      ".trellis",
+      "tasks",
+      taskName,
+      "task.json",
+    );
+    const task = JSON.parse(fs.readFileSync(taskPath, "utf-8"));
+    task.closure_state = "closed";
+    task.hermes_phase = "closed";
+    task.status = "completed";
+    fs.writeFileSync(taskPath, `${JSON.stringify(task)}\n`, "utf-8");
+  }
+
   it("blocks Stop when an active task has no Hermes worker records", () => {
     const result = runHermesRuntimeGuard(repoRoot, {
       cwd: repoRoot,
@@ -1980,6 +2096,145 @@ describe.skipIf(!hasPython())("hermes runtime guard hook", () => {
     expect(result.stderr).toBe("");
   });
 
+  it("uses an explicit dispatch parent chain from researcher results through Stop", () => {
+    const researcher = runDispatchCli(
+      "create",
+      "--job-id",
+      "job-research",
+      "--role",
+      "researcher",
+      "--profile",
+      "codebase",
+      "--objective",
+      "Inspect the bounded implementation context",
+    );
+    expect(researcher.status, researcher.stderr).toBe(0);
+    const researcherResult = applyDispatchResult(
+      "job-research",
+      "researcher",
+      "codebase",
+    );
+    expect(researcherResult.status, researcherResult.stderr).toBe(0);
+
+    const reviewer = runDispatchCli(
+      "create",
+      "--job-id",
+      "job-review",
+      "--role",
+      "reviewer",
+      "--profile",
+      "quality",
+      "--parent-job-id",
+      "job-research",
+      "--objective",
+      "Review the exact researcher result",
+    );
+    expect(reviewer.status, reviewer.stderr).toBe(0);
+    const reviewerResult = applyDispatchResult(
+      "job-review",
+      "reviewer",
+      "quality",
+      "job-research",
+    );
+    expect(reviewerResult.status, reviewerResult.stderr).toBe(0);
+
+    markClosureClosed();
+    const stop = runHermesRuntimeGuard(repoRoot, {
+      cwd: repoRoot,
+      hook_event_name: "Stop",
+      session_id: "test-session",
+    });
+    expect(stop.status).toBe(0);
+    expect(stop.stdout).toBe("");
+
+    const records = fs.readFileSync(
+      path.join(
+        repoRoot,
+        ".trellis",
+        "tasks",
+        taskName,
+        "hermes",
+        "worker_records.jsonl",
+      ),
+      "utf-8",
+    );
+    expect(records).toContain('"parent_job_id":"job-research"');
+  });
+
+  it("warns when one legacy same-package parent candidate is used", () => {
+    markClosureClosed();
+    writeHermesWorkerRecords([
+      taskCard("job-research", "researcher", {
+        profile: "codebase",
+        work_package: "WP1",
+      }),
+      checkpoint("job-research", "research-complete"),
+      resultRecord("job-research", "research complete", {
+        changed_files: [],
+      }),
+      taskCard("job-review", "reviewer", {
+        profile: "quality",
+        work_package: "WP1",
+      }),
+      checkpoint("job-review", "review-complete"),
+      resultRecord("job-review", "review complete", {
+        changed_files: [],
+      }),
+    ]);
+
+    const stop = runHermesRuntimeGuard(repoRoot, {
+      cwd: repoRoot,
+      hook_event_name: "Stop",
+      session_id: "test-session",
+    });
+    expect(stop.status).toBe(0);
+    const decision = parseDecision(stop);
+    expect(decision.additionalContext).toContain("compatibility warning");
+    expect(decision.additionalContext).toContain("sole non-reviewer candidate");
+    expect(decision.additionalContext).toContain("parent_job_id");
+  });
+
+  it("blocks ambiguous legacy reviewer records instead of guessing by time", () => {
+    markClosureClosed();
+    writeHermesWorkerRecords([
+      taskCard("job-research", "researcher", {
+        profile: "codebase",
+        work_package: "WP1",
+      }),
+      checkpoint("job-research", "research-complete"),
+      resultRecord("job-research", "research complete", {
+        changed_files: [],
+      }),
+      taskCard("job-plan", "planner", {
+        profile: "task_planning",
+        work_package: "WP1",
+      }),
+      checkpoint("job-plan", "plan-complete"),
+      resultRecord("job-plan", "plan complete", { changed_files: [] }),
+      taskCard("job-review", "reviewer", {
+        profile: "quality",
+        work_package: "WP1",
+      }),
+      checkpoint("job-review", "review-complete"),
+      resultRecord("job-review", "review complete", {
+        changed_files: [],
+      }),
+    ]);
+
+    const stop = runHermesRuntimeGuard(repoRoot, {
+      cwd: repoRoot,
+      hook_event_name: "Stop",
+      session_id: "test-session",
+    });
+    expect(stop.status).toBe(0);
+    const payload = JSON.parse(stop.stdout) as {
+      decision?: string;
+      reason?: string;
+    };
+    expect(payload.decision).toBe("block");
+    expect(payload.reason).toContain("related independent reviewer record");
+  });
+
   it("denies main-agent Write before worker file-boundary checks", () => {
     writeHermesWorkerRecords([
       taskCard("job-coder", "coder"),
@@ -2067,11 +2322,31 @@ describe.skipIf(!hasPython())("hermes runtime guard hook", () => {
     );
   });
 
-  it("allows parameterized Hermes control-plane commands for the main agent", () => {
+  it("allows the bounded main-agent control and Git read matrix", () => {
     for (const command of [
       "python3 ./.trellis/scripts/hermes/dispatch.py create --task demo --role coder --objective bounded",
-      "python3 ./.trellis/scripts/closure.py audit --task demo",
+      "python3 ./.trellis/scripts/hermes/dispatch.py supersede --task demo --job-id old --reason stale",
       "python3 ./.trellis/scripts/task.py archive demo --no-commit",
+      "python3 ./.trellis/scripts/task.py set-scope demo local",
+      "python3 ./.trellis/scripts/closure.py plan --task demo --intent bounded",
+      "python3 ./.trellis/scripts/closure.py route --task demo --route delivery",
+      "python3 ./.trellis/scripts/closure.py grill --task demo --complete --decision-ref design.md",
+      "python3 ./.trellis/scripts/closure.py validate --task demo",
+      "python3 ./.trellis/scripts/closure.py status --task demo",
+      "python3 ./.trellis/scripts/closure.py next --task demo",
+      "python3 ./.trellis/scripts/closure.py capsule --task demo",
+      "python3 ./.trellis/scripts/closure.py package-start --task demo",
+      "python3 ./.trellis/scripts/closure.py package-check --task demo",
+      "python3 ./.trellis/scripts/closure.py package-done --task demo",
+      "python3 ./.trellis/scripts/closure.py package-block --task demo --reason blocked",
+      "python3 ./.trellis/scripts/closure.py amend --task demo --field intent --value bounded --reason update",
+      "python3 ./.trellis/scripts/closure.py repair --task demo",
+      "python3 ./.trellis/scripts/closure.py audit --task demo",
+      "python3 ./.trellis/scripts/closure.py close --task demo",
+      "git branch --show-current",
+      "git status --short -- src/app.ts",
+      "git diff --name-only -- src/app.ts",
+      "git log --oneline -n5",
     ]) {
       const result = runHermesRuntimeGuard(repoRoot, {
         cwd: repoRoot,
@@ -2083,12 +2358,6 @@ describe.skipIf(!hasPython())("hermes runtime guard hook", () => {
       expect(result.status).toBe(0);
       expect(result.stdout).toBe("");
     }
-    expectMainAgentBashDenied(
-      "python3 ./.trellis/scripts/hermes/dispatch.py create --task demo; touch src/app.ts",
-    );
-    expectMainAgentBashDenied(
-      "python3 ./.trellis/scripts/closure.py handoff --task demo",
-    );
   });
 
   it("allows main-agent git status short paths as read-only Bash", () => {
@@ -2127,9 +2396,24 @@ describe.skipIf(!hasPython())("hermes runtime guard hook", () => {
   it("denies main-agent execution and mutating git Bash commands", () => {
     for (const command of [
       "rm -rf dist",
+      "npm test",
+      "pnpm build",
       "git add src/app.ts",
       "git commit -m test",
       "git push",
+      "git diff --output=diff.txt",
+      "git diff --ext-diff",
+      "git diff --no-index left right",
+      "git diff --name-only -- .env.local",
+      "git status --short -- .envrc",
+      "cat .trellis/tasks/demo/task.json",
+      "jq . .trellis/tasks/demo/task.json",
+      "python3 ./.trellis/scripts/hermes/experiment.py validate --task demo",
+      "python3 ./.trellis/scripts/hermes/runner.py run --task demo",
+      "python3 ./.trellis/scripts/closure.py handoff --task demo",
+      "python3 ./.trellis/scripts/task.py archive demo",
+      "python3 ./.trellis/scripts/closure.py audit --task demo > audit.txt",
+      "python3 ./.trellis/scripts/closure.py audit --task demo && touch src/app.ts",
       "pytest",
       "go test ./...",
       "cargo test",
@@ -2325,7 +2609,7 @@ describe.skipIf(!hasPython())("hermes runtime guard hook", () => {
     );
   });
 
-  it("lets runner Bash execution pass through existing record policy", () => {
+  it("allows runner Bash only through the registered runner command", () => {
     writeHermesWorkerRecords([
       taskCard("job-runner", "runner"),
       heartbeat("job-runner"),
@@ -2337,7 +2621,7 @@ describe.skipIf(!hasPython())("hermes runtime guard hook", () => {
       agent_role: "runner",
       tool_name: "Bash",
       tool_input: {
-        command: "pnpm test",
+        command: `python3 ./.trellis/scripts/hermes/runner.py validate --task ${taskName}`,
       },
       session_id: "test-session",
     });
@@ -2353,6 +2637,16 @@ describe.skipIf(!hasPython())("hermes runtime guard hook", () => {
     expect(payload.hookSpecificOutput?.additionalContext).toContain(
       "Hermes Runtime",
     );
+
+    const direct = runHermesRuntimeGuard(repoRoot, {
+      cwd: repoRoot,
+      hook_event_name: "PreToolUse",
+      agent_role: "runner",
+      tool_name: "Bash",
+      tool_input: { command: "pnpm test" },
+      session_id: "test-session",
+    });
+    expect(parseDecision(direct).permissionDecision).toBe("deny");
   });
 
   it("denies PreToolUse write tools when an active task has no Hermes worker records", () => {

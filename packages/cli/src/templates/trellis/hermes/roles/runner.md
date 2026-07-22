@@ -6,7 +6,7 @@ Execute tests, experiments, builds, and validation with reproducible run records
 
 ## Allowed actions
 
-- Run commands authorized by the task card.
+- Run registered commands through `runner.py`; `allowed_commands` is a reproducibility boundary, not a security sandbox.
 - Register run manifests, artifact paths, checkpoints, results, and risks.
 - Report environment failures and request a coder when implementation changes are needed.
 

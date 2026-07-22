@@ -1840,6 +1840,8 @@ def build_capsule(task_dir: Path, data: dict[str, Any], root: Path | None = None
 
 
 def write_handoff(task_dir: Path, data: dict[str, Any], root: Path | None = None) -> Path:
+    revision = data.get("hermes_revision", 0)
+    revision_text = str(revision) if isinstance(revision, int) and not isinstance(revision, bool) else "unknown"
     packages = [item for item in data.get("work_packages") or [] if isinstance(item, dict)]
     completed = [str(item.get("id")) for item in packages if item.get("status") == "done"]
     evidence = _dedupe([
@@ -1852,6 +1854,9 @@ def write_handoff(task_dir: Path, data: dict[str, Any], root: Path | None = None
     content = "\n".join(
         [
             "# Task Handoff",
+            "",
+            "## Task Revision",
+            revision_text,
             "",
             "## Current Goal",
             str(data.get("intent") or data.get("title") or "-"),

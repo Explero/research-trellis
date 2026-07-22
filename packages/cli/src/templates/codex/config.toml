@@ -1,3 +1,4 @@
+# TRELLIS:CODEX_CONFIG:START
 # Project-scoped Codex defaults for Trellis workflows.
 # Codex merges this layer after the user-level config when the project
 # is marked as a trusted project. To trust this project, add it under
@@ -8,9 +9,12 @@
 #
 # Without trust, the [features] block below is loaded but disabled.
 
-# Default coordinator model for this research workflow.
+# Default coordinator model for this research workflow. Codex 0.144.0 or
+# newer is required to recognize these model and reasoning-effort values.
+# TRELLIS:CODEX_MODEL_DEFAULTS:START
 model = "gpt-5.6-sol"
 model_reasoning_effort = "high"
+# TRELLIS:CODEX_MODEL_DEFAULTS:END
 
 # Keep AGENTS.md as the primary project instruction file.
 project_doc_fallback_filenames = ["AGENTS.md"]
@@ -41,3 +45,4 @@ min_wait_timeout_ms = 120000
 # Envelope files. It works directly in the current project workspace.
 [hermes.context_firewall]
 native_authority = "protocol"
+# TRELLIS:CODEX_CONFIG:END

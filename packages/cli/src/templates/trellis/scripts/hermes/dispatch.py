@@ -42,6 +42,7 @@ def build_parser() -> argparse.ArgumentParser:
     create.add_argument("--role", required=True)
     create.add_argument("--profile")
     create.add_argument("--work-package")
+    create.add_argument("--parent-job-id")
     create.add_argument("--objective", required=True)
     create.add_argument("--ref", action="append", default=[])
     create.add_argument("--allowed-file", action="append", default=[])
@@ -133,6 +134,7 @@ def main(argv: list[str] | None = None) -> int:
                 "role": args.role,
                 "profile": args.profile,
                 "work_package": args.work_package,
+                "parent_job_id": args.parent_job_id,
                 "objective": args.objective,
                 "refs": args.ref,
                 "allowed_files": args.allowed_file,

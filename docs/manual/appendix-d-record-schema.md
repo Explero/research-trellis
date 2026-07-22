@@ -16,7 +16,7 @@
 
 | 类型 | 必填字段摘要 |
 | --- | --- |
-| `task_card`（任务卡） | `type,id,timestamp,job_id,role,worktree_id,status,allowed_files,forbidden_files,heartbeat_interval,timeout_at,checkpoint,resume_from,record_uri,evidence_refs,risk_flags`；`profile`（模式）可省略，写入时会补默认值 |
+| `task_card`（任务卡） | `type,id,timestamp,job_id,role,worktree_id,status,allowed_files,forbidden_files,heartbeat_interval,timeout_at,checkpoint,resume_from,record_uri,evidence_refs,risk_flags`；`profile`（模式）可省略，正式质量、证据、主张和统计复核还要有 `parent_job_id`（父工作编号） |
 | `heartbeat`（心跳） | `type,id,timestamp,job_id,status,checkpoint,summary,next_check_at` |
 | `checkpoint`（检查点） | `type,id,timestamp,job_id,checkpoint,resume_from,evidence_refs,open_items` |
 | `result`（结果） | `type,id,timestamp,job_id,status,summary,changed_files,evidence_refs,risk_flags,handoff` |
@@ -32,8 +32,8 @@
 
 | 文件 | 关键字段 |
 | --- | --- |
-| `<job>.dispatch.json`（派发文件） | `schema_version,job_id,task_id,hermes_revision,role,profile,work_package,objective,refs,allowed_files,forbidden_files,status,body,audit` |
-| `<job>.result.json`（净化结果） | `schema_version,job_id,status,conclusion,uncertainties,changed_files,evidence_refs,artifact_refs,run_refs,risk_flags,next_action,audit` |
+| `<job>.dispatch.json`（派发文件） | `schema,schema_version,job_id,task_id,task_revision,hermes_revision,role,profile,work_package,parent_job_id,objective,refs,allowed_files,forbidden_files,status,body,audit` |
+| `<job>.result.json`（净化结果） | `schema,schema_version,job_id,task_revision,role,profile,parent_job_id,status,conclusion,uncertainties,changed_files,evidence_refs,artifact_refs,run_refs,risk_flags,next_action,audit` |
 
 派发最多 3 个引用，正文最多 2000 字符；结果结论最多 1200 字符。`runner`（运行代理）结果的 `evidence_refs`（证据引用）必须为空，`reviewer:evidence/claim`（证据或主张复核）只能写 proposed judgment（提议判断）。raw trace（原始跟踪）位于 `.trellis/.runtime/hermes-traces/`（本地运行目录），不属于任务记录或发布包。
 
@@ -60,7 +60,7 @@ python3 ./.trellis/scripts/hermes/validate.py --task "$TASK" --kind claim
 ## 验证记录
 
 - 日期：2026-07-15。
-- 版本：`0.7.1`（测试版）。
+- 版本：`0.7.1-beta.0`（测试版）。
 - 更名前基准提交：`9f7dc8497b4782878d6fa7ac3b63eba5bde507df`。
 - 命令：`rg -n -m 1 "REQUIRED_FIELDS|PLAN_CHANGE_DECISION_STATES" packages/cli/src/templates/trellis/scripts/hermes/runtime.py`（记录结构核对）。
 - 结果：必填字段表和计划变更决定值与运行时定义一致；`recordbus.md`（记录总线说明）已标为全局协议路径。

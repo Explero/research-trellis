@@ -88,8 +88,13 @@ def heartbeat_record(
     }
 
 
-def checkpoint_record(args: argparse.Namespace) -> dict[str, Any]:
-    return {
+def checkpoint_record(
+    args: argparse.Namespace,
+    parent_job_id: Any = None,
+    *,
+    has_parent_field: bool = False,
+) -> dict[str, Any]:
+    record: dict[str, Any] = {
         "type": "checkpoint",
         "id": make_record_id("cp", args.job_id),
         "timestamp": now_utc(),
@@ -99,10 +104,20 @@ def checkpoint_record(args: argparse.Namespace) -> dict[str, Any]:
         "evidence_refs": [],
         "open_items": [],
     }
+    if has_parent_field:
+        record["parent_job_id"] = parent_job_id
+    return record
 
 
-def result_record(args: argparse.Namespace, manifest_id: str, outputs: list[str]) -> dict[str, Any]:
-    return {
+def result_record(
+    args: argparse.Namespace,
+    manifest_id: str,
+    outputs: list[str],
+    parent_job_id: Any = None,
+    *,
+    has_parent_field: bool = False,
+) -> dict[str, Any]:
+    record: dict[str, Any] = {
         "type": "result",
         "id": make_record_id("rs", args.job_id),
         "timestamp": now_utc(),
@@ -114,6 +129,9 @@ def result_record(args: argparse.Namespace, manifest_id: str, outputs: list[str]
         "risk_flags": [],
         "handoff": f"run manifest {manifest_id}",
     }
+    if has_parent_field:
+        record["parent_job_id"] = parent_job_id
+    return record
 
 
 def rejection_record(
@@ -315,6 +333,9 @@ def run_command(args: argparse.Namespace) -> int:
             file=sys.stderr,
         )
         return 1
+    # Snapshot declared input hashes before process launch. The command may
+    # legitimately transform an input later, but the manifest must preserve
+    # the exact pre-run material it received.
     input_entries = [path_entry(root, cwd, value, "input") for value in inputs]
     hermes_dir = worker_path.parent
     runs_dir = hermes_dir / "runs"
@@ -324,7 +345,16 @@ def run_command(args: argparse.Namespace) -> int:
     stdout_path = run_dir / "stdout.log"
     stderr_path = run_dir / "stderr.log"
     started_at = now_utc()
-    append_record(worker_path, checkpoint_record(args))
+    has_parent_field = "parent_job_id" in task_card
+    parent_job_id = task_card.get("parent_job_id")
+    append_record(
+        worker_path,
+        checkpoint_record(
+            args,
+            parent_job_id,
+            has_parent_field=has_parent_field,
+        ),
+    )
     append_record(worker_path, heartbeat_record(args.job_id, args.checkpoint, args.summary, interval_seconds))
     last_heartbeat = time.monotonic()
     launch_error: OSError | None = None
@@ -380,7 +410,16 @@ def run_command(args: argparse.Namespace) -> int:
     append_record(manifest_path, manifest_record)
 
     if exit_code == 0:
-        append_record(worker_path, result_record(args, run_id, [entry["path"] for entry in output_entries]))
+        append_record(
+            worker_path,
+            result_record(
+                args,
+                run_id,
+                [entry["path"] for entry in output_entries],
+                parent_job_id,
+                has_parent_field=has_parent_field,
+            ),
+        )
     else:
         append_record(
             worker_path,
