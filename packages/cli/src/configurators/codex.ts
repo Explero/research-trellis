@@ -1,3 +1,4 @@
+import fs from "node:fs";
 import path from "node:path";
 import { AI_TOOLS } from "../types/ai-tools.js";
 import {
@@ -8,6 +9,8 @@ import {
   getHooksConfig,
 } from "../templates/codex/index.js";
 import { ensureDir, writeFile } from "../utils/file-writer.js";
+import { mergeTrellisCodexConfig } from "../utils/codex-config.js";
+import { warnCodexVersion } from "../utils/codex-version.js";
 import {
   resolvePlaceholders,
   resolveAllAsSkillsNeutral,
@@ -26,10 +29,10 @@ import {
  * - .codex/agents/, hooks/, hooks.json, config.toml — platform-specific
  */
 export async function configureCodex(cwd: string): Promise<void> {
+  warnCodexVersion();
   // Shared skills from common source → .agents/skills/
-  // Uses the neutral placeholder resolver so the 5 shared workflow skills
-  // (brainstorm, before-dev, check, break-loop, update-spec) render to the
-  // same bytes regardless of which platform writes them — required because
+  // Uses the neutral placeholder resolver so shared workflow skills render to
+  // the same bytes regardless of which platform writes them — required because
   // Gemini CLI 0.40+ also targets `.agents/skills/` (last-writer-wins is
   // safe when both writers produce identical output).
   const sharedSkillsRoot = path.join(cwd, ".agents", "skills");
@@ -133,8 +136,19 @@ export async function configureCodex(cwd: string): Promise<void> {
 
   // Config → .codex/config.toml
   const config = getConfigTemplate();
-  await writeFile(
-    path.join(codexRoot, config.targetPath),
-    replacePythonCommandLiterals(config.content),
-  );
+  const configPath = path.join(codexRoot, config.targetPath);
+  const templateContent = replacePythonCommandLiterals(config.content);
+  let configContent = templateContent;
+  if (fs.existsSync(configPath)) {
+    try {
+      const existing = fs.readFileSync(configPath, "utf-8");
+      configContent = mergeTrellisCodexConfig(
+        existing,
+        templateContent,
+      ).content;
+    } catch {
+      // Keep writeFile's existing-file handling for an unreadable config.
+    }
+  }
+  await writeFile(configPath, configContent);
 }

@@ -3,7 +3,6 @@ from __future__ import annotations
 import json
 import hashlib
 import re
-import shlex
 import sys
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
@@ -55,6 +54,7 @@ RUN_MANIFEST_REQUIRED_FIELDS = [
 ]
 CODER_REVIEW_HANDOFFS = {"review", "claim_ready"}
 TERMINAL_WORKER_RECORD_TYPES = {"result", "rejection", "stalled"}
+INDEPENDENT_REVIEWER_PROFILES = {"closure", "safety"}
 APPROVAL_CHANGE_ID_FIELDS = {
     "change_id",
     "change_ids",
@@ -97,10 +97,12 @@ EXPERIMENT_REQUIRED_FIELDS = [
     "allowed_commands",
     "artifact_dir",
 ]
+DATA_PREFLIGHT_CHANGE_FIELDS = {"dataset", "split", "preprocessing"}
+DATA_PREFLIGHT_CHECKS = ("schema", "missing", "duplicates", "split_leakage")
+DATA_PREFLIGHT_STATES = {"checked", "not_applicable"}
 SECRET_ENV_NAME_PATTERN = re.compile(
     r"\b[A-Z0-9_]*(?:SECRET|TOKEN|PASSWORD|PASSWD|PRIVATE_KEY|API_KEY|ACCESS_KEY)[A-Z0-9_]*\b"
 )
-CONTAINER_IMAGE_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:/@-]{0,255}$")
 
 REQUIRED_FIELDS = {
     "task_card": [
@@ -452,32 +454,6 @@ def validate_required_fields(record: dict[str, Any], line_number: int) -> list[s
 
 def is_nonempty_string(value: Any) -> bool:
     return isinstance(value, str) and bool(value.strip())
-
-
-def container_image_error(image: Any) -> str | None:
-    if not isinstance(image, str) or not image.strip():
-        return "sandbox mode container requires sandbox.image"
-    normalized = image.strip()
-    if normalized.startswith("-"):
-        return "sandbox.image must be a container image reference, not a docker flag"
-    if any(char.isspace() for char in normalized):
-        return "sandbox.image must not contain whitespace"
-    if CONTAINER_IMAGE_PATTERN.fullmatch(normalized) is None:
-        return "sandbox.image contains unsupported characters"
-    return None
-
-
-def parse_container_runtime_command(command: Any) -> tuple[list[str], str | None]:
-    text = command if isinstance(command, str) and command.strip() else "docker"
-    try:
-        runtime_command = shlex.split(text)
-    except ValueError as exc:
-        return [], f"sandbox.command is invalid: {exc}"
-    if len(runtime_command) != 1:
-        return [], "sandbox.command for container mode must be docker without extra arguments"
-    if Path(runtime_command[0]).name != "docker":
-        return [], "sandbox mode container requires docker as sandbox.command"
-    return runtime_command, None
 
 
 def validate_optional_string_list(
@@ -1196,6 +1172,8 @@ def validate_worker_records(records: list[JsonlRecord]) -> list[str]:
         if len(entries) > 1:
             lines = ", ".join(str(entry.line_number) for entry in entries)
             errors.append(f"duplicate task_card for job_id {job_id}: lines {lines}")
+            continue
+        errors.extend(_parent_job_card_errors(entries[0], task_cards))
 
     active_writers: dict[str, list[JsonlRecord]] = {}
     for job_id, entries in task_cards.items():
@@ -1226,6 +1204,8 @@ def validate_worker_records(records: list[JsonlRecord]) -> list[str]:
         if record_type == "result" and isinstance(job_id, str):
             entries = task_cards.get(job_id, [])
             card = entries[0].value if len(entries) == 1 else None
+            if card is not None:
+                errors.extend(_parent_job_result_errors(entry, card))
             if card and not is_change_set_allowed(card, value.get("changed_files", [])):
                 errors.append(
                     f"line {entry.line_number}: result changed files violate task_card permissions"
@@ -1238,7 +1218,12 @@ def validate_worker_records(records: list[JsonlRecord]) -> list[str]:
                 errors.append(
                     f"line {entry.line_number}: missing checkpoint for job_id {job_id}"
                 )
-            if card and card.get("role") == "coder" and is_coder_review_handoff(value):
+            if (
+                card
+                and card.get("role") == "coder"
+                and card.get("profile") != "configuration"
+                and is_coder_review_handoff(value)
+            ):
                 if not has_related_record(
                     records,
                     task_cards,
@@ -1279,6 +1264,131 @@ def is_coder_review_handoff(record: dict[str, Any]) -> bool:
     )
 
 
+def _parent_job_value(value: dict[str, Any]) -> tuple[bool, str | None]:
+    """Return whether a record uses the new parent field and its valid value."""
+    if "parent_job_id" not in value:
+        return False, None
+    parent = value.get("parent_job_id")
+    if parent is None:
+        return True, None
+    if isinstance(parent, str) and parent.strip():
+        return True, parent.strip()
+    return True, ""
+
+
+def _parent_job_card_errors(
+    entry: JsonlRecord,
+    task_cards: dict[str, list[JsonlRecord]],
+) -> list[str]:
+    card = entry.value
+    job_id = card.get("job_id")
+    if not isinstance(job_id, str) or not job_id:
+        return []
+    explicit, parent_job_id = _parent_job_value(card)
+    role = card.get("role")
+    profile = card.get("profile")
+    if not explicit:
+        return []
+    if parent_job_id == "":
+        return [f"line {entry.line_number}: parent_job_id must be a non-empty string or null"]
+    if (
+        role == "reviewer"
+        and profile not in INDEPENDENT_REVIEWER_PROFILES
+        and parent_job_id is None
+    ):
+        return [
+            f"line {entry.line_number}: reviewer task_card requires parent_job_id unless profile is closure or safety"
+        ]
+    if role == "runner" and profile in {"test", "build"} and parent_job_id is None:
+        return [
+            f"line {entry.line_number}: runner {profile} task_card requires parent_job_id"
+        ]
+    if role == "runner" and profile == "validation" and parent_job_id is None:
+        has_coder = any(
+            len(entries) == 1
+            and entries[0].value.get("role") == "coder"
+            and entries[0].value.get("work_package") == card.get("work_package")
+            for entries in task_cards.values()
+        )
+        if has_coder:
+            return [
+                f"line {entry.line_number}: runner validation task_card requires parent_job_id when checking coder work"
+            ]
+    if parent_job_id is None:
+        return []
+    if parent_job_id == job_id:
+        return [f"line {entry.line_number}: parent_job_id cannot equal job_id"]
+    parent_entries = task_cards.get(parent_job_id, [])
+    if len(parent_entries) != 1:
+        return [f"line {entry.line_number}: parent_job_id {parent_job_id} has no unique task_card"]
+    parent = parent_entries[0].value
+    if parent.get("work_package") != card.get("work_package"):
+        return [
+            f"line {entry.line_number}: parent_job_id {parent_job_id} must use the same work_package"
+        ]
+    return []
+
+
+def _parent_job_result_errors(entry: JsonlRecord, card: dict[str, Any]) -> list[str]:
+    explicit_card, card_parent = _parent_job_value(card)
+    explicit_result, result_parent = _parent_job_value(entry.value)
+    if not explicit_card or not explicit_result:
+        return []
+    if result_parent == "":
+        return [f"line {entry.line_number}: result parent_job_id must be a non-empty string or null"]
+    if result_parent != card_parent:
+        return [f"line {entry.line_number}: result parent_job_id does not match task_card"]
+    return []
+
+
+def _legacy_parent_candidates(
+    task_cards: dict[str, list[JsonlRecord]],
+    child_job_id: str,
+    work_package: Any,
+) -> set[str]:
+    candidates: set[str] = set()
+    for candidate_job_id, entries in task_cards.items():
+        if candidate_job_id == child_job_id or len(entries) != 1:
+            continue
+        candidate = entries[0].value
+        if candidate.get("role") == "reviewer":
+            continue
+        if candidate.get("work_package") == work_package:
+            candidates.add(candidate_job_id)
+    return candidates
+
+
+def _record_matches_parent(
+    record: dict[str, Any],
+    card: dict[str, Any],
+    task_cards: dict[str, list[JsonlRecord]],
+    parent_job_id: str,
+) -> bool:
+    explicit_card, card_parent = _parent_job_value(card)
+    explicit_record, record_parent = _parent_job_value(record)
+    parent_entries = task_cards.get(parent_job_id, [])
+    if len(parent_entries) != 1:
+        return False
+    same_package = parent_entries[0].value.get("work_package") == card.get("work_package")
+    if explicit_card:
+        return same_package and card_parent == parent_job_id and (
+            not explicit_record or record_parent == card_parent
+        )
+    if explicit_record:
+        return same_package and record_parent == parent_job_id
+    child_job_id = card.get("job_id")
+    if not isinstance(child_job_id, str):
+        return False
+    # Old records did not carry parent_job_id. Keep compatibility only when
+    # same-package ownership has exactly one possible parent; never infer by
+    # timestamp or result ordering.
+    return _legacy_parent_candidates(
+        task_cards,
+        child_job_id,
+        card.get("work_package"),
+    ) == {parent_job_id}
+
+
 def has_related_record(
     records: list[JsonlRecord],
     task_cards: dict[str, list[JsonlRecord]],
@@ -1303,11 +1413,7 @@ def has_related_record(
             continue
         if profiles is not None and card.get("profile") not in profiles:
             continue
-        if (
-            result_job_id == coder_job_id
-            or card.get("parent_job_id") == coder_job_id
-            or value.get("parent_job_id") == coder_job_id
-        ):
+        if _record_matches_parent(value, card, task_cards, coder_job_id):
             return True
     return False
 
@@ -1333,6 +1439,15 @@ def compatibility_warnings(path: Path, kind: str) -> list[str]:
             seen.add(warning)
             message = f"line {entry.line_number}: {warning}"
             warnings.append(message)
+        role = entry.value.get("role")
+        if role in {"runner", "reviewer"} and "parent_job_id" not in entry.value:
+            message = (
+                f"line {entry.line_number}: legacy task_card has no parent_job_id; "
+                "relationship matching is limited to one unambiguous same-work_package candidate"
+            )
+            if message not in seen:
+                seen.add(message)
+                warnings.append(message)
     return warnings
 
 
@@ -1816,32 +1931,153 @@ def validate_experiment_config(path: Path) -> list[str]:
         for command in parsed["allowed_commands"]
     ):
         return [f"{path}: allowed_commands must be a non-empty list of strings"]
-    sandbox = parsed.get("sandbox", {"mode": "none", "required": False})
-    if not isinstance(sandbox, dict):
-        return [f"{path}: sandbox must be a mapping"]
-    sandbox_mode = sandbox.get("mode", "none")
-    if sandbox_mode not in {"none", "container", "external"}:
-        return [f"{path}: sandbox.mode must be one of none, container, external"]
-    sandbox_required = parse_bool(sandbox.get("required", False))
-    if sandbox_required is None:
-        return [f"{path}: sandbox.required must be true or false"]
-    if sandbox_required and sandbox_mode == "none":
-        return [f"{path}: sandbox.required=true cannot use mode=none"]
-    if sandbox_mode == "container":
-        _, command_error = parse_container_runtime_command(sandbox.get("command"))
-        if command_error is not None:
-            return [f"{path}: {command_error}"]
-        image_error = container_image_error(sandbox.get("image"))
-        if image_error is not None:
-            return [f"{path}: {image_error}"]
-    if sandbox_mode == "external":
-        command = sandbox.get("command")
-        if command is not None and not is_nonempty_string(command):
-            return [f"{path}: sandbox.command must be a non-empty string when present"]
     if not isinstance(parsed.get("artifact_dir"), str) or not parsed["artifact_dir"].strip():
         return [f"{path}: artifact_dir must be a non-empty string"]
 
-    return []
+    _, preflight_errors = validate_data_preflight(path, parsed)
+    return preflight_errors
+
+
+def _repo_file(root: Path, value: Any, label: str) -> tuple[Path | None, str | None]:
+    if not isinstance(value, str) or not value.strip():
+        return None, f"{label} must be a non-empty repository-relative path"
+    normalized = value.strip().replace("\\", "/")
+    if normalized.startswith("/") or re.match(r"^[A-Za-z]:/", normalized) or ".." in Path(normalized).parts:
+        return None, f"{label} must stay inside the repository"
+    candidate = (root / normalized).resolve(strict=False)
+    try:
+        candidate.relative_to(root)
+    except ValueError:
+        return None, f"{label} must stay inside the repository"
+    if not candidate.is_file() or has_symlink_component(candidate):
+        return None, f"{label} does not exist as a regular repository file: {normalized}"
+    return candidate, None
+
+
+def _task_requires_data_preflight(path: Path) -> tuple[bool, list[str]]:
+    task_path = path.parent.parent / "task.json"
+    if not task_path.is_file():
+        return False, [
+            f"{path}: task.json is missing; formal experiment validation requires task state"
+        ]
+    if has_symlink_component(task_path):
+        return False, [
+            f"{path}: task.json cannot be read through a symlink for formal experiment validation"
+        ]
+    try:
+        content = task_path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError) as exc:
+        return False, [f"{path}: task.json cannot be read: {exc}"]
+    try:
+        task = json.loads(content)
+    except json.JSONDecodeError as exc:
+        return False, [f"{path}: task.json contains invalid JSON: {exc.msg}"]
+    if not isinstance(task, dict):
+        return False, [f"{path}: task.json must be a mapping"]
+    # Legacy non-closure tasks keep their existing experiment behavior. Only
+    # closure tasks with an explicit data-changing exploration route require
+    # data_preflight.
+    if not any(key in task for key in ("closure_state", "hermes_phase", "work_packages")):
+        return False, []
+    if task.get("research_route") != "exploration":
+        return False, []
+    fields = task.get("research_change_fields")
+    normalized_fields = {
+        item.strip().casefold()
+        for item in fields
+        if isinstance(item, str) and item.strip()
+    } if isinstance(fields, list) else set()
+    return bool(DATA_PREFLIGHT_CHANGE_FIELDS.intersection(normalized_fields)), []
+
+
+def _load_preflight_checks(path: Path) -> tuple[dict[str, Any], str | None]:
+    try:
+        content = path.read_text(encoding="utf-8")
+        parsed = json.loads(content) if path.suffix.casefold() == ".json" else parse_simple_yaml(content)
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError, ValueError) as exc:
+        return {}, f"data_preflight.checks_ref cannot be parsed: {exc}"
+    if not isinstance(parsed, dict):
+        return {}, "data_preflight.checks_ref must contain a mapping"
+    checks = parsed.get("checks", parsed)
+    if not isinstance(checks, dict):
+        return {}, "data_preflight.checks_ref checks must be a mapping"
+    return checks, None
+
+
+def validate_data_preflight(
+    path: Path,
+    experiment: dict[str, Any],
+) -> tuple[list[Path], list[str]]:
+    required, task_errors = _task_requires_data_preflight(path)
+    if task_errors:
+        return [], task_errors
+    preflight = experiment.get("data_preflight")
+    if preflight is None:
+        if required:
+            return [], [f"{path}: data_preflight is required for exploration changes to dataset, split, or preprocessing"]
+        return [], []
+    if not isinstance(preflight, dict):
+        return [], [f"{path}: data_preflight must be a mapping"]
+
+    errors: list[str] = []
+    for field in ("source", "version"):
+        if not isinstance(preflight.get(field), str) or not str(preflight[field]).strip():
+            errors.append(f"{path}: data_preflight.{field} must be a non-empty string")
+
+    input_manifest = preflight.get("input_manifest")
+    data_path = preflight.get("data_path")
+    selected = [
+        (name, value)
+        for name, value in (("input_manifest", input_manifest), ("data_path", data_path))
+        if isinstance(value, str) and value.strip()
+    ]
+    if len(selected) != 1:
+        errors.append(f"{path}: data_preflight requires exactly one of input_manifest or data_path")
+
+    root = repo_root(path)
+    tracked_paths: list[Path] = []
+    data_file: Path | None = None
+    if len(selected) == 1:
+        field, value = selected[0]
+        data_file, error = _repo_file(root, value, f"data_preflight.{field}")
+        if error:
+            errors.append(f"{path}: {error}")
+        elif data_file is not None:
+            tracked_paths.append(data_file)
+
+    expected_hash = preflight.get("hash")
+    if not isinstance(expected_hash, str) or not is_valid_sha256(expected_hash):
+        errors.append(f"{path}: data_preflight.hash must be sha256:<64 lowercase hex>")
+    elif data_file is not None:
+        actual_hash = sha256_file(data_file)
+        if actual_hash != expected_hash:
+            errors.append(
+                f"{path}: data_preflight hash mismatch for {data_file.relative_to(root).as_posix()}"
+            )
+
+    checks_path, checks_error = _repo_file(
+        root,
+        preflight.get("checks_ref"),
+        "data_preflight.checks_ref",
+    )
+    if checks_error:
+        errors.append(f"{path}: {checks_error}")
+    elif checks_path is not None:
+        tracked_paths.append(checks_path)
+        checks, parse_error = _load_preflight_checks(checks_path)
+        if parse_error:
+            errors.append(f"{path}: {parse_error}")
+        else:
+            for check in DATA_PREFLIGHT_CHECKS:
+                raw = checks.get(check)
+                if isinstance(raw, dict):
+                    raw = raw.get("status")
+                state = str(raw).strip().casefold() if raw is not None else ""
+                if state not in DATA_PREFLIGHT_STATES:
+                    errors.append(
+                        f"{path}: data_preflight check {check} must be checked or not_applicable"
+                    )
+    return tracked_paths, errors
 
 
 def parse_bool(value: Any) -> bool | None:
@@ -1897,9 +2133,6 @@ def write_experiment_skeleton(path: Path, task: str) -> bool:
             '  shell: "bash"',
             "allowed_commands:",
             '  - "python3"',
-            "sandbox:",
-            '  mode: "none"',
-            "  required: false",
             f'artifact_dir: ".trellis/tasks/{task}/hermes/runs"',
             "",
         ]

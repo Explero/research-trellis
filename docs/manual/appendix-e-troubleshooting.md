@@ -36,7 +36,7 @@
 | 派发提示 `stale_dispatch`（过期派发） | 当前 `hermes_revision`（Hermes 修订号）已变化，重新创建派发 |
 | 返回提示 `invalid_json`（非法 JSON）或 `long_log`（长日志） | 只返回结果信封 JSON；日志、差异和搜索过程保留在文件或本地原始跟踪中 |
 | 两次返回无效后 job 被阻塞 | 修正返回契约并创建替代派发；不要把整个科研任务改成完成 |
-| `standard`（标准）或 `publication`（发表）提示防火墙不可用 | 启用并批准 Claude/Codex 钩子，或使用 `Codex strict`（Codex 严格模式）；发表模式不能降级到原生建议模式 |
+| 子代理派发没有收到最小上下文 | 检查 Claude/Codex 钩子是否启用，或显式读取当前派发文件；关闭仍以任务记录、证据和审计为准 |
 | `close`（关闭）提示结果未确认 | 先处理所有派发结果和工作包，再显式运行 `audit`（审计）与 `close`（关闭） |
 | 质量门禁缺少统计字段 | 见[指标与比较](11-metrics-and-comparison.md)中的当前限制 |
 | 审批门禁失败 | 等待真实 `human/root`（人工根权限）批准记录 |
@@ -65,7 +65,7 @@ python3 ./.trellis/scripts/hermes/dispatch.py status --task "$TASK"
 ## 验证记录
 
 - 日期：2026-07-15。
-- 版本：`0.7.1`（测试版）。
+- 版本：`0.7.1-beta.0`（测试版）。
 - 更名前基准提交：`9f7dc8497b4782878d6fa7ac3b63eba5bde507df`。
 - 命令：`rg -n -m 1 "quality gate|missing evidence|approval" packages/cli/src/templates/trellis/scripts/hermes packages/cli/test/templates/hermes-runtime.test.ts`（失败关闭分支核对）。
 - 结果：质量门禁、缺失证据和审批失败分支都有实现或测试依据。

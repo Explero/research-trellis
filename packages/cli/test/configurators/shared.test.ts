@@ -516,6 +516,24 @@ describe("resolvePlaceholdersNeutral", () => {
 // ---------------------------------------------------------------------------
 
 describe("resolveSkillsNeutral / resolveAllAsSkillsNeutral", () => {
+  it("routes shared skills through research roles without forcing an engineering pipeline", () => {
+    const skills = new Map(
+      resolveSkillsNeutral(AI_TOOLS.codex.templateContext).map((skill) => [
+        skill.name,
+        skill.content,
+      ]),
+    );
+
+    expect(skills.get("trellis-brainstorm")).toContain("It is not part of every task");
+    expect(skills.get("trellis-grill-me")).toContain("Task size alone is not a trigger");
+    expect(skills.get("trellis-before-dev")).toContain("validated `coder` dispatch");
+    expect(skills.get("trellis-tdd")).toContain("passing tests do not validate a hypothesis");
+    expect(skills.get("trellis-check")).toContain("Pure experiment and literature packages skip this skill");
+    expect(skills.get("trellis-break-loop")).toContain("negative scientific result");
+    expect(skills.get("trellis-improve-codebase-architecture")).toContain("explicit software-architecture skill");
+    expect(skills.get("trellis-update-spec")).toContain("Evaluate this once near closure");
+  });
+
   it("resolveSkillsNeutral includes Hermes audit, provenance, service queue, and quality-gate checks in trellis-check", () => {
     const skills = resolveSkillsNeutral(AI_TOOLS.codex.templateContext);
     const check = skills.find((skill) => skill.name === "trellis-check");
@@ -562,6 +580,20 @@ describe("resolveSkillsNeutral / resolveAllAsSkillsNeutral", () => {
         content.indexOf(`${py} ./.trellis/scripts/task.py archive <task-name>`),
       );
     }
+  });
+
+  it("resolveCommands exposes compact status and handoff entry points", () => {
+    const commands = resolveCommands(claudeCtx);
+    const status = commands.find((command) => command.name === "status")?.content ?? "";
+    const handoff = commands.find((command) => command.name === "handoff")?.content ?? "";
+    const py = getPythonCommandForPlatform();
+
+    expect(status).toContain(`${py} ./.trellis/scripts/closure.py status --task <task>`);
+    expect(status).toContain(`${py} ./.trellis/scripts/closure.py next --task <task>`);
+    expect(status).toContain("This command is read-only");
+    expect(handoff).toContain("coder:configuration");
+    expect(handoff).toContain("must not run the write command");
+    expect(handoff).toContain("does not complete, close, archive, approve, or amend");
   });
 
   it("resolveCommands injects the trellis-switch guard", () => {
@@ -644,15 +676,15 @@ describe("resolveSkillsNeutral / resolveAllAsSkillsNeutral", () => {
     }
   });
 
-  it("resolveAllAsSkillsNeutral keeps the 5 shared skills byte-identical to resolveSkillsNeutral", () => {
+  it("resolveAllAsSkillsNeutral keeps shared skills byte-identical to resolveSkillsNeutral", () => {
     const all = resolveAllAsSkillsNeutral(AI_TOOLS.codex.templateContext);
-    const fiveOnly = resolveSkillsNeutral(AI_TOOLS.codex.templateContext);
-    const sharedNames = new Set(fiveOnly.map((s) => s.name));
+    const sharedOnly = resolveSkillsNeutral(AI_TOOLS.codex.templateContext);
+    const sharedNames = new Set(sharedOnly.map((s) => s.name));
     const allShared = all.filter((s) => sharedNames.has(s.name));
-    expect(allShared.length).toBe(fiveOnly.length);
-    for (const five of fiveOnly) {
-      const match = allShared.find((s) => s.name === five.name);
-      expect(match?.content).toBe(five.content);
+    expect(allShared.length).toBe(sharedOnly.length);
+    for (const shared of sharedOnly) {
+      const match = allShared.find((s) => s.name === shared.name);
+      expect(match?.content).toBe(shared.content);
     }
   });
 });

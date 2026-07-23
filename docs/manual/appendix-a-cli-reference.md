@@ -6,7 +6,7 @@
 
 ## 适用范围
 
-适用于 `0.7.1`（测试版）。
+适用于 `0.7.1-beta.0`（测试版）。
 
 ## 前置条件
 
@@ -38,6 +38,18 @@ python3 ./.trellis/scripts/task.py start "$TASK"
 python3 ./.trellis/scripts/task.py finish
 python3 ./.trellis/scripts/task.py archive "$TASK" --no-commit
 ```
+
+平台命令入口：
+
+| 入口 | 用途 | 任务状态影响 |
+| --- | --- | --- |
+| `continue`（继续） | 恢复活动任务 | 无直接写入 |
+| `status`（状态） | 显示阶段、工作包、阻塞和下一动作 | 只读 |
+| `handoff`（交接） | 生成或下发子代理编写 `HANDOFF.md`（交接摘要） | 只更新交接文件 |
+| `finish-work`（收尾） | 审计、关闭并归档满足条件的任务 | 可能归档 |
+| `start`（启动） | 兼容无自动启动钩子的环境 | 无直接写入 |
+
+平台决定命令前缀。`Claude Code`（Claude 代码工具）等原生命令平台使用斜杠命令；`Codex`（代码代理平台）使用同名技能入口。`status`（状态）不会运行修复、关闭或归档；`handoff`（交接）不会完成或关闭任务。
 
 Closure 命令：
 
@@ -82,13 +94,13 @@ Agent Context Firewall（代理上下文防火墙）统一命令：
 python3 ./.trellis/scripts/hermes/dispatch.py create --task "$TASK" --role <role> --profile <profile> --objective <text>
 python3 ./.trellis/scripts/hermes/dispatch.py validate --task "$TASK" --job-id <job>
 python3 ./.trellis/scripts/hermes/dispatch.py show --task "$TASK" --job-id <job> --prompt
-python3 ./.trellis/scripts/hermes/dispatch.py run --task "$TASK" --job-id <job> --platform codex --mode strict
+python3 ./.trellis/scripts/hermes/dispatch.py run --task "$TASK" --job-id <job> --platform codex
 python3 ./.trellis/scripts/hermes/dispatch.py apply --task "$TASK" --job-id <job> --result result.json
 python3 ./.trellis/scripts/hermes/dispatch.py list --task "$TASK"
 python3 ./.trellis/scripts/hermes/dispatch.py status --task "$TASK" --job-id <job>
 ```
 
-`create`（创建）会同时生成派发文件和任务卡；`validate`（校验）检查修订号与边界；`show`（显示）默认不读取 raw trace（原始跟踪）；`run`（运行）的 `Codex native`（Codex 原生）为建议性，`strict`（严格）才执行结构化包装；`apply`（应用）保存原始结果后只写入净化结果并更新 `next_action`（下一动作）。
+`create`（创建）会同时生成派发文件和任务卡；`validate`（校验）检查修订号与边界；`show`（显示）默认不读取 raw trace（原始跟踪）；`run`（运行）在当前项目工作区使用紧凑派发协议；`apply`（应用）保存原始结果后只写入净化结果并更新 `next_action`（下一动作）。
 
 高风险入口包括 `research-trellis init --force`（强制初始化）、`research-trellis update --force`（强制更新）、`research-trellis uninstall --yes`（确认卸载）、`research-trellis channel rm`（删除频道）、高风险 `closure.py amend`（计划变更）和 `task.py archive`（归档任务，默认可能提交）。
 
@@ -103,7 +115,7 @@ python3 ./.trellis/scripts/hermes/dispatch.py status --task "$TASK" --job-id <jo
 ## 验证记录
 
 - 日期：2026-07-15。
-- 版本：`0.7.1`（测试版）。
+- 版本：`0.7.1-beta.0`（测试版）。
 - 更名前基准提交：`9f7dc8497b4782878d6fa7ac3b63eba5bde507df`。
 - 命令：`rg -n -m 1 "\.command\(|task.py|hermes/" packages/cli/src/cli packages/cli/src/templates/trellis/scripts`（常用入口核对）。
 - 结果：本页列出的主命令、任务脚本和科研脚本入口均可定位。

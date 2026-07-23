@@ -1,9 +1,7 @@
-import { readFileSync, readdirSync, statSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import path from "node:path";
 import { AI_TOOLS } from "../types/ai-tools.js";
-import {
-  getAllCommands as getClaudeCommands,
-} from "../templates/claude/index.js";
+import { getAllCommands as getClaudeCommands } from "../templates/claude/index.js";
 import { getClaudeTemplatePath } from "../templates/extract.js";
 import { ensureDir, writeFile } from "../utils/file-writer.js";
 import {
@@ -15,6 +13,11 @@ import {
   writeSharedHooks,
   replacePythonCommandLiterals,
 } from "./shared.js";
+
+export const CLAUDE_THIN_ENTRY = `# Claude Code
+
+Use \`AGENTS.md\` as the project instructions. Read \`.trellis/project/PROJECT_INDEX.md\`, then the current Task Capsule or \`HANDOFF.md\` only when needed. Do not duplicate those rules here.
+`;
 
 const EXCLUDE_PATTERNS = [
   ".d.ts",
@@ -103,4 +106,11 @@ export async function configureClaude(cwd: string): Promise<void> {
     resolveSkills(ctx),
     resolveBundledSkills(ctx),
   );
+
+  // Root CLAUDE.md is a Claude-only discovery pointer. Never claim or replace
+  // a project-owned file, including during force initialization.
+  const rootEntry = path.join(cwd, "CLAUDE.md");
+  if (!existsSync(rootEntry)) {
+    await writeFile(rootEntry, CLAUDE_THIN_ENTRY);
+  }
 }

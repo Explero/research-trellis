@@ -1,10 +1,16 @@
 # Trellis Brainstorm
 
-## Non-Negotiable Interview Contract
+## Focused Research Framing Contract
 
-Interview me relentlessly about every aspect of this plan until we reach a shared understanding. Walk down each branch of the design tree, resolving dependencies between decisions one-by-one. For each question, provide your recommended answer.
+The main agent triggers this skill only when the research question, scope, or
+observable completion criteria remain unclear after repository-first analysis.
+It is not part of every task. Clear delivery and frozen-protocol execution tasks
+go directly to a bounded closure plan.
 
-Ask the questions one at a time.
+Resolve only uncertainties that block planning. Ask one high-value question at
+a time and include a recommended answer. A researcher may collect missing
+sources; a planner may propose framing, but the main agent retains routing and
+the user retains research decisions.
 
 ## Non-Negotiable Evidence Rule
 
@@ -12,7 +18,9 @@ If a question can be answered by exploring the codebase, explore the codebase in
 
 This is mandatory. Before asking the user a question, first check whether the answer is already available in code, tests, configs, docs, existing specs, or task history.
 
-Do not ask the user to confirm facts that the repository can answer. Ask only for product intent, preference, scope, risk tolerance, or decisions that remain ambiguous after inspection.
+Do not ask the user to confirm facts that the repository can answer. Ask only
+for research intent, scope, evidence expectations, preferences, risk tolerance,
+or decisions that remain ambiguous after inspection.
 
 ---
 

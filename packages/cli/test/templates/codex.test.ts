@@ -69,17 +69,35 @@ describe("codex getAllAgents", () => {
     }
   });
 
-  it("marks native Hermes agents advisory and points enforced work to strict dispatch", () => {
+  it("keeps Hermes agents on the compact dispatch protocol", () => {
     const agents = new Map(getAllAgents().map((agent) => [agent.name, agent.content]));
     for (const role of ["planner", "researcher", "coder", "runner", "reviewer"]) {
       const content = agents.get(`hermes-${role}`);
-      expect(content).toContain("Native Codex dispatch is advisory");
       expect(content).toContain(`role: ${role}:<profile>`);
       expect(content).toMatch(/Profile|profile/);
       expect(content).toContain("multi_agent = false");
-      expect(content).toContain("--mode strict");
       expect(content).toContain("Result Envelope JSON");
+      expect(content).not.toContain("sandbox_mode");
+      expect(content).not.toContain("--mode strict");
       expect(content).not.toContain(".trellis/tasks/<task>/prd.md");
+    }
+  });
+
+  it("assigns research reasoning and execution models consistently", () => {
+    const agents = new Map(getAllAgents().map((agent) => [agent.name, agent.content]));
+    for (const name of [
+      "hermes-planner",
+      "hermes-researcher",
+      "hermes-reviewer",
+      "trellis-check",
+      "trellis-research",
+    ]) {
+      expect(agents.get(name)).toContain('model = "gpt-5.6-sol"');
+      expect(agents.get(name)).toContain('model_reasoning_effort = "high"');
+    }
+    for (const name of ["hermes-coder", "hermes-runner", "trellis-implement"]) {
+      expect(agents.get(name)).toContain('model = "gpt-5.6-terra"');
+      expect(agents.get(name)).toContain('model_reasoning_effort = "max"');
     }
   });
 });
@@ -97,8 +115,14 @@ describe("codex getConfigTemplate", () => {
     expect(config.targetPath).toBe("config.toml");
     expect(config.content).toContain("project_doc_fallback_filenames");
     expect(config.content).toContain("AGENTS.md");
-    expect(config.content).toContain('native_authority = "advisory"');
-    expect(config.content).toContain("--output-schema --json -o");
+    expect(config.content).toContain('model = "gpt-5.6-sol"');
+    expect(config.content).toContain('model_reasoning_effort = "high"');
+    expect(config.content).toContain("# TRELLIS:CODEX_CONFIG:START");
+    expect(config.content).toContain("# TRELLIS:CODEX_CONFIG:END");
+    expect(config.content).toContain("# TRELLIS:CODEX_MODEL_DEFAULTS:START");
+    expect(config.content).toContain("# TRELLIS:CODEX_MODEL_DEFAULTS:END");
+    expect(config.content).toContain('native_authority = "protocol"');
+    expect(config.content).not.toContain("strict_authority");
   });
 });
 

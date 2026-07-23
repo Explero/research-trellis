@@ -56,7 +56,7 @@
 - `.trellis/spec/languages/`（语言书写规范）预置常用语言基线；任务只能按当前修改的语言选择引用，避免一次加载全部规则。
 - `.trellis/tasks/<task>/hermes/`（任务科研记录）保存任务事实。
 - `task.json`（任务状态）保存当前 closure 状态；`task-events.jsonl`（任务事件）只追加重要历史。
-- `HANDOFF.md`（交接）按条件生成；`closure-report.md`（关闭报告）由通过的收口审计生成。
+- `HANDOFF.md`（交接）按条件生成并记录对应任务修订号；旧格式或过期交接只用于恢复参考。`closure-report.md`（关闭报告）由通过的收口审计生成。
 - `.trellis/.runtime/`（会话运行状态）保存活动任务指针，通常不提交。
 - `.codex/`（Codex 配置）、`.claude/`（Claude 配置）等目录由平台选择决定。
 

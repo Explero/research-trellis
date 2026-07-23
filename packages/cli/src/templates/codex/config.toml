@@ -1,3 +1,4 @@
+# TRELLIS:CODEX_CONFIG:START
 # Project-scoped Codex defaults for Trellis workflows.
 # Codex merges this layer after the user-level config when the project
 # is marked as a trusted project. To trust this project, add it under
@@ -7,6 +8,13 @@
 #   trust_level = "trusted"
 #
 # Without trust, the [features] block below is loaded but disabled.
+
+# Default coordinator model for this research workflow. Codex 0.144.0 or
+# newer is required to recognize these model and reasoning-effort values.
+# TRELLIS:CODEX_MODEL_DEFAULTS:START
+model = "gpt-5.6-sol"
+model_reasoning_effort = "high"
+# TRELLIS:CODEX_MODEL_DEFAULTS:END
 
 # Keep AGENTS.md as the primary project instruction file.
 project_doc_fallback_filenames = ["AGENTS.md"]
@@ -18,7 +26,9 @@ project_doc_fallback_filenames = ["AGENTS.md"]
 # config.toml cannot set feature flags; they must be user-level.
 # Codex 0.129+ additionally gates each installed hook behind a one-time
 # `/hooks` TUI review; until the user approves it, the hook stays inactive.
+# TRELLIS:CODEX_CONFIG:END
 
+# TRELLIS:CODEX_TABLES:START
 # multi_agent_v2 forces structured subagent orchestration with the
 # `wait` tool — parent must block on terminal status before acting,
 # instead of cancelling / re-spawning. Incompatible with
@@ -33,11 +43,8 @@ enabled = true
 max_concurrent_threads_per_session = 3
 min_wait_timeout_ms = 120000
 
-# Native custom-agent dispatch cannot mechanically replace or validate the
-# agent prompt/output, so its Context Firewall authority is advisory only.
-# Use the generated dispatch CLI strict wrapper for enforced Hermes work:
-# python3 ./.trellis/scripts/hermes/dispatch.py run --task <task> --job-id <job> --platform codex --mode strict
+# Native custom-agent dispatch uses the validated Hermes dispatch and Result
+# Envelope files. It works directly in the current project workspace.
 [hermes.context_firewall]
-native_authority = "advisory"
-strict_authority = "enforced"
-strict_runtime = "codex exec --output-schema --json -o"
+native_authority = "protocol"
+# TRELLIS:CODEX_TABLES:END

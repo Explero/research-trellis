@@ -250,6 +250,45 @@ describe("Agent Context Firewall dispatch CLI", () => {
     expect(dispatch.audit.metrics.ref_count).toBe(1);
   });
 
+  it("permits a coder configuration dispatch only for the current task handoff", () => {
+    const result = run([
+      "create",
+      "--task", "demo",
+      "--job-id", "job-handoff",
+      "--role", "coder",
+      "--profile", "configuration",
+      "--objective", "Write the current task handoff.",
+      "--ref", "prd.md",
+      "--allowed-file", ".trellis/tasks/demo/HANDOFF.md",
+    ]);
+    expect(result.status, result.stderr).toBe(0);
+    const dispatch = JSON.parse(
+      fs.readFileSync(
+        path.join(taskDir, "hermes", "dispatches", "job-handoff.dispatch.json"),
+        "utf-8",
+      ),
+    ) as { handoff_writer: boolean; work_package: string | null; body: string };
+    expect(dispatch.handoff_writer).toBe(true);
+    expect(dispatch.work_package).toBeNull();
+    expect(dispatch.body).toContain("Handoff writer:");
+
+    const applied = apply("job-handoff", validResult("job-handoff", {
+      changed_files: [".trellis/tasks/demo/HANDOFF.md"],
+    }));
+    expect(applied.status, applied.stderr).toBe(0);
+    const handoff = fs.readFileSync(path.join(taskDir, "HANDOFF.md"), "utf-8");
+    expect(handoff).toContain("# Task Handoff");
+    expect(handoff).toContain("- .trellis/tasks/demo/HANDOFF.md");
+  });
+
+  it("reserves the task handoff path for the dedicated handoff dispatch", () => {
+    const result = create("job-handoff-escape", "coder", [
+      "--allowed-file", ".trellis/tasks/demo/HANDOFF.md",
+    ]);
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("handoff_path_reserved");
+  });
+
   it("adds only role-matched project context after explicit task refs", () => {
     const projectDir = path.join(root, ".trellis", "project");
     fs.mkdirSync(projectDir, { recursive: true });
@@ -260,9 +299,17 @@ describe("Agent Context Firewall dispatch CLI", () => {
     fs.writeFileSync(path.join(taskDir, "evidence.md"), "Evidence\n");
 
     expect(create("job-project-coder", "coder").status).toBe(0);
-    expect(create("job-project-runner", "runner").status).toBe(0);
     expect(
-      create("job-project-review", "reviewer", ["--profile", "evidence"])
+      create("job-project-runner", "runner", [
+        "--parent-job-id", "job-project-coder",
+      ]).status,
+    ).toBe(0);
+    expect(
+      create("job-project-review", "reviewer", [
+        "--profile", "evidence",
+        "--work-package", "WP1",
+        "--parent-job-id", "job-project-runner",
+      ])
         .status,
     ).toBe(0);
     expect(
@@ -305,7 +352,9 @@ describe("Agent Context Firewall dispatch CLI", () => {
 
   it("allows planner and reviewer task-level work without a package", () => {
     expect(create("job-planner", "planner").status).toBe(0);
-    expect(create("job-review", "reviewer").status).toBe(0);
+    expect(
+      create("job-review", "reviewer", ["--profile", "closure"]).status,
+    ).toBe(0);
     const review = JSON.parse(
       fs.readFileSync(
         path.join(taskDir, "hermes", "dispatches", "job-review.dispatch.json"),
@@ -314,6 +363,36 @@ describe("Agent Context Firewall dispatch CLI", () => {
     ) as Record<string, unknown>;
     expect(review.work_package).toBeNull();
     expect(review.blind_review).toBe(true);
+  });
+
+  it("restricts non-coder writes to role-owned task record directories", () => {
+    const sourceWrite = create("job-review-source-write", "reviewer", [
+      "--profile", "closure",
+      "--allowed-file", "src/**",
+    ]);
+    expect(sourceWrite.status).toBe(1);
+    expect(sourceWrite.stderr).toContain("role_write_scope");
+
+    const reviewRecord = create("job-review-record", "reviewer", [
+      "--profile", "closure",
+      "--allowed-file", ".trellis/tasks/demo/hermes/reviews/**",
+    ]);
+    expect(reviewRecord.status, reviewRecord.stderr).toBe(0);
+  });
+
+  it("requires a runner checking coder work to bind the coder job", () => {
+    expect(create("job-parent-coder", "coder").status).toBe(0);
+    const unbound = create("job-unbound-runner", "runner", [
+      "--profile", "validation",
+    ]);
+    expect(unbound.status).toBe(1);
+    expect(unbound.stderr).toContain("missing_parent_job");
+
+    const bound = create("job-bound-runner", "runner", [
+      "--profile", "validation",
+      "--parent-job-id", "job-parent-coder",
+    ]);
+    expect(bound.status, bound.stderr).toBe(0);
   });
 
   it("rejects missing jobs, stale revisions, and execution without the current package", () => {
@@ -422,7 +501,7 @@ describe("Agent Context Firewall dispatch CLI", () => {
     expect(dispatch.forbidden_files).toContain("generated/**");
   });
 
-  it("allows publication packet creation but refuses execution without a hard gate", () => {
+  it("allows publication packet creation with the compact protocol", () => {
     writeJson(path.join(taskDir, "task.json"), baseTask({ closure_mode: "publication" }));
     const result = run(
       [
@@ -432,7 +511,7 @@ describe("Agent Context Firewall dispatch CLI", () => {
       { TRELLIS_HOOKS: "0", TRELLIS_HOOKS_ACTIVE: "1" },
     );
     expect(result.status).toBe(0);
-    expect(result.stderr).toContain("execution and close remain blocked");
+    expect(result.stderr).toContain("validated dispatch and Result Envelope protocol");
     const execution = run(
       [
         "run", "--task", "demo", "--job-id", "job-publication",
@@ -440,8 +519,8 @@ describe("Agent Context Firewall dispatch CLI", () => {
       ],
       { TRELLIS_HOOKS: "0", TRELLIS_HOOKS_ACTIVE: "1" },
     );
-    expect(execution.status).toBe(1);
-    expect(execution.stderr).toContain("advisory_forbidden");
+    expect(execution.status).toBe(0);
+    expect(execution.stdout).toContain('"status": "advisory"');
   });
 
   it("rejects invalid JSON, missing uncertainties, long logs, and full diffs", () => {
@@ -592,8 +671,13 @@ describe("Agent Context Firewall dispatch CLI", () => {
   });
 
   it("limits evidence and claim reviewers to proposed judgments", () => {
+    expect(create("job-judgment-source", "runner").status).toBe(0);
     expect(
-      create("job-evidence-judgment", "reviewer", ["--profile", "evidence"]).status,
+      create("job-evidence-judgment", "reviewer", [
+        "--profile", "evidence",
+        "--work-package", "WP1",
+        "--parent-job-id", "job-judgment-source",
+      ]).status,
     ).toBe(0);
     const approved = apply(
       "job-evidence-judgment",
@@ -605,7 +689,11 @@ describe("Agent Context Firewall dispatch CLI", () => {
     expect(approved.stderr).toContain("review_authority_violation");
 
     expect(
-      create("job-claim-judgment", "reviewer", ["--profile", "claim"]).status,
+      create("job-claim-judgment", "reviewer", [
+        "--profile", "claim",
+        "--work-package", "WP1",
+        "--parent-job-id", "job-judgment-source",
+      ]).status,
     ).toBe(0);
     const proposed = apply(
       "job-claim-judgment",
@@ -784,7 +872,14 @@ describe("Agent Context Firewall dispatch CLI", () => {
   });
 
   it("binds blind reviewer reads to allowed refs and rejects worker context", () => {
-    expect(create("job-review-read", "reviewer", ["--profile", "quality"]).status).toBe(0);
+    expect(create("job-review-source", "coder").status).toBe(0);
+    expect(
+      create("job-review-read", "reviewer", [
+        "--profile", "quality",
+        "--work-package", "WP1",
+        "--parent-job-id", "job-review-source",
+      ]).status,
+    ).toBe(0);
     runHook("inject-subagent-context.py", {
       cwd: root,
       tool_name: "Agent",
@@ -843,216 +938,6 @@ describe("Agent Context Firewall dispatch CLI", () => {
     expect(guard.stdout).toBe("");
   });
 
-  it("runs Codex strict through output-schema/json/o and stores only sanitized output", () => {
-    expect(create("job-codex-strict").status).toBe(0);
-    const fakeCodex = path.join(root, "fake-codex.py");
-    fs.writeFileSync(
-      fakeCodex,
-      [
-        "#!/usr/bin/env python3",
-        "import json, pathlib, re, sys",
-        "args = sys.argv[1:]",
-        "if args == ['exec', '--help']:",
-        "    print('codex exec --output-schema --json -o')",
-        "    raise SystemExit(0)",
-        "output = pathlib.Path(args[args.index('-o') + 1])",
-        "prompt = args[-1]",
-        "job = re.search(r'^job_id: (.+)$', prompt, re.M).group(1)",
-        "revision = int(re.search(r'@ revision (\\d+)$', prompt, re.M).group(1))",
-        "role, profile = re.search(r'^role: ([^:]+):(.+)$', prompt, re.M).groups()",
-        "pathlib.Path('src/app.ts').write_text('strict change\\n', encoding='utf-8')",
-        "output.write_text(json.dumps({'schema': 'hermes-result/v1', 'job_id': job, 'task_revision': revision, 'role': role, 'profile': profile, 'status': 'success', 'conclusion': 'Strict result.', 'uncertainties': [], 'changed_files': ['src/app.ts'], 'evidence_refs': [], 'artifact_refs': [], 'verification': {'status': 'not_recorded', 'run_refs': []}, 'risks': [], 'next_action': 'Review package.'}), encoding='utf-8')",
-        "print(json.dumps({'type': 'trace', 'private': 'raw codex trace'}))",
-        "",
-      ].join("\n"),
-      "utf-8",
-    );
-    fs.chmodSync(fakeCodex, 0o755);
-    const result = run([
-      "run", "--task", "demo", "--job-id", "job-codex-strict",
-      "--platform", "codex", "--mode", "strict", "--codex-bin", fakeCodex,
-    ]);
-    expect(result.status, result.stderr).toBe(0);
-    expect(result.stdout).toContain("Strict result.");
-    expect(result.stdout).not.toContain("raw codex trace");
-    const dispatch = JSON.parse(
-      fs.readFileSync(
-        path.join(taskDir, "hermes", "dispatches", "job-codex-strict.dispatch.json"),
-        "utf-8",
-      ),
-    );
-    expect(dispatch.execution_mode).toBe("strict");
-    expect(dispatch.status).toBe("confirmed");
-  });
-
-  it("excludes environment and credential files from the Codex strict workspace", () => {
-    expect(create("job-codex-secret-workspace").status).toBe(0);
-    fs.writeFileSync(path.join(root, ".env"), "SECRET_VALUE=do-not-copy\n", "utf-8");
-    fs.writeFileSync(path.join(root, ".npmrc"), "//registry.example/:_authToken=do-not-copy\n", "utf-8");
-    fs.mkdirSync(path.join(root, "config"), { recursive: true });
-    fs.writeFileSync(
-      path.join(root, "config", "service-account.json"),
-      `token=${["github_pat_", "B".repeat(24)].join("")}\n`,
-      "utf-8",
-    );
-    const fakeCodex = path.join(root, "fake-codex-secret-workspace.py");
-    fs.writeFileSync(
-      fakeCodex,
-      [
-        "#!/usr/bin/env python3",
-        "import json, pathlib, re, sys",
-        "args = sys.argv[1:]",
-        "if args == ['exec', '--help']:",
-        "    print('codex exec --output-schema --json -o')",
-        "    raise SystemExit(0)",
-        "if pathlib.Path('.env').exists() or pathlib.Path('.npmrc').exists() or pathlib.Path('config/service-account.json').exists():",
-        "    raise SystemExit('sensitive file copied into strict workspace')",
-        "output = pathlib.Path(args[args.index('-o') + 1])",
-        "prompt = args[-1]",
-        "job = re.search(r'^job_id: (.+)$', prompt, re.M).group(1)",
-        "revision = int(re.search(r'@ revision (\\d+)$', prompt, re.M).group(1))",
-        "role, profile = re.search(r'^role: ([^:]+):(.+)$', prompt, re.M).groups()",
-        "output.write_text(json.dumps({'schema': 'hermes-result/v1', 'job_id': job, 'task_revision': revision, 'role': role, 'profile': profile, 'status': 'success', 'conclusion': 'Sensitive files were excluded.', 'uncertainties': [], 'changed_files': [], 'evidence_refs': [], 'artifact_refs': [], 'verification': {'status': 'not_recorded', 'run_refs': []}, 'risks': [], 'next_action': 'Review.'}), encoding='utf-8')",
-        "",
-      ].join("\n"),
-      "utf-8",
-    );
-    fs.chmodSync(fakeCodex, 0o755);
-
-    const result = run([
-      "run", "--task", "demo", "--job-id", "job-codex-secret-workspace",
-      "--platform", "codex", "--mode", "strict", "--codex-bin", fakeCodex,
-    ]);
-    expect(result.status, result.stderr).toBe(0);
-    expect(fs.existsSync(path.join(root, ".env"))).toBe(true);
-    expect(fs.existsSync(path.join(root, ".npmrc"))).toBe(true);
-    expect(fs.existsSync(path.join(root, "config", "service-account.json"))).toBe(true);
-  });
-
-  it("rejects Codex strict when actual changes escape allowed files", () => {
-    expect(create("job-codex-escape").status).toBe(0);
-    fs.writeFileSync(path.join(root, "README.md"), "original\n", "utf-8");
-    const originalReadme = fs.readFileSync(path.join(root, "README.md"), "utf-8");
-    const fakeCodex = path.join(root, "fake-codex-escape.py");
-    fs.writeFileSync(
-      fakeCodex,
-      [
-        "#!/usr/bin/env python3",
-        "import json, pathlib, re, sys",
-        "args = sys.argv[1:]",
-        "if args == ['exec', '--help']:",
-        "    print('codex exec --output-schema --json -o')",
-        "    raise SystemExit(0)",
-        "output = pathlib.Path(args[args.index('-o') + 1])",
-        "prompt = args[-1]",
-        "job = re.search(r'^job_id: (.+)$', prompt, re.M).group(1)",
-        "revision = int(re.search(r'@ revision (\\d+)$', prompt, re.M).group(1))",
-        "role, profile = re.search(r'^role: ([^:]+):(.+)$', prompt, re.M).groups()",
-        "pathlib.Path('README.md').write_text('unauthorized\\n', encoding='utf-8')",
-        "output.write_text(json.dumps({'schema': 'hermes-result/v1', 'job_id': job, 'task_revision': revision, 'role': role, 'profile': profile, 'status': 'success', 'conclusion': 'Escaped.', 'uncertainties': [], 'changed_files': ['README.md'], 'evidence_refs': [], 'artifact_refs': [], 'verification': {'status': 'not_recorded', 'run_refs': []}, 'risks': [], 'next_action': 'Review.'}), encoding='utf-8')",
-      ].join("\n"),
-      "utf-8",
-    );
-    fs.chmodSync(fakeCodex, 0o755);
-    const result = run([
-      "run", "--task", "demo", "--job-id", "job-codex-escape",
-      "--platform", "codex", "--mode", "strict", "--codex-bin", fakeCodex,
-    ]);
-    expect(result.status).toBe(1);
-    expect(result.stderr).toContain("unauthorized_actual_changes");
-    expect(fs.readFileSync(path.join(root, "README.md"), "utf-8")).toBe(originalReadme);
-  });
-
-  it("does not sync strict workspace changes when the result envelope is invalid", () => {
-    expect(create("job-codex-invalid").status).toBe(0);
-    const originalSource = fs.readFileSync(path.join(root, "src", "app.ts"), "utf-8");
-    const fakeCodex = path.join(root, "fake-codex-invalid.py");
-    fs.writeFileSync(
-      fakeCodex,
-      [
-        "#!/usr/bin/env python3",
-        "import json, pathlib, re, sys",
-        "args = sys.argv[1:]",
-        "if args == ['exec', '--help']:",
-        "    print('codex exec --output-schema --json -o')",
-        "    raise SystemExit(0)",
-        "output = pathlib.Path(args[args.index('-o') + 1])",
-        "prompt = args[-1]",
-        "job = re.search(r'^job_id: (.+)$', prompt, re.M).group(1)",
-        "revision = int(re.search(r'@ revision (\\d+)$', prompt, re.M).group(1))",
-        "role, profile = re.search(r'^role: ([^:]+):(.+)$', prompt, re.M).groups()",
-        "pathlib.Path('src/app.ts').write_text('untrusted strict change\\n', encoding='utf-8')",
-        "output.write_text(json.dumps({'schema': 'hermes-result/v1', 'job_id': job, 'task_revision': revision, 'role': role, 'profile': profile, 'status': 'success', 'conclusion': 'Missing required uncertainties.', 'changed_files': ['src/app.ts'], 'evidence_refs': [], 'artifact_refs': [], 'verification': {'status': 'not_recorded', 'run_refs': []}, 'risks': [], 'next_action': 'Review.'}), encoding='utf-8')",
-        "",
-      ].join("\n"),
-      "utf-8",
-    );
-    fs.chmodSync(fakeCodex, 0o755);
-
-    const result = run([
-      "run", "--task", "demo", "--job-id", "job-codex-invalid",
-      "--platform", "codex", "--mode", "strict", "--codex-bin", fakeCodex,
-    ]);
-
-    expect(result.status).toBe(1);
-    expect(result.stderr).toContain("missing_result_fields");
-    expect(fs.readFileSync(path.join(root, "src", "app.ts"), "utf-8")).toBe(
-      originalSource,
-    );
-    const dispatch = JSON.parse(
-      fs.readFileSync(
-        path.join(taskDir, "hermes", "dispatches", "job-codex-invalid.dispatch.json"),
-        "utf-8",
-      ),
-    ) as { status: string; invalid_result_attempts: number; last_result_error: string };
-    expect(dispatch).toMatchObject({
-      status: "rewrite_required",
-      invalid_result_attempts: 1,
-      last_result_error: "missing_result_fields",
-    });
-  });
-
-  it("degrades missing Codex strict capability by closure mode", () => {
-    expect(create("job-codex-lean").status).toBe(0);
-    const lean = run([
-      "run", "--task", "demo", "--job-id", "job-codex-lean",
-      "--platform", "codex", "--mode", "strict", "--codex-bin", "missing-codex-bin",
-    ]);
-    expect(lean.status).toBe(0);
-    expect(lean.stdout).toContain('"status": "advisory"');
-
-    writeJson(path.join(taskDir, "task.json"), baseTask({ closure_mode: "publication" }));
-    expect(create("job-codex-publication", "planner").status).toBe(0);
-    const publication = run([
-      "run", "--task", "demo", "--job-id", "job-codex-publication",
-      "--platform", "codex", "--mode", "strict", "--codex-bin", "missing-codex-bin",
-    ]);
-    expect(publication.status).toBe(1);
-    expect(publication.stderr).toContain("codex_strict_unavailable");
-  });
-
-  it("does not accept environment flags or unsigned future heartbeats as a hard gate", () => {
-    writeJson(path.join(taskDir, "task.json"), baseTask({ closure_mode: "standard" }));
-    expect(create("job-forged", "planner", ["--platform", "codex"]).status).toBe(0);
-    const heartbeatDir = path.join(root, ".trellis", ".runtime", "context-firewall");
-    fs.mkdirSync(heartbeatDir, { recursive: true });
-    writeJson(path.join(heartbeatDir, "codex-hooks-forged.json"), {
-      platform: "codex",
-      mechanism: "hooks",
-      task_id: "demo",
-      job_id: "job-forged",
-      timestamp: "2999-01-01T00:00:00Z",
-    });
-    const forged = run(
-      [
-        "run", "--task", "demo", "--job-id", "job-forged",
-        "--platform", "codex", "--mode", "native",
-      ],
-      { TRELLIS_HOOKS_ACTIVE: "1", TRELLIS_CODEX_STRICT: "1" },
-    );
-    expect(forged.status).toBe(1);
-    expect(forged.stderr).toContain("firewall_unavailable");
-  });
 
   it("supersedes a blocked dispatch and restores the package mechanically", () => {
     expect(create("job-old").status).toBe(0);

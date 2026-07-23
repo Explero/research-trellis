@@ -1,4 +1,12 @@
-Read the relevant development guidelines before starting your task.
+# Before Development
+
+Main triggers this skill only when the current work package requires code,
+tests, or configuration changes. A validated `coder` dispatch uses it; pure
+literature, experiment-only, evidence-review, and claim-review packages skip it.
+It loads the smallest relevant engineering constraints and does not decide the
+scientific hypothesis, model choice, metric, or claim.
+
+Read the relevant development guidelines before starting implementation.
 
 Execute these steps:
 

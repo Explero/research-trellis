@@ -6,9 +6,8 @@ import path from "node:path";
 import {
   checkHermesRequiredFiles,
   checkHookMatcherIncludes,
+  checkLocalRunnerConfiguration,
   checkNoPythonCaches,
-  checkSandboxConfiguration,
-  checkSecurityGateDocumentation,
 } from "../../scripts/hermes-preflight.js";
 
 const repoRoot = path.resolve(import.meta.dirname, "../../../../");
@@ -74,89 +73,16 @@ describe("hermes-preflight checks", () => {
     });
   });
 
-  it("requires deployment docs to state Bash and approval security boundaries", () => {
+  it("checks direct local runner templates", () => {
     withTempRoot((root) => {
-      writeFile(
-        root,
-        "docs/hermes_deployment_preflight.md",
-        "`Bash` is partially guarded.\n",
-      );
-
-      const result = checkSecurityGateDocumentation(root);
-
-      expect(result.ok).toBe(false);
-      expect(result.messages.join("\n")).toContain("approval_records");
-      expect(result.messages.join("\n")).toContain("human/root");
-    });
-  });
-
-  it("requires deployment docs to state hardening and storage boundaries", () => {
-    withTempRoot((root) => {
-      writeFile(
-        root,
-        "docs/hermes_deployment_preflight.md",
-        [
-          "`deployment candidate hardening` is the scope.",
-          "`Bash` writes fail closed.",
-          "`allowed_commands` is not a strong command sandbox.",
-          "`not an OS sandbox`.",
-          "`approval_records` require `external human/root approval`.",
-          "",
-        ].join("\n"),
-      );
-
-      const result = checkSecurityGateDocumentation(root);
-
-      expect(result.ok).toBe(false);
-      expect(result.messages.join("\n")).toContain("JSONL");
-      expect(result.messages.join("\n")).toContain("not tamper-proof");
-    });
-  });
-
-  it("checks sandbox configuration defaults and documentation boundaries", () => {
-    withTempRoot((root) => {
-      writeFile(
-        root,
-        "packages/cli/src/templates/trellis/hermes/config.yaml",
-        [
-          'runtime_scope: "deployment candidate hardening"',
-          "sandbox:",
-          '  mode: "none"',
-          "  required: false",
-          '  note: "not an OS sandbox"',
-          "",
-        ].join("\n"),
-      );
-      writeFile(
-        root,
-        "packages/cli/src/templates/trellis/hermes/experiments/experiment.yaml",
-        [
-          "sandbox:",
-          '  mode: "none"',
-          "  required: false",
-          "",
-        ].join("\n"),
-      );
-      writeFile(
-        root,
-        "docs/hermes_deployment_preflight.md",
-        [
-          "`sandbox.required=true` with `mode=none` must fail closed.",
-          "`mode=none` is only local execution.",
-          "`container` and `external` modes are availability checks only.",
-          "`not an OS sandbox`.",
-          "`allowed_commands` is not a strong command sandbox.",
-          "",
-        ].join("\n"),
-      );
-
-      const result = checkSandboxConfiguration(root);
-
+      writeFile(root, "packages/cli/src/templates/trellis/hermes/config.yaml", 'runtime_boundary: "runs directly in the project workspace"\n');
+      writeFile(root, "packages/cli/src/templates/trellis/hermes/experiments/experiment.yaml", "allowed_commands:\n  - \"python3\"\nartifact_dir: \".trellis/tasks/{task}/hermes/runs\"\n");
+      const result = checkLocalRunnerConfiguration(root);
       expect(result.ok).toBe(true);
     });
   });
 
-  it("quick CLI runs security gate without build/typecheck", () => {
+  it("quick CLI runs local runner checks without build/typecheck", () => {
     const result = spawnSync(
       process.execPath,
       [scriptPath, "--", "--quick", "--skip-python-compile"],
@@ -167,9 +93,8 @@ describe("hermes-preflight checks", () => {
     );
 
     expect(result.status).toBe(0);
-    expect(result.stdout).toContain("Hermes deployment preflight");
+    expect(result.stdout).toContain("Hermes local workflow preflight");
     expect(result.stdout).toContain("quick mode");
-    expect(result.stdout).toContain("Bash");
-    expect(result.stdout).toContain("approval_records");
+    expect(result.stdout).toContain("current project workspace");
   });
 });

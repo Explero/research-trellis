@@ -2,11 +2,13 @@
 
 ## 目标
 
-为每个科研任务固定问题、假设、数据、被测对象、指标、环境、允许命令和产物目录。
+为每个科研任务固定问题、假设、数据、被测对象、指标、环境、允许命令和产物目录。运行器直接在当前项目环境执行命令，不提供容器或沙箱运行模式。
 
 ## 适用范围
 
 适用于本地脚本、测试、基准、数据处理和模型评估。纯文档任务仍会生成实验骨架，但启动前也必须把占位字段改成非空内容。
+
+数据预检不是通用步骤。只有 Hermes closure（科研闭环）任务属于 exploration（探索），且 `research_change_fields`（研究变化字段）包含 `dataset`（数据集）、`split`（数据切分）或 `preprocessing`（预处理）时才启用；旧版非 closure 任务、普通任务、冻结协议执行和不涉及这三个字段的探索任务都不增加预检。
 
 ## 前置条件
 
@@ -39,21 +41,23 @@ environment:
   shell: "bash"
 allowed_commands:
   - "python3 scripts/evaluate.py"
-sandbox:
-  mode: "none"
-  required: false
 artifact_dir: ".trellis/tasks/任务名/hermes/runs"
 ```
 
-3. 尽量把 `allowed_commands`（允许命令）写成完整命令前缀，而不是只写 `python3`（Python 3 命令）。当前匹配支持可执行文件名、完整命令或命令前缀，但它不是强安全边界。
-4. 选择运行隔离方式：
+3. 对需要数据预检的任务，增加 `data_preflight`（数据预检）：
 
-| 模式 | 当前状态 |
-| --- | --- |
-| `none`（无隔离） | 已实现且为默认值；直接在本机运行 |
-| `container`（容器） | 实验性；需要 `docker`（容器命令）和有效镜像，运行器会挂载仓库 |
-| `external`（外部） | 配置可解析，但当前运行器不提供外部沙箱执行，实际运行会失败 |
+```yaml
+data_preflight:
+  source: "公开评估集"
+  version: "2026-07"
+  input_manifest: "data/eval-manifest.json"
+  hash: "sha256:实际文件的64位小写哈希"
+  checks_ref: "data/eval-checks.yaml"
+```
 
+`input_manifest`（输入清单）与 `data_path`（数据路径）二选一，`hash`（哈希值）必须与所指文件一致。`checks_ref`（检查记录）必须位于仓库内，并把 `schema`（结构）、`missing`（缺失值）、`duplicates`（重复项）和 `split_leakage`（切分泄漏）分别记为 `checked`（已检查）或 `not_applicable`（不适用）。运行时还要用 `runner.py run --input`（声明运行输入）同时传入数据文件和检查记录，二者会带哈希写入运行清单。
+
+4. 尽量把 `allowed_commands`（允许命令）写成完整命令前缀，而不是只写 `python3`（Python 3 命令）。它用于实验复现和任务边界，不是安全隔离。
 5. 校验配置：
 
 ```bash
@@ -67,18 +71,17 @@ python3 ./.trellis/scripts/hermes/experiment.py validate --task "$TASK"
 ## 失败恢复
 
 - 字段为空或类型错误：按报错修正；指标和允许命令必须是非空列表，随机种子必须是整数。
-- `sandbox.required=true`（必须隔离）却使用 `mode: none`（无隔离）：改用可用容器，或停止运行。
-- 容器命令不可用：安装并验证 `docker`（容器命令），或在明确接受风险后改回无隔离模式。
 - 命令被拒绝：不要扩大到笼统的可执行文件；把确实需要的完整命令前缀加入配置并重新审阅。
+- 数据预检失败：修正仓库内路径、实际文件哈希或四项检查状态。校验通过前运行器不会执行命令，也不会写入成功运行状态。
+- 旧配置中的 `sandbox`（沙箱）字段可以保留，但运行器会忽略它并直接在项目环境执行。
 
 ## 验证记录
 
 - 日期：2026-07-15。
 - 版本：`0.7.1-beta.0`（测试版）。
 - 更名前基准提交：`9f7dc8497b4782878d6fa7ac3b63eba5bde507df`。
-- 命令：`rg -n -m 1 "allowed_commands|sandbox" packages/cli/src/templates/trellis/scripts/hermes packages/cli/test/templates/hermes-runtime.test.ts`（实现与测试核对）。
-- 结果：命令允许列表、隔离模式和对应测试均可定位。
-- 未验证项：本轮未启动真实容器或外部隔离环境。
+- 命令：`rg -n -m 1 "allowed_commands" packages/cli/src/templates/trellis/scripts/hermes packages/cli/test/templates/hermes-runtime.test.ts`（实现与测试核对）。
+- 结果：命令允许列表和本地运行记录均可定位。
 
 ## 来源
 

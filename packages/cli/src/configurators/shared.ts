@@ -162,7 +162,7 @@ export function resolvePlaceholders(
  * Identical to {@link resolvePlaceholders} except that {@link CMD_REF} is
  * rendered in a platform-neutral form (`` `name` (Trellis command) ``)
  * instead of substituting a platform-specific prefix. This is the only
- * placeholder that varies between platforms in the 5 shared workflow skills
+ * placeholder that varies between platforms in the shared workflow skills
  * (`brainstorm`, `before-dev`, `check`, `break-loop`, `update-spec`), so
  * neutralizing it makes the rendered SKILL.md files byte-identical regardless
  * of which Trellis configurator wrote them — eliminating the
@@ -196,7 +196,7 @@ export function resolvePlaceholdersNeutral(
   result = result.replace(RE_USER_ACTION_LABEL, context.userActionLabel);
   result = result.replace(RE_CLI_FLAG, context.cliFlag);
 
-  // Conditional blocks (resolved per platform — none of the 5 shared skills
+  // Conditional blocks (resolved per platform — none of the shared skills
   // use conditionals, but Codex-only command-as-skill files might in future).
   const flagValues: Record<(typeof CONDITIONAL_FLAGS)[number], boolean> = {
     AGENT_CAPABLE: context.agentCapable,
@@ -229,6 +229,10 @@ const SKILL_DESCRIPTIONS: Record<string, string> = {
     "Resume work on the current task. Loads the workflow Phase Index, figures out which phase/step to pick up at, then pulls the step-level detail via get_context.py --mode phase. Use when coming back to an in-progress task and you need to know what to do next.",
   "finish-work":
     "Wrap up the current session: verify quality gate passed, remind user to commit, archive completed tasks, and record session progress to the developer journal. Use when done coding and ready to end the session.",
+  status:
+    "Show the active task's compact phase, work package, blockers, and next action without changing task state. Use when the user asks for progress or wants to confirm what happens next.",
+  handoff:
+    "Write a compact HANDOFF.md checkpoint for the active Hermes closure task before a pause, context compaction, session switch, or explicit handoff request. It does not close or archive the task.",
   "before-dev":
     "Discovers and injects project-specific coding guidelines from .trellis/spec/ before implementation begins. Reads spec indexes, pre-development checklists, and shared thinking guides for the target package. Use when starting a new coding task, before writing any code, switching to a different package, or needing to refresh project conventions and standards.",
   brainstorm:
@@ -237,8 +241,7 @@ const SKILL_DESCRIPTIONS: Record<string, string> = {
     "Tightens a Trellis task's requirements after repository-first clarification. Use when factual questions are exhausted and the remaining gaps are about scope, product intent, trade-offs, or edge cases that must be resolved before implementation.",
   check:
     "Comprehensive quality verification: spec compliance, lint, type-check, tests, cross-layer data flow, code reuse, and consistency checks. Use when code is written and needs quality verification, before committing changes, or to catch context drift during long sessions.",
-  tdd:
-    "Drives a test-first implementation flow by breaking work into observable behavior slices, defining public interfaces under test, and running red-green-refactor cycles. Use when the chosen development strategy is TDD or the user explicitly asks to work test-first.",
+  tdd: "Drives a test-first implementation flow by breaking work into observable behavior slices, defining public interfaces under test, and running red-green-refactor cycles. Use when the chosen development strategy is TDD or the user explicitly asks to work test-first.",
   "break-loop":
     "Deep bug analysis to break the fix-forget-repeat cycle. Analyzes root cause category, why fixes failed, prevention mechanisms, and captures knowledge into specs. Use after fixing a bug to prevent the same class of bugs.",
   "improve-codebase-architecture":
@@ -273,6 +276,8 @@ export function wrapWithSkillFrontmatter(
 const COMMAND_DESCRIPTIONS: Record<string, string> = {
   start: "Initialize a Trellis development session.",
   continue: "Resume work on the current task at the correct phase.",
+  status: "Show the active task status without changing it.",
+  handoff: "Write a compact handoff for the active closure task.",
   "finish-work":
     "Wrap up the current session: quality gate, commit reminder, archive, journal.",
 };
@@ -292,7 +297,8 @@ export function wrapWithCommandFrontmatter(
   return `---\nname: ${name}\ndescription: ${description}\n---\n\n${content}`;
 }
 
-const TRELLIS_SWITCH_GUARD_PATH = "./.trellis/scripts/assert_trellis_enabled.py";
+const TRELLIS_SWITCH_GUARD_PATH =
+  "./.trellis/scripts/assert_trellis_enabled.py";
 const FRONTMATTER_RE = /^(---\r?\n[\s\S]*?\r?\n---)((?:\r?\n)*)/;
 const TOP_LEVEL_HEADING_RE = /^(# [^\r\n]+)((?:\r?\n)+)/;
 
@@ -427,7 +433,7 @@ export function resolveCommands(ctx: TemplateContext): ResolvedTemplate[] {
 }
 
 /**
- * Resolve only the 5 skill templates with trellis- prefix + SKILL.md frontmatter.
+ * Resolve shared workflow skill templates with trellis- prefix + SKILL.md frontmatter.
  * Used by "both" platforms for the auto-triggered skills.
  */
 export function resolveSkills(ctx: TemplateContext): ResolvedTemplate[] {
@@ -465,7 +471,7 @@ export function resolveSkillsNeutral(ctx: TemplateContext): ResolvedTemplate[] {
 
 /**
  * Same as {@link resolveAllAsSkills} but uses
- * {@link resolvePlaceholdersNeutral} for the 5 shared skills. The 2 command
+ * {@link resolvePlaceholdersNeutral} for the shared skills. The command
  * templates (continue, finish-work) folded into the skill set still resolve
  * `{{CLI_FLAG}}` / `{{PYTHON_CMD}}` per platform — only Codex writes those
  * files into `.agents/skills/`, so byte-identity isn't required there.
@@ -539,7 +545,10 @@ export function resolveBundledSkills(
       relativePath: `${skill.name}/${file.relativePath}`,
       content:
         file.relativePath === "SKILL.md"
-          ? injectTrellisSwitchGuard(resolvePlaceholders(file.content, ctx), "skill")
+          ? injectTrellisSwitchGuard(
+              resolvePlaceholders(file.content, ctx),
+              "skill",
+            )
           : resolvePlaceholders(file.content, ctx),
     })),
   );

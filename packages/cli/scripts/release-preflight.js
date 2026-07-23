@@ -77,7 +77,11 @@ const HERMES_PYTHON_TEMPLATE_FILES = [
   "packages/cli/src/templates/trellis/scripts/hermes/runner.py",
   "packages/cli/src/templates/trellis/scripts/hermes/runtime.py",
   "packages/cli/src/templates/trellis/scripts/hermes/validate.py",
+  "packages/cli/src/templates/trellis/scripts/common/closure.py",
+  "packages/cli/src/templates/trellis/scripts/common/dispatch.py",
+  "packages/cli/src/templates/trellis/scripts/common/firewall.py",
   "packages/cli/src/templates/shared-hooks/hermes-runtime-guard.py",
+  "packages/cli/src/templates/shared-hooks/inject-workflow-state.py",
 ];
 const PACKED_CLI_REQUIRED_FILES = [
   "package/README.md",
@@ -89,7 +93,13 @@ const PACKED_CLI_REQUIRED_FILES = [
   "package/dist/templates/trellis/scripts/hermes/experiment.py",
   "package/dist/templates/trellis/scripts/hermes/runner.py",
   "package/dist/templates/trellis/scripts/hermes/report.py",
+  "package/dist/templates/trellis/scripts/common/closure.py",
+  "package/dist/templates/trellis/scripts/common/dispatch.py",
+  "package/dist/templates/trellis/hermes/schemas/result-envelope.schema.json",
   "package/dist/templates/shared-hooks/hermes-runtime-guard.py",
+  "package/dist/templates/shared-hooks/inject-workflow-state.py",
+  "package/dist/templates/common/commands/status.md",
+  "package/dist/templates/common/commands/handoff.md",
 ];
 
 const RED = "\x1b[31m";

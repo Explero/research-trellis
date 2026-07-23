@@ -89,13 +89,15 @@ python3 ./.trellis/scripts/task.py create-pr [name] [--dry-run]
 
 work package 与 subtask 的边界：work package 属于同一 task 内部，适合顺序推进和共享上下文；subtask 用于可独立交付、独立审查或并行工作的任务。`task.json` 是当前状态唯一事实源，`hermes/task-events.jsonl` 只保存重要状态历史。
 
+科研协作以证据和事实为先，不以迎合用户结论为目标。主代理应明确重要假设、不确定性和有证据的异议，科研取舍由用户批准。普通可逆任务直接执行；有限不确定性先声明假设再执行；只有改变研究问题、协议或主张边界的高风险研究变化才暂停讨论。证据冲突或关键假设失效时进入 `blocked`（阻塞），通过人工批准的 `amend`（修改）更新协议后再继续。提示词不能代替任务和实验中的结构化记录，也不能因此让每个任务都经过 grill。
+
 ```bash
 # 规划与验证
 python3 ./.trellis/scripts/closure.py plan --task <task> \
   --intent "可观察目标" --done-when "完成条件"
 # 研究协议分流：探索任务需记录变化字段和已完成 grill
 python3 ./.trellis/scripts/closure.py route --task <task> --route exploration --research-change hypothesis
-python3 ./.trellis/scripts/closure.py grill --task <task> --complete
+python3 ./.trellis/scripts/closure.py grill --task <task> --complete --decision-ref design.md
 python3 ./.trellis/scripts/closure.py validate --task <task>
 
 # 每次只处理当前 package
@@ -108,10 +110,10 @@ python3 ./.trellis/scripts/closure.py audit --task <task>
 python3 ./.trellis/scripts/closure.py repair --task <task>
 python3 ./.trellis/scripts/closure.py close --task <task>
 
-# 正式角色派发：Claude 只传 job_id；Codex strict 由 CLI 执行
+# 正式角色派发：Claude 只传 job_id；Codex 使用同一紧凑派发协议
 python3 ./.trellis/scripts/hermes/dispatch.py create --task <task> --role <role> --profile <profile> --objective "任务"
 python3 ./.trellis/scripts/hermes/dispatch.py validate --task <task> --job-id <job>
-python3 ./.trellis/scripts/hermes/dispatch.py run --task <task> --job-id <job> --platform codex --mode strict
+python3 ./.trellis/scripts/hermes/dispatch.py run --task <task> --job-id <job> --platform codex
 ```
 
 每轮 hook 优先注入约 500–1000 字符的 Task Capsule，只包含 intent、范围、当前 package、done_when、next action、blockers 和最多 3 个相关引用。完整 PRD、报告、事件、ledger、历史任务和非当前 spec 均保留，但只在需要时读取。Claude Code、Codex 与 OpenCode 使用相同 capsule 语义；没有每轮 hook 的平台需要显式运行 `closure.py capsule`。
@@ -122,7 +124,9 @@ python3 ./.trellis/scripts/hermes/dispatch.py run --task <task> --job-id <job> -
 
 科研任务按研究协议是否改变分流，不按任务大小。`delivery`（确定性交付）不改变研究协议，等价重构和性能优化留在这里；`execution`（已冻结协议的实验执行）只运行种子或预先批准的参数搜索；`exploration`（探索性研究）记录 hypothesis、model_architecture、dataset、split、preprocessing、objective/loss、metric_definition、baseline、claim_scope 中实际变化的字段，并在 validate 前记录已完成的 grill。新假设或模型功能架构变化属于高风险探索，必须创建独立探索任务（可挂同一父项目），不能伪装成普通 work package。
 
-Hermes 正式角色只保留 planner、researcher、coder、runner、reviewer；Profile 只表示角色内的当前工作模式。Agent Context Firewall 只正式支持 Claude Code 和 Codex：派发文件绑定 `hermes_revision`、当前 package 和最多 3 个引用；Claude Agent 只接收 `job_id`，Codex native 仅为 advisory，strict 才机械执行和净化结果。原版 `trellis-implement` / `trellis-check` / `trellis-research` 继续使用原有兼容路径。
+新完成的高风险 grill 必须用 `decision_ref`（决策记录引用）指向仓库内或任务内的 `prd.md`（需求文档）、`design.md`（设计文档）等记录。该记录至少包含 `Decision`（决定）、`Rationale`（理由）、`Evidence`（证据）、`Alternatives`（备选方案）和 `Failure Conditions`（失效条件）；事件和 Task Capsule 只保存引用，不注入正文。旧任务只有 `grill_completed=true`（已完成讨论）而没有引用时继续兼容并提示警告。涉及 dataset、split 或 preprocessing 的 exploration 还必须在任务级 `experiment.yaml`（实验配置）填写 `data_preflight`（数据预检）；其他 exploration、delivery 和 execution 不增加该步骤。
+
+Hermes 正式角色只保留 planner、researcher、coder、runner、reviewer；Profile 只表示角色内的当前工作模式。Agent Context Firewall 只正式支持 Claude Code 和 Codex：派发文件绑定 `hermes_revision`、当前 package 和最多 3 个引用；Claude Agent 只接收 `job_id`，Codex 使用同一派发和结果文件。原版 `trellis-implement` / `trellis-check` / `trellis-research` 继续使用原有兼容路径。
 
 阶段推进：planning 先 plan/validate；ready 显示下一动作；running 只执行当前 package；review 先 package 检查或全局 audit；audit 有缺口时只允许有界 repair，不重新规划已完成 package；close 通过后才允许 finish/archive。run finished、package done、task closed、claim approved 是四种不同状态，不能互相替代。
 
@@ -213,12 +217,21 @@ Phase 3: Finish  → 验证、更新 spec、提交代码、最后收尾
 <!-- Per-turn breadcrumb: shown when there is no active task (before Phase 1) -->
 
 [workflow-state:no_task]
-No active task. First classify the current turn and ask for task-creation consent before creating any Trellis task.
+No active task. First analyze every actionable request: intent, scope, observable completion, research-protocol impact, risk, and the smallest useful 1-4 package split. Then ask for task-creation consent before creating any Trellis task.
 Simple conversation / small task: ask only whether this turn should create a Trellis task. If the user says no, skip Trellis for this session.
 Complex task: ask the user if you can create a Trellis task and enter the planning phase. If the user says no, explain, clarify scope, or suggest a smaller split.
+Do not load a planning skill by default. Use brainstorm only for unresolved requirements and grill-me only for a material unresolved research or scope decision.
 
 当用户用自然语言提出 Claude Code 工作流改动时，先引导他们进入 `task.py create`；不要要求固定命令短语。
 [/workflow-state:no_task]
+
+### 用户入口优先级
+
+先根据活动任务、当前工作包、任务胶囊和用户的自然语言请求自动选择规划、执行、审核、交接或收尾流程；不要等待用户输入固定命令。`continue`（继续）、`status`（状态）、`handoff`（交接）、`finish-work`（收尾）和 `start`（启动）只是明确入口或兼容入口，不能绕过任何状态门禁。
+
+建议用户主动理解和调用的技能只有 `grill-me`（聚焦讨论）和 `update-spec`（更新规范）。前者用于未解决的研究设计、架构或范围决策，后者用于把经过验证的项目知识写入规范；即使用户不显式调用，主代理也必须在相应条件出现时自动触发这些过程。为保持旧项目兼容和自动路由，其他规划、规范读取、验证、测试驱动、根因分析和架构审查技能仍会随平台安装，但不要求用户记忆其名称。
+
+技能不按固定数量加载，也不构成一条每次都要执行的流水线。新任务由主代理完成轻量分析和 1–4 个结果型工作包；已有任务的普通补充继续当前工作包，只有范围或研究协议变化才 amend 并重新 validate。主代理负责触发和整合，具体执行按权限下发：`before-dev` 给 coder，测试/实验给 runner，质量/证据/统计/closure 给 reviewer，根因或方法分析给 planner，资料检索给 researcher，规范与 handoff 写入给 `coder:configuration`。
 
 ### Phase 1: Plan
 - 1.0 Create task `[required · once]`（只有获得 task-creation consent 后才能执行）
@@ -238,7 +251,8 @@ Multi-deliverable scope: consider a parent task plus independently verifiable ch
 Sub-agent mode: curate `implement.jsonl` and `check.jsonl` as spec/research manifests before start.
 
 Planning order: `task.py create` → evidence-based main-agent analysis → optional `trellis-brainstorm` / `trellis-grill-me` only for an unresolved material decision → development strategy decision.
-For a Lean Research Closure task, intent, definition of done, route, and a validated work-package plan are sufficient to enter ready. An exploration route records a focused completed grill for its changed research decision.
+Use three intervention levels: execute ordinary reversible work directly; state material assumptions and proceed under limited uncertainty; pause only for a high-risk research change, then record the approved decision. Evidence conflict or a failed critical assumption means blocked plus an approved amendment.
+For a Lean Research Closure task, intent, definition of done, route, and a validated work-package plan are sufficient to enter ready. A new completed high-risk exploration grill also records a repository- or task-relative decision_ref; prompts never replace this record, and ordinary tasks do not acquire a grill gate.
 When a grill is running, do not enter development strategy decisions, do not create or complete `design.md` / `implement.md`, and do not run `task.py start` until that decision is resolved.
 Do not enter development strategy decisions until `prd.md` has been tightened through repository-first clarification and one-question-at-a-time follow-up.
 Before `task.py start`, record the development strategy decisions in the task documents. Complex tasks should store them in `implement.md`: development mode (current session / subagent), branch vs worktree, default flow vs TDD, plus a single `A.` / `B.` / `C.` style strategy block that records the task-level selection for `trellis-spec-review`, `trellis-code-review`, `trellis-code-architecture-review`, `trellis-improve-codebase-architecture`, and `trellis-merge-review`. New tasks must stamp that block with `Review-gate contract: explicit-selection-v1`. Use `Optional review gates status: pending` only while the choice is still open; before `task.py start`, replace it with `Optional review gates status: configured` plus explicit `Enabled optional review gates:` and `Disabled optional review gates:` lists. If the user does not select any optional gate, still record all five in the disabled list and keep `trellis-check` fixed outside the optional set. Only tasks that entirely lack `Review-gate contract: explicit-selection-v1` count as legacy tasks and preserve the old behavior; if the marker exists but the configured enabled/disabled lists are missing, planning is incomplete and the task must not start. `trellis-improve-codebase-architecture` deep-review requires `trellis-code-architecture-review`; do not record or accept deep-review without that prerequisite gate. If the strategy is `subagent + worktree`, pin the shared path to `./.trellis/trellis-worktrees/<task-dir-name>` and require every code-development subagent to use it. If the strategy is TDD, record `trellis-tdd` as the reference flow. Record whether to run pre-development architecture guidance in that same strategy block. If guidance is enabled, record `架构审查：enabled` in `implement.md`, dispatch `trellis-improve-codebase-architecture` with `架构审查模式: guidance` before `task.py start`, and append its output to `design.md`, but do NOT implicitly enable `trellis-improve-codebase-architecture` deep-review; that gate still requires explicit selection in the same task-level review-gate set.
@@ -252,7 +266,7 @@ Before `task.py start`, record the development strategy decisions in the task do
 
 [workflow-state:planning-inline]
 Hermes closure: use the injected Task Capsule first. Run `closure.py plan` and `closure.py validate`; do not treat commands or file operations as packages.
-Load `trellis-brainstorm`; stay in planning.
+Analyze every new task, but load `trellis-brainstorm` only for unresolved requirements and `trellis-grill-me` only for a material unresolved research decision.
 Lightweight: `prd.md` can be enough. Complex: finish `prd.md`, `design.md`, and `implement.md`; ask for review before `task.py start`.
 Multi-deliverable scope: consider a parent task plus independently verifiable child tasks; dependencies must be written in child artifacts, not implied by tree position.
 Inline mode: skip jsonl curation; Phase 2 reads artifacts/specs via `trellis-before-dev`.
@@ -274,14 +288,15 @@ Inline mode: skip jsonl curation; Phase 2 reads artifacts/specs via `trellis-bef
 Sub-agent dispatch protocol applies to all platforms and all sub-agents, including class-2 Codex/Copilot/Gemini/Qoder and `trellis-research`: every dispatch prompt starts with `Active task: <task path from task.py current>` before role-specific instructions.
 
 [workflow-state:in_progress]
-Hermes closure: follow the Task Capsule route and its one-line rule before starting a package; exploration without a completed grill cannot validate, while delivery/execution do not require one. Create a validated revision-bound dispatch before every formal role. Claude Agent receives only `job_id`; Codex native is advisory and publication requires strict mode. Accept only the sanitized Result Envelope with `uncertainties`; never inject raw logs, diffs, or search history. Each dispatch is single-purpose: after a result is recorded, immediately close that subagent and create a fresh dispatch for later work. Move running -> review with `package-check`, record validation with `package-done`, then run `audit` and `close`.
-Flow: `trellis-implement` -> `trellis-check` -> `trellis-update-spec` -> archive or commit as needed -> merge if needed -> optional `trellis-merge-review` -> build/test -> `/trellis:finish-work`.
+Hermes closure: follow the Task Capsule route and its one-line rule before starting a package; exploration without a completed grill cannot validate, while delivery/execution do not require one. Create a validated revision-bound dispatch before every formal role. Claude Agent receives only `job_id`; Codex uses the same compact dispatch and result files in the current project workspace. Test/build/code-validation runners and quality/evidence/claim/statistics reviewers bind `parent_job_id` to the exact job under review; independent experiments, closure, and independent safety review may remain task-level. Only coder edits implementation files; planner, researcher, and reviewer may write only their task-scoped record directories, and runner executes through `runner.py`. Accept only the sanitized Result Envelope with `uncertainties`; never inject raw logs, diffs, or search history. Each dispatch is single-purpose: after a result is recorded, immediately close that subagent and create a fresh dispatch for later work. Move running -> review with `package-check`, record validation with `package-done`, then run `audit` and `close`.
+Research-first routing: code packages trigger coder `before-dev`, then runner verification and independent reviewer quality checks; formal experiment packages trigger runner records and reviewer evidence/statistics checks without forcing code skills; `update-spec` is evaluated once near closure and writes only reviewed durable knowledge. Repeated technical failures may trigger `break-loop`; negative research results do not. Handoff is conditional on pause, phase/agent change, compaction, blocking, or closure. A handoff records its task revision; stale or legacy handoffs are recovery hints only, and `task.py finish` never writes one implicitly. At closure, reviewer checks closure and runner performs final validation/archive actions.
+Compatibility finish path for code work: archive or commit as needed -> `/trellis:finish-work`; research-only tasks do not force a code commit.
 Claude Code optional review gates: if the task artifacts carry `Review-gate contract: explicit-selection-v1`, preserve the configured selection. Keep any enabled `trellis-spec-review`, `trellis-code-review`, and `trellis-code-architecture-review` in that order, run `trellis-improve-codebase-architecture` and `trellis-merge-review` only when the task strategy explicitly enables them, and keep `trellis-check` fixed outside this optional set. New tasks that use this contract must record `Optional review gates status: configured` plus explicit enabled/disabled lists; if the user picks none, record all five optional gates as disabled. Only tasks that entirely lack the contract marker count as legacy tasks and preserve the old behavior.
-Main-session default: dispatch implement/check sub-agents. Sub-agent self-exemption: if already running as `trellis-implement`, do NOT spawn another `trellis-implement` or `trellis-check`; if already running as `trellis-check`, do NOT spawn another `trellis-check` or `trellis-implement`. Dispatch is main session only.
+Main-session default: dispatch the canonical role required by the current package. Only code packages use implement/check sub-agents; experiments use runner plus evidence/statistics review, and literature or planning packages use researcher/planner plus an appropriate independent review. Sub-agent self-exemption: an active sub-agent never dispatches another worker. Dispatch is main session only.
 Dispatch prompt starts with `Active task: <task path from task.py current>`. Read context: jsonl entries -> `prd.md` -> `design.md if present` -> `implement.md if present`.
 
 Claude review gates are read-only gates. They report PASS / FAIL, blocking issues, and suggested next actions; they do not modify code directly.
-If a Claude review gate fails, the main agent repairs the code, then re-runs the same gate before advancing.
+If a Claude code review gate fails, the main agent dispatches a bounded coder repair, then re-runs the same gate before advancing.
 For any enabled `trellis-spec-review`, `trellis-code-review`, `trellis-code-architecture-review`, and `trellis-merge-review`, count repeated failures per gate and per task. If the same gate blocks the same task more than 3 times in a row, the main agent must briefly report that status to the user, re-check whether the requirements have drifted, and ask whether to skip the current review gate.
 If the chosen strategy is `subagent + worktree`, all code-development subagents must use the same `./.trellis/trellis-worktrees/<task-dir-name>` path.
 If the chosen strategy is TDD, align implementation and review expectations to `trellis-tdd`.

@@ -86,6 +86,7 @@ export interface TrellisTaskRecord {
   research_route?: ResearchRoute;
   research_change_fields?: string[];
   grill_completed?: boolean;
+  decision_ref?: string | null;
   constraints?: ClosureConstraints;
   work_packages?: ClosureWorkPackage[];
   current_work_package?: string | null;
@@ -137,6 +138,7 @@ export const TASK_RECORD_FIELD_ORDER = [
   "research_route",
   "research_change_fields",
   "grill_completed",
+  "decision_ref",
   "constraints",
   "work_packages",
   "current_work_package",
@@ -181,6 +183,7 @@ const NULLABLE_STRING_FIELDS: ReadonlySet<TaskRecordField> = new Set([
   "parent",
   "current_work_package",
   "next_action",
+  "decision_ref",
 ]);
 
 const STRING_ARRAY_FIELDS: ReadonlySet<TaskRecordField> = new Set([
@@ -208,6 +211,7 @@ const OPTIONAL_CLOSURE_FIELDS: ReadonlySet<TaskRecordField> = new Set([
   "research_route",
   "research_change_fields",
   "grill_completed",
+  "decision_ref",
   "constraints",
   "work_packages",
   "current_work_package",
@@ -438,6 +442,7 @@ export function emptyTaskRecord(
     research_route: "delivery",
     research_change_fields: [],
     grill_completed: false,
+    decision_ref: null,
     constraints: {
       excluded_platforms: [],
       excluded_paths: [],

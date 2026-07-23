@@ -1,4 +1,5 @@
 import { execFileSync, spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -31,6 +32,7 @@ interface TestTask {
   research_route?: string;
   research_change_fields?: string[];
   grill_completed?: boolean;
+  decision_ref?: string | null;
 }
 
 function hasPython(): boolean {
@@ -159,11 +161,63 @@ function writeTask(taskDir: string, value: Record<string, unknown>): void {
   );
 }
 
+function stableValue(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(stableValue);
+  if (value && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>)
+        .sort(([left], [right]) => left.localeCompare(right))
+        .map(([key, item]) => [key, stableValue(item)]),
+    );
+  }
+  return value;
+}
+
+function resultSha256(value: Record<string, unknown>): string {
+  const payload = Object.fromEntries(
+    Object.entries(value).filter(([key]) => key !== "audit"),
+  );
+  return `sha256:${createHash("sha256")
+    .update(JSON.stringify(stableValue(payload)), "utf8")
+    .digest("hex")}`;
+}
+
 function plan(root: string, doneWhen: string[], extra: string[] = []) {
   const args = ["plan", "--intent", "Produce a verified result"];
   for (const item of doneWhen) args.push("--done-when", item);
   args.push(...extra);
   return run(root, ...args);
+}
+
+function writeDecisionRecord(
+  taskDir: string,
+  filename = "design.md",
+  marker = "DECISION_BODY_MUST_NOT_BE_IN_CAPSULE",
+): string {
+  fs.writeFileSync(
+    path.join(taskDir, filename),
+    [
+      "# Research Decision",
+      "",
+      "## Decision",
+      marker,
+      "",
+      "## Rationale",
+      "The choice follows the current research objective.",
+      "",
+      "## Evidence",
+      "Repository evidence supports this bounded choice.",
+      "",
+      "## Alternatives",
+      "Keep the previous protocol.",
+      "",
+      "## Failure Conditions",
+      "Conflicting evidence or a failed critical assumption.",
+      "",
+    ].join("\n"),
+    "utf-8",
+  );
+  return filename;
 }
 
 function planTwoExplicitPackages(root: string) {
@@ -239,12 +293,56 @@ describe.skipIf(!hasPython())("Lean Research Closure CLI", () => {
     expect(blocked.status).toBe(1);
     expect(blocked.stderr).toContain("completed grill");
 
-    expect(run(root, "grill", "--complete").status).toBe(0);
+    const missingDecision = run(root, "grill", "--complete");
+    expect(missingDecision.status).not.toBe(0);
+    expect(missingDecision.stderr).toContain("--decision-ref");
+
+    const decisionRef = writeDecisionRecord(taskDir);
+    expect(
+      run(root, "grill", "--complete", "--decision-ref", decisionRef).status,
+    ).toBe(0);
     expect(run(root, "validate").status).toBe(0);
     const capsule = run(root, "capsule");
     expect(capsule.stdout).toContain("Route: exploration");
     expect(capsule.stdout).toContain("Research changes: model_architecture");
     expect(capsule.stdout).toContain("Grill: complete");
+    expect(capsule.stdout).toContain("Decision ref: design.md");
+    expect(capsule.stdout).not.toContain("DECISION_BODY_MUST_NOT_BE_IN_CAPSULE");
+    const events = fs
+      .readFileSync(path.join(taskDir, "hermes", "task-events.jsonl"), "utf-8")
+      .trim()
+      .split("\n")
+      .map((line) => JSON.parse(line) as Record<string, unknown>);
+    expect(events.find((event) => event.event_type === "grill_completed")).toMatchObject({
+      decision_ref: "design.md",
+    });
+  });
+
+  it("keeps legacy completed grills without decision_ref compatible with a warning", () => {
+    writeTask(taskDir, baseTask({
+      intent: "Preserve a legacy exploration task",
+      definition_of_done: ["Legacy result is verified"],
+      research_route: "exploration",
+      research_change_fields: ["dataset"],
+      grill_completed: true,
+      work_packages: [
+        {
+          id: "WP1",
+          title: "Legacy result",
+          outcome: "Legacy result is verified",
+          done_when: ["Legacy result is verified"],
+          evidence_required: [],
+          depends_on: [],
+          status: "pending",
+          evidence_refs: [],
+          blocker: null,
+        },
+      ],
+    }));
+
+    const result = run(root, "validate");
+    expect(result.status).toBe(0);
+    expect(result.stderr).toContain("legacy completed grill has no decision_ref");
   });
 
   it("automatically routes recorded research changes to exploration", () => {
@@ -609,7 +707,7 @@ describe.skipIf(!hasPython())("Lean Research Closure CLI", () => {
     expect(fs.existsSync(taskDir)).toBe(true);
   });
 
-  it("writes a handoff when an open task session is finished", () => {
+  it("finishes a session without mutating an open task or writing a handoff", () => {
     expect(plan(root, ["Result A"]).status).toBe(0);
     const sessions = path.join(root, ".trellis", ".runtime", "sessions");
     fs.mkdirSync(sessions, { recursive: true });
@@ -619,8 +717,74 @@ describe.skipIf(!hasPython())("Lean Research Closure CLI", () => {
     );
     const result = runTask(root, "finish");
     expect(result.status).toBe(0);
-    expect(result.stdout).toContain("Handoff updated");
-    expect(fs.existsSync(path.join(taskDir, "HANDOFF.md"))).toBe(true);
+    expect(result.stdout).not.toContain("Handoff updated");
+    expect(fs.existsSync(path.join(taskDir, "HANDOFF.md"))).toBe(false);
+    expect(readTask(taskDir).closure_state).toBe("open");
+  });
+
+  it("writes handoffs from validated task results only", () => {
+    expect(plan(root, ["Result A"]).status).toBe(0);
+    fs.mkdirSync(path.join(taskDir, "hermes", "dispatches"), { recursive: true });
+    fs.mkdirSync(path.join(root, "src"), { recursive: true });
+    fs.writeFileSync(path.join(root, "src", "owned.ts"), "export {};\n");
+    fs.writeFileSync(path.join(root, "src", "forged.ts"), "export {};\n");
+    fs.writeFileSync(path.join(root, "unrelated.txt"), "other task change\n");
+    const task = readTask(taskDir);
+    writeTask(taskDir, { ...task, confirmed_dispatches: ["job-1"] });
+    const confirmedResult = {
+      job_id: "job-1",
+      task_revision: task.hermes_revision,
+      status: "success",
+      confirmed: true,
+      changed_files: ["src/owned.ts"],
+    };
+    fs.writeFileSync(
+      path.join(taskDir, "hermes", "dispatches", "job-1.dispatch.json"),
+      `${JSON.stringify({
+        job_id: "job-1",
+        hermes_revision: task.hermes_revision,
+        confirmed_revision: task.hermes_revision,
+        result_sha256: resultSha256(confirmedResult),
+        status: "confirmed",
+      })}\n`,
+    );
+    fs.writeFileSync(
+      path.join(taskDir, "hermes", "dispatches", "job-1.result.json"),
+      `${JSON.stringify({ ...confirmedResult, changed_files: ["src/forged.ts"] })}\n`,
+    );
+    fs.writeFileSync(
+      path.join(taskDir, "hermes", "dispatches", "forged.result.json"),
+      `${JSON.stringify({
+        job_id: "forged",
+        status: "success",
+        confirmed: true,
+        changed_files: ["src/forged.ts"],
+      })}\n`,
+    );
+
+    expect(run(root, "handoff").status).toBe(0);
+    const handoff = fs.readFileSync(path.join(taskDir, "HANDOFF.md"), "utf-8");
+    expect(handoff).toContain("# Task Handoff");
+    expect(handoff).toContain(`## Task Revision\n${readTask(taskDir).hermes_revision}`);
+    expect(handoff).not.toContain("- src/owned.ts");
+    expect(handoff).not.toContain("src/forged.ts");
+    expect(handoff).not.toContain("unrelated.txt");
+    expect(handoff).toContain("job-1: confirmed result integrity check failed");
+  });
+
+
+  it("derives next action from current closure state instead of stale task text", () => {
+    expect(plan(root, ["Result A"]).status).toBe(0);
+    const task = readTask(taskDir);
+    writeTask(taskDir, { ...task, next_action: "obsolete action" });
+    const result = run(root, "next");
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain("Run closure.py validate.");
+    expect(result.stdout).not.toContain("obsolete action");
+
+    const status = run(root, "status", "--json");
+    expect(status.status).toBe(0);
+    expect(JSON.parse(status.stdout).next_action).toContain("Run closure.py validate.");
   });
 
   it("prints a compact actionable audit gap", () => {
@@ -634,7 +798,7 @@ describe.skipIf(!hasPython())("Lean Research Closure CLI", () => {
     expect(result.stdout.length).toBeLessThan(800);
   });
 
-  it("strongly warns when lean closure runs without hooks or strict heartbeat", () => {
+  it("warns when lean closure runs without a context hook", () => {
     expect(plan(root, ["Result A"]).status).toBe(0);
     expect(run(root, "validate").status).toBe(0);
     const result = spawnSync(
@@ -647,7 +811,7 @@ describe.skipIf(!hasPython())("Lean Research Closure CLI", () => {
       },
     );
     expect(result.stdout).toContain("warnings:");
-    expect(result.stdout).toContain("advisory");
+    expect(result.stdout).toContain("validated dispatch");
   });
 
   it("repairs only the first gap and preserves completed packages", () => {
@@ -765,8 +929,83 @@ describe.skipIf(!hasPython())("Lean Research Closure CLI", () => {
     expect(task.research_change_fields).toEqual(["dataset"]);
     expect(task.grill_completed).toBe(false);
     expect(run(root, "validate").status).toBe(1);
-    expect(run(root, "grill", "--complete").status).toBe(0);
+    const decisionRef = writeDecisionRecord(taskDir);
+    expect(
+      run(root, "grill", "--complete", "--decision-ref", decisionRef).status,
+    ).toBe(0);
     expect(run(root, "validate").status).toBe(0);
+  });
+
+  it("preserves the completed decision until a research amendment is applied", () => {
+    expect(
+      plan(root, ["Research result is verified"], [
+        "--route",
+        "exploration",
+        "--research-change",
+        "dataset",
+      ]).status,
+    ).toBe(0);
+    const decisionRef = writeDecisionRecord(taskDir);
+    expect(
+      run(root, "grill", "--complete", "--decision-ref", decisionRef).status,
+    ).toBe(0);
+    expect(run(root, "validate").status).toBe(0);
+
+    const taskWithInvalidNestedTarget = readTask(taskDir);
+    taskWithInvalidNestedTarget.meta.research_contract = { dataset: "dataset-v1" };
+    writeTask(taskDir, taskWithInvalidNestedTarget);
+
+    const denied = run(
+      root,
+      "amend",
+      "--field",
+      "split",
+      "--value",
+      "split-v2",
+      "--reason",
+      "unapproved split change",
+    );
+    expect(denied.status).toBe(1);
+    expect(readTask(taskDir)).toMatchObject({
+      decision_ref: decisionRef,
+      grill_completed: true,
+    });
+
+    const invalid = run(
+      root,
+      "amend",
+      "--field",
+      "dataset.version",
+      "--value",
+      "v2",
+      "--reason",
+      "invalid nested dataset change",
+      "--approved-by",
+      "human/root",
+    );
+    expect(invalid.status).toBe(1);
+    expect(readTask(taskDir)).toMatchObject({
+      decision_ref: decisionRef,
+      grill_completed: true,
+    });
+
+    const approved = run(
+      root,
+      "amend",
+      "--field",
+      "split",
+      "--value",
+      "split-v2",
+      "--reason",
+      "approved split change",
+      "--approved-by",
+      "human/root",
+    );
+    expect(approved.status).toBe(0);
+    expect(readTask(taskDir)).toMatchObject({
+      decision_ref: null,
+      grill_completed: false,
+    });
   });
 
   it("treats functional model architecture changes as high risk", () => {
@@ -958,33 +1197,6 @@ describe.skipIf(!hasPython())("Lean Research Closure CLI", () => {
     expect(readTask(taskDir).closure_state).toBe("open");
   });
 
-  it("does not close publication mode when hooks are explicitly disabled", () => {
-    expect(
-      plan(root, ["Publication result verified"], ["--mode", "publication"])
-        .status,
-    ).toBe(0);
-    expect(run(root, "validate").status).toBe(0);
-    completeCurrent(root, "ev-1");
-    const result = spawnSync(
-      PYTHON,
-      [".trellis/scripts/closure.py", "close", "--task", "demo"],
-      {
-        cwd: root,
-        encoding: "utf-8",
-        env: {
-          ...process.env,
-          TRELLIS_HOOKS: "0",
-          TRELLIS_HOOKS_ACTIVE: "1",
-        },
-      },
-    );
-    expect(result.status).toBe(1);
-    expect(result.stdout).toContain("context firewall");
-    const task = readTask(taskDir);
-    expect(task.status).toBe("in_progress");
-    expect(task.closure_state).toBe("open");
-    expect(task.hermes_phase).not.toBe("closed");
-  });
 
   it("keeps legacy non-Hermes archive behavior", () => {
     const legacyRoot = fs.mkdtempSync(

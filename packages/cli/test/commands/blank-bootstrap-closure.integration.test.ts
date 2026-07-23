@@ -42,8 +42,41 @@ describe("empty repository bootstrap closure", () => {
       fs.writeFileSync(path.join(project, "RESEARCH_PLAN.md"), "# Research Plan\n\nMethod: run one fixed sample.\n");
       fs.writeFileSync(path.join(project, "CONSTRAINTS.md"), "# Constraints\n\nLimit: keep the first task small.\n");
 
+      const bootstrapPrd = path.join(
+        root,
+        ".trellis",
+        "tasks",
+        "00-bootstrap-guidelines",
+        "prd.md",
+      );
+      fs.appendFileSync(
+        bootstrapPrd,
+        [
+          "",
+          "## Decision",
+          "Verify one agreed sample before expanding the project.",
+          "",
+          "## Rationale",
+          "A fixed sample provides the smallest observable result.",
+          "",
+          "## Evidence",
+          "The project contract records the agreed sample and constraints.",
+          "",
+          "## Alternatives",
+          "Build a larger evaluation workflow first.",
+          "",
+          "## Failure Conditions",
+          "The sample cannot be reproduced under the recorded constraints.",
+          "",
+        ].join("\n"),
+        "utf-8",
+      );
+
       const closure = (args: string[]) => run(root, "closure.py", args);
-      expect(closure(["grill", "--task", "00-bootstrap-guidelines", "--complete"]).status).toBe(0);
+      expect(closure([
+        "grill", "--task", "00-bootstrap-guidelines", "--complete",
+        "--decision-ref", "prd.md",
+      ]).status).toBe(0);
       expect(closure(["validate", "--task", "00-bootstrap-guidelines"]).status).toBe(0);
       expect(closure(["package-start", "--task", "00-bootstrap-guidelines", "--package-id", "WP1"]).status).toBe(0);
       expect(closure(["package-check", "--task", "00-bootstrap-guidelines", "--package-id", "WP1"]).status).toBe(0);

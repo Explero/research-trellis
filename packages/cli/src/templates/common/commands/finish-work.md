@@ -42,13 +42,15 @@ Then route:
   > "FYI, dirty files outside this task's scope — leaving them for the other window: `<list>`."
 - **Genuinely unsure** — ask the user once: "Are `<list>` this task's work I forgot to commit, or another window's? (commit / ignore)" — then route per their answer.
 
-## Step 3: Run Hermes closure gates
+## Step 3: Review Hermes closure gates
 
-Use the current active task name for `<task>`. Every closure task runs audit and close:
+Use the current active task name for `<task>`. The main agent coordinates this
+step but does not self-approve closure. First run the deterministic audit, then
+create a validated `reviewer:closure` dispatch against `task.json`, the audit
+result, package dispositions, blockers, and evidence references:
 
 ```bash
 {{PYTHON_CMD}} ./.trellis/scripts/closure.py audit --task <task>
-{{PYTHON_CMD}} ./.trellis/scripts/closure.py close --task <task>
 ```
 
 For `standard` and `publication`, also validate the existing Hermes records:
@@ -65,15 +67,26 @@ For `publication` only, additionally run the formal comparison gate:
 {{PYTHON_CMD}} ./.trellis/scripts/hermes/report.py quality-gate --task <task>
 ```
 
-Run only the gates required by `closure_mode`. Do not archive while `closure_state` is not `closed`. Legacy tasks without closure fields retain the original compatibility path.
+Run only the gates required by `closure_mode`. A reviewer records gaps but does
+not modify task state. Do not advance while the independent closure verdict has
+blocking gaps. Do not archive until that verdict and the deterministic gate both
+pass. Legacy tasks without closure fields retain the original compatibility
+path.
 
-## Step 4: Archive task(s)
+## Step 4: Close and archive through a runner
+
+After the reviewer passes closure, create a validated `runner:validation`
+dispatch for the required final checks and these control commands:
 
 ```bash
+{{PYTHON_CMD}} ./.trellis/scripts/closure.py close --task <task>
 {{PYTHON_CMD}} ./.trellis/scripts/task.py archive <task-name>
 ```
 
-At minimum: the current active task (if any). Plus any extra tasks the user confirmed in Step 1. Each archive produces a `chore(task): archive ...` commit via the script's auto-commit.
+The runner reports command results and archive location; it does not reinterpret
+evidence or approve claims. At minimum archive the current active task, plus any
+extra tasks the user confirmed in Step 1. Each archive produces a
+`chore(task): archive ...` commit via the script's auto-commit.
 
 If there is no active task and the user did not confirm any cleanup archives, skip this step.
 

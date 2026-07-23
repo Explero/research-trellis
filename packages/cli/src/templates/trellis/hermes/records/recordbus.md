@@ -4,8 +4,8 @@ RecordBus is the only trusted communication channel between agents.
 
 Chat messages can hint at work, but they are not facts. A task is not complete
 until the relevant record exists under `.trellis/tasks/<task>/hermes/`.
-This is deployment candidate hardening, not a production-ready platform. JSONL
-records are not tamper-proof storage, and Hermes is not an OS sandbox.
+Hermes is a lightweight local collaboration tool. JSONL records preserve task
+history but are not a security or isolation boundary.
 
 ## Role And Task Card Guide
 
@@ -20,8 +20,8 @@ Formal Agent Context Firewall support is limited to Claude and Codex. A
 validated dispatch lives at
 `.trellis/tasks/<task>/hermes/dispatches/<job>.dispatch.json`; its sanitized
 result lives beside it as `<job>.result.json`. Claude hooks replace Agent input
-and output. Codex native agents are advisory; strict mode uses `codex exec
---output-schema --json -o` through `dispatch.py run`.
+and output. Codex uses the same compact dispatch and result protocol in the
+current project workspace.
 
 Use task cards to assign one bounded worker at a time. Canonical roles are
 `planner`, `researcher`, `coder`, `runner`, and `reviewer`. The optional
@@ -69,9 +69,8 @@ store task-specific evidence, claims, approvals, worker logs, or review results.
 - Provenance records go to `provenance_ledger.jsonl` and should include
   dataset, model, code, env, and artifact refs with hash, version, or source
   metadata.
-- Audit records go to `audit_ledger.jsonl` for security gates, external write
-  boundaries, secret redaction, sandbox gate decisions, and approval boundary
-  events.
+- Audit records go to `audit_ledger.jsonl` for evidence, review, approval, and
+  task-boundary events.
 - Plan change records go to `plan_change_log.jsonl` when a PRD, contract,
   experiment config, or other research plan changes. Append a new record instead
   of rewriting the old plan trail.
@@ -100,10 +99,8 @@ Experiment work should keep its source config in `experiment.yaml` and append
 execution details to `run_manifest.jsonl` so the run stays traceable without
 mixing it into chat history. Each manifest entry should include command, cwd,
 env_summary, inputs, outputs, exit_code, started_at, and finished_at.
-`allowed_commands` is a command allowlist, not a strong command sandbox. If
-`python3` is allowed, arbitrary Python code can still be executed by that
-command. Use exact command patterns and external OS-level isolation for stronger
-controls.
+`allowed_commands` is a reproducibility contract for the task, not a security
+boundary. Use exact command patterns so later runs are easy to understand.
 Runner-managed commands should write stdout and stderr logs under the task
 Hermes directory and include those log paths in the manifest. Failed commands
 must keep the original exit code and append a rejection that points to the
@@ -207,7 +204,7 @@ Append a `provenance` record to lock the refs used by an experiment.
 Append an `audit` record when a security or approval boundary is checked.
 
 ```json
-{"type":"audit","id":"au-YYYYMMDD-HHMMSS-slug","timestamp":"YYYY-MM-DDTHH:MM:SSZ","event":"security_gate|external_write_boundary|secret_redaction|sandbox_gate|approval_boundary","actor":"runner.py","boundary":"allowed_commands","decision":"blocked","summary":"short reason"}
+{"type":"audit","id":"au-YYYYMMDD-HHMMSS-slug","timestamp":"YYYY-MM-DDTHH:MM:SSZ","event":"evidence_check|review_check|approval_boundary","actor":"runner.py","boundary":"allowed_commands","decision":"recorded","summary":"short reason"}
 ```
 
 ### plan_change

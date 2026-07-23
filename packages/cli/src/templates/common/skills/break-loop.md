@@ -1,6 +1,13 @@
 # Break the Loop - Deep Bug Analysis
 
-When debug is complete, use this for deep analysis to break the "fix bug -> forget -> repeat" cycle.
+The main agent triggers this skill for repeated technical failures, not for a
+normal negative scientific result. Dispatch `planner:root_cause` to separate
+code, environment, data-pipeline, and experiment-contract causes; dispatch a
+coder only after a bounded repair is identified. Evidence or statistical doubt
+goes to the corresponding reviewer instead.
+
+Use it to break the "fix bug -> forget -> repeat" cycle after failed technical
+repairs or after a difficult technical defect is resolved.
 
 ---
 
@@ -108,18 +115,13 @@ Three levels of insight:
 
 ---
 
-## After Analysis: Immediate Actions
+## After Analysis: Bounded Actions
 
-**IMPORTANT**: After completing the analysis above, you MUST immediately:
-
-1. **Update spec/guides** - Don't just list TODOs, actually update the relevant files:
-   - If it's a cross-platform issue → update `cross-platform-thinking-guide.md`
-   - If it's a cross-layer issue → update `cross-layer-thinking-guide.md`
-   - If it's a code reuse issue → update `code-reuse-thinking-guide.md`
-   - If it's domain-specific → update `backend/*.md` or `frontend/*.md`
-
-2. **Sync templates** - After updating `.trellis/spec/`, sync to `src/templates/markdown/spec/`
-
-3. **Commit the spec updates** - This is the primary output, not just the analysis text
-
-> **The analysis is worthless if it stays in chat. The value is in the updated specs.**
+1. Record the testable root cause, smallest diagnostic, and repair boundary in
+   the planner result.
+2. Return implementation repair to a validated `coder:repair` dispatch.
+3. If the result reveals reviewed, reusable engineering knowledge, let the main
+   agent evaluate `update-spec` near closure. A `coder:configuration` worker
+   writes it and a reviewer verifies it.
+4. Do not edit specs, sync templates, commit files, or reinterpret a negative
+   research result from this analysis skill.

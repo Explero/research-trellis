@@ -214,7 +214,7 @@ def cmd_start(args: argparse.Namespace) -> int:
         if is_closure_task(task_data):
             phase = task_data.get("hermes_phase")
             if phase == "planning":
-                errors, _ = validate_closure(task_data)
+                errors, _ = validate_closure(task_data, full_path)
                 detail = "; ".join(errors[:3]) if errors else "plan has not been validated"
                 print(colored(
                     f"Error: Closure task is not ready: {detail}",
@@ -293,34 +293,21 @@ def cmd_start(args: argparse.Namespace) -> int:
 def cmd_finish(args: argparse.Namespace) -> int:
     """Clear active task."""
     repo_root = get_repo_root()
-    active = clear_active_task(repo_root)
+    active = resolve_active_task(repo_root)
     current = active.task_path
 
     if not current:
         print(colored("No current task set", Colors.YELLOW))
         return 0
 
-    # Resolve task.json path before clearing
     task_json_path = repo_root / current / FILE_TASK_JSON
 
+    cleared = clear_active_task(repo_root)
+
     print(colored(f"✓ Cleared current task (was: {current})", Colors.GREEN))
-    print(f"Source: {active.source}")
+    print(f"Source: {cleared.source}")
 
     if task_json_path.is_file():
-        task_data = read_json(task_json_path)
-        if isinstance(task_data, dict):
-            from common.closure import is_closure_task, write_handoff
-
-            if is_closure_task(task_data) and task_data.get("closure_state") != "closed":
-                handoff_path = write_handoff(
-                    task_json_path.parent,
-                    task_data,
-                    repo_root,
-                )
-                print(colored(
-                    f"✓ Handoff updated: {handoff_path.relative_to(repo_root)}",
-                    Colors.GREEN,
-                ))
         run_task_hooks("after_finish", task_json_path, repo_root)
     return 0
 

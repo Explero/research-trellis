@@ -6,9 +6,7 @@ import hashlib
 import json
 import os
 import re
-import shutil
 import subprocess
-import tempfile
 from copy import deepcopy
 from datetime import datetime, timedelta, timezone
 from fnmatch import fnmatchcase
@@ -23,6 +21,7 @@ from .closure import (
     package_by_id,
     save_task,
     task_state_lock,
+    write_handoff,
 )
 from .firewall import closure_mode_gate, record_firewall_heartbeat
 from .io import path_has_symlink, read_json, write_json_atomic
@@ -39,6 +38,7 @@ MAX_RESULT_LINES = 80
 MAX_INVALID_RESULTS = 2
 EXECUTION_ROLES = {"coder", "runner"}
 TASK_LEVEL_ROLES = {"planner", "researcher", "reviewer"}
+INDEPENDENT_REVIEWER_PROFILES = {"closure", "safety"}
 PROJECT_CONTEXT_FILES = {
     "background": ".trellis/project/BACKGROUND.md",
     "research_plan": ".trellis/project/RESEARCH_PLAN.md",
@@ -123,6 +123,7 @@ RESULT_FIELDS = {
     "task_revision",
     "role",
     "profile",
+    "parent_job_id",
     "status",
     "conclusion",
     "uncertainties",
@@ -211,16 +212,27 @@ def create_dispatch(
     role = normalized.role
     profile = normalized.profile
     work_package = _normalize_optional_text(spec.get("work_package"))
-    _validate_work_package(task, role, work_package)
+    parent_job_id = _normalize_optional_text(spec.get("parent_job_id"))
+    constraints = closure_constraints(task)
+    allowed_files = _normalize_patterns(spec.get("allowed_files"), "allowed_files")
+    forbidden_files = _normalize_patterns(spec.get("forbidden_files"), "forbidden_files")
+    handoff_writer = _is_handoff_writer(
+        task_dir,
+        repo_root,
+        role,
+        profile,
+        work_package,
+        allowed_files,
+    )
+    _validate_handoff_file_boundary(task_dir, repo_root, allowed_files, handoff_writer)
+    _validate_role_write_scope(task_dir, repo_root, role, allowed_files)
+    _validate_work_package(task, role, work_package, allow_task_handoff=handoff_writer)
     refs = _normalize_refs(
         task_dir,
         repo_root,
         _merged_dispatch_refs(task, spec.get("refs"), repo_root, role, profile),
         role,
     )
-    constraints = closure_constraints(task)
-    allowed_files = _normalize_patterns(spec.get("allowed_files"), "allowed_files")
-    forbidden_files = _normalize_patterns(spec.get("forbidden_files"), "forbidden_files")
     if role == "coder" and not allowed_files:
         raise DispatchError("missing_allowed_files", "coder dispatch requires allowed_files")
     if not forbidden_files:
@@ -237,12 +249,23 @@ def create_dispatch(
         role,
         profile,
         work_package,
+        parent_job_id,
         objective,
     )
     _validate_job_id(job_id)
     path = dispatch_path(task_dir, job_id)
     if path.exists():
         raise DispatchError("duplicate_job", f"dispatch already exists for {job_id}")
+    _validate_parent_job(
+        task_dir,
+        task,
+        repo_root,
+        job_id=job_id,
+        role=role,
+        profile=profile,
+        work_package=work_package,
+        parent_job_id=parent_job_id,
+    )
 
     mode = str(task.get("closure_mode") or "lean")
     gate_errors, gate_warnings = closure_mode_gate(
@@ -275,6 +298,8 @@ def create_dispatch(
         "role": role,
         "profile": profile,
         "work_package": work_package,
+        "parent_job_id": parent_job_id,
+        "handoff_writer": handoff_writer,
         "objective": objective,
         "allowed_refs": refs,
         "refs": refs,
@@ -435,6 +460,22 @@ def validate_dispatch(
         )
     if dispatch.get("task_revision") != dispatch.get("hermes_revision"):
         errors.append("task_revision")
+    try:
+        parent_job_id = _normalize_optional_text(dispatch.get("parent_job_id"))
+        if dispatch.get("parent_job_id") != parent_job_id:
+            errors.append("parent_job_id")
+        _validate_parent_job(
+            task_dir,
+            task,
+            repo_root,
+            job_id=str(dispatch.get("job_id") or ""),
+            role=str(dispatch.get("role") or ""),
+            profile=str(dispatch.get("profile") or ""),
+            work_package=_normalize_optional_text(dispatch.get("work_package")),
+            parent_job_id=parent_job_id,
+        )
+    except DispatchError as exc:
+        errors.append(exc.code)
     if dispatch.get("allowed_refs") != dispatch.get("refs"):
         errors.append("allowed_refs")
     if dispatch.get("forbidden") != dispatch.get("forbidden_files"):
@@ -453,10 +494,27 @@ def validate_dispatch(
     except RoleProfileError:
         errors.append("role_profile")
     try:
+        handoff_writer = _is_handoff_writer(
+            task_dir,
+            repo_root,
+            str(dispatch.get("role") or ""),
+            str(dispatch.get("profile") or ""),
+            dispatch.get("work_package"),
+            _string_list(dispatch.get("allowed_files")),
+        )
+        if dispatch.get("handoff_writer") is not handoff_writer:
+            errors.append("handoff_writer")
+        _validate_handoff_file_boundary(
+            task_dir,
+            repo_root,
+            _string_list(dispatch.get("allowed_files")),
+            handoff_writer,
+        )
         _validate_work_package(
             task,
             str(dispatch.get("role") or ""),
             dispatch.get("work_package"),
+            allow_task_handoff=handoff_writer,
         )
     except DispatchError as exc:
         errors.append(exc.code)
@@ -506,11 +564,6 @@ def prepare_dispatch_for_agent(
     if role and dispatch.get("role") != role:
         raise DispatchError("role_mismatch", "Agent role does not match validated dispatch")
     mode = str(task.get("closure_mode") or "lean")
-    if platform == "codex" and not hook_active and mode == "publication":
-        raise DispatchError(
-            "advisory_forbidden",
-            "publication cannot use advisory Codex native dispatch; use strict mode",
-        )
     task_id = str(task.get("id") or task_dir.name)
     if hook_active:
         record_firewall_heartbeat(
@@ -562,7 +615,8 @@ def prepare_dispatch_for_agent(
 
 def build_canonical_prompt(dispatch: dict[str, Any]) -> str:
     refs = _string_list(dispatch.get("refs"))
-    constraints = dispatch.get("constraints") if isinstance(dispatch.get("constraints"), dict) else {}
+    raw_constraints = dispatch.get("constraints")
+    constraints: dict[str, Any] = raw_constraints if isinstance(raw_constraints, dict) else {}
     verification_level = constraints.get("validation_level", "targeted")
     excluded_platforms = _string_list(constraints.get("excluded_platforms"))
     excluded_paths = _string_list(constraints.get("excluded_paths"))
@@ -572,6 +626,7 @@ def build_canonical_prompt(dispatch: dict[str, Any]) -> str:
         f"task: {dispatch.get('task_path')} @ revision {dispatch.get('hermes_revision')}",
         f"role: {dispatch.get('role')}:{dispatch.get('profile')}",
         f"work_package: {dispatch.get('work_package') or 'null'}",
+        f"parent_job_id: {dispatch.get('parent_job_id') or 'null'}",
         f"objective: {dispatch.get('objective')}",
         "refs: " + (", ".join(refs) if refs else "none"),
         "allowed_files: " + (", ".join(_string_list(dispatch.get("allowed_files"))) or "none"),
@@ -582,11 +637,15 @@ def build_canonical_prompt(dispatch: dict[str, Any]) -> str:
         "Read only these refs unless the objective names a deterministic ledger check.",
         "For targeted verification, run only the current work package's directed check and record basic evidence; do not claim completion from chat.",
         "Do not include logs, diffs, search history, tool traces, secrets, or absolute user paths.",
-        "Return exactly one JSON object with: schema, job_id, task_revision, role, profile, status(success|failure|blocked), conclusion, evidence_refs, artifact_refs, changed_files, verification, risks, uncertainties, next_action.",
+        "Return exactly one JSON object with: schema, job_id, task_revision, role, profile, parent_job_id when present, status(success|failure|blocked), conclusion, evidence_refs, artifact_refs, changed_files, verification, risks, uncertainties, next_action.",
         f"conclusion must be <= {MAX_CONCLUSION_CHARS} characters; uncertainties is required.",
     ]
     if dispatch.get("blind_review"):
         lines.append("Blind review: do not read coder/runner explanations or worker result prose; judge current artifacts and ledgers only.")
+    if dispatch.get("handoff_writer"):
+        lines.append(
+            "Handoff writer: run closure.py handoff for this task. Do not edit task state or other files; report HANDOFF.md as the only changed file."
+        )
     body = "\n".join(lines)
     _check_sensitive_text(body, "dispatch body")
     if ABSOLUTE_USER_PATH_RE.search(body):
@@ -641,6 +700,13 @@ def accept_result_text(
         _apply_result_state(updated_task, dispatch, sanitized)
         try:
             save_task(task_dir, updated_task, lock_held=True)
+            if dispatch.get("handoff_writer") and sanitized["status"] == "success":
+                dispatch["status"] = "confirmed"
+                dispatch["confirmed_revision"] = _task_revision(updated_task)
+                dispatch["confirmed_at"] = now_utc()
+                dispatch["result_sha256"] = sanitized["audit"]["result_sha256"]
+                _write_task_runtime_json(task_dir, dispatch_path(task_dir, job_id), dispatch)
+                write_handoff(task_dir, updated_task, repo_root)
             _append_worker_result(task_dir, dispatch, sanitized)
         except (ClosureError, DispatchError, OSError) as exc:
             raise DispatchError("state_confirmation_failed", "result was stored but state confirmation failed") from exc
@@ -728,6 +794,10 @@ def validate_result_envelope(
         raise DispatchError("result_revision_mismatch", "result task_revision does not match dispatch")
     if value.get("role") != dispatch.get("role") or value.get("profile") != dispatch.get("profile"):
         raise DispatchError("result_role_mismatch", "result role/profile does not match dispatch")
+    result_parent_job_id = _normalize_optional_text(value.get("parent_job_id"))
+    dispatch_parent_job_id = _normalize_optional_text(dispatch.get("parent_job_id"))
+    if "parent_job_id" in value and result_parent_job_id != dispatch_parent_job_id:
+        raise DispatchError("result_parent_mismatch", "result parent_job_id does not match dispatch")
     if value.get("status") not in {"success", "failure", "blocked"}:
         raise DispatchError("invalid_result_status", "status must be success, failure, or blocked")
     conclusion = _required_text(value.get("conclusion"), "conclusion")
@@ -789,6 +859,7 @@ def validate_result_envelope(
         "task_revision": value["task_revision"],
         "role": value["role"],
         "profile": value["profile"],
+        "parent_job_id": dispatch_parent_job_id,
         "status": value["status"],
         "conclusion": conclusion,
         "uncertainties": uncertainties,
@@ -825,6 +896,7 @@ def sanitized_summary(task_dir: Path, job_id: str) -> dict[str, Any]:
                 "task_revision",
                 "role",
                 "profile",
+                "parent_job_id",
                 "status",
                 "conclusion",
                 "uncertainties",
@@ -847,6 +919,7 @@ def sanitized_summary(task_dir: Path, job_id: str) -> dict[str, Any]:
         "task_revision": dispatch.get("task_revision", dispatch.get("hermes_revision")),
         "role": dispatch.get("role"),
         "profile": dispatch.get("profile"),
+        "parent_job_id": dispatch.get("parent_job_id"),
         "status": "blocked" if status == "blocked" else status,
         "conclusion": "Result envelope was rejected by the context firewall.",
         "uncertainties": [f"invalid_result_attempts={attempts}"],
@@ -874,6 +947,7 @@ def list_dispatches(task_dir: Path) -> list[dict[str, Any]]:
             "role": value.get("role"),
             "profile": value.get("profile"),
             "work_package": value.get("work_package"),
+            "parent_job_id": value.get("parent_job_id"),
             "hermes_revision": value.get("hermes_revision"),
             "status": value.get("status"),
             "invalid_result_attempts": value.get("invalid_result_attempts", 0),
@@ -949,326 +1023,6 @@ def supersede_dispatch(
     return dispatch
 
 
-def run_codex_strict(
-    task_dir: Path,
-    task: dict[str, Any],
-    repo_root: Path,
-    job_id: str,
-    *,
-    codex_bin: str = "codex",
-) -> tuple[dict[str, Any] | None, list[str]]:
-    dispatch = load_dispatch(task_dir, job_id)
-    validate_dispatch(task_dir, task, dispatch, repo_root)
-    executable = shutil.which(codex_bin)
-    capability_errors = _codex_capability_errors(executable or codex_bin, repo_root)
-    mode = str(task.get("closure_mode") or "lean")
-    if capability_errors:
-        if mode in {"standard", "publication"}:
-            raise DispatchError("codex_strict_unavailable", capability_errors[0], capability_errors)
-        dispatch["status"] = "validated"
-        dispatch["advisory"] = True
-        _write_task_runtime_json(task_dir, dispatch_path(task_dir, job_id), dispatch)
-        return None, ["Codex strict capability is unavailable; using advisory native dispatch."]
-
-    record_firewall_heartbeat(
-        repo_root,
-        "codex",
-        "strict",
-        task_id=str(task.get("id") or task_dir.name),
-        job_id=job_id,
-    )
-    dispatch["status"] = "running"
-    dispatch["platform"] = "codex"
-    dispatch["execution_mode"] = "strict"
-    dispatch["started_at"] = now_utc()
-    _write_task_runtime_json(task_dir, dispatch_path(task_dir, job_id), dispatch)
-    runtime_dir = raw_trace_path(repo_root, task_dir, job_id).parent
-    runtime_dir.mkdir(parents=True, exist_ok=True)
-    try:
-        with tempfile.TemporaryDirectory(prefix="trellis-codex-strict-") as temporary:
-            workspace = Path(temporary) / "workspace"
-            _copy_strict_workspace(repo_root, workspace)
-            output_dir = workspace / ".trellis" / ".strict-output"
-            output_dir.mkdir(parents=True, exist_ok=True)
-            output_path = output_dir / f"{job_id}.last-message.json"
-            schema_path = workspace / ".trellis" / "hermes" / "schemas" / "result-envelope.schema.json"
-            before = _snapshot_workspace(workspace)
-            sandbox_mode = "workspace-write" if dispatch.get("role") in EXECUTION_ROLES else "read-only"
-            command = [
-                executable or codex_bin,
-                "exec",
-                "--ephemeral",
-                "--ignore-user-config",
-                "--skip-git-repo-check",
-                "--sandbox",
-                sandbox_mode,
-                "--ask-for-approval",
-                "never",
-                "--output-schema",
-                str(schema_path),
-                "--json",
-                "-o",
-                str(output_path),
-                str(dispatch["body"]),
-            ]
-            completed = subprocess.run(
-                command,
-                cwd=workspace,
-                env=_strict_environment(),
-                capture_output=True,
-                text=True,
-                encoding="utf-8",
-                errors="replace",
-                timeout=3600,
-                check=False,
-            )
-            after = _snapshot_workspace(workspace)
-            actual_changes = sorted(
-                path for path in set(before) | set(after) if before.get(path) != after.get(path)
-            )
-            if completed.returncode != 0:
-                _mark_dispatch_terminal(task_dir, dispatch, "failed", "codex_exec_failed")
-                _apply_failed_execution_state(task_dir, task, dispatch, "Codex strict execution failed.")
-                raise DispatchError("codex_exec_failed", "Codex strict execution failed")
-            if not _changes_allowed(actual_changes, dispatch):
-                _mark_dispatch_terminal(task_dir, dispatch, "failed", "unauthorized_actual_changes")
-                _apply_failed_execution_state(
-                    task_dir,
-                    task,
-                    dispatch,
-                    "Codex strict changed files outside dispatch permissions.",
-                )
-                raise DispatchError(
-                    "unauthorized_actual_changes",
-                    "Codex strict workspace changes violate dispatch permissions",
-                    actual_changes,
-                )
-            try:
-                raw_result = output_path.read_text(encoding="utf-8")
-            except OSError as exc:
-                raise DispatchError("missing_result", "Codex did not write the final result envelope") from exc
-            # Validate the complete envelope before any isolated code reaches the
-            # caller's workspace. A rejected result must leave source untouched,
-            # while still receiving the same recorded invalid-result outcome as
-            # a native dispatch.
-            try:
-                validate_result_envelope(task_dir, task, dispatch, raw_result, repo_root)
-                _validate_reported_changes(raw_result, actual_changes)
-            except DispatchError as exc:
-                _store_raw_trace(repo_root, task_dir, job_id, raw_result, "codex_strict_result")
-                _record_invalid_result(task_dir, task, dispatch, exc)
-                raise
-            sync_state = _prepare_strict_sync(repo_root, actual_changes, Path(temporary) / "sync-backup")
-            try:
-                _sync_strict_changes(workspace, repo_root, actual_changes, sync_state)
-            except Exception:
-                _restore_strict_sync(repo_root, sync_state)
-                raise
-            try:
-                accepted_result = accept_result_text(task_dir, task, repo_root, job_id, raw_result)
-            except Exception:
-                _restore_strict_sync(repo_root, sync_state)
-                raise
-    except DispatchError:
-        raise
-    except (OSError, subprocess.SubprocessError) as exc:
-        _store_raw_trace(repo_root, task_dir, job_id, str(exc), "codex_exec_error")
-        raise DispatchError("codex_exec_failed", "Codex strict execution failed") from exc
-    trace = json.dumps(
-        {"stdout": completed.stdout, "stderr": completed.stderr, "exit_code": completed.returncode},
-        ensure_ascii=False,
-    )
-    _store_raw_trace(repo_root, task_dir, job_id, trace, "codex_exec_trace")
-    return accepted_result, []
-
-
-def _copy_strict_workspace(repo_root: Path, workspace: Path) -> None:
-    def ignore(directory: str, names: list[str]) -> set[str]:
-        relative = Path(directory).resolve().relative_to(repo_root.resolve())
-        ignored = {
-            name
-            for name in names
-            if name in {
-                ".aws",
-                ".git",
-                ".netrc",
-                ".npmrc",
-                ".pypirc",
-                ".ssh",
-                "__pycache__",
-                "coverage",
-                "credentials",
-                "dist",
-                "id_ed25519",
-                "id_rsa",
-                "node_modules",
-            }
-            or name.startswith(".env")
-            or name.endswith((".key", ".pem", ".p12", ".pfx"))
-            or any(marker in name.casefold() for marker in ("credential", "secret", "token"))
-            or _strict_workspace_file_contains_secret(Path(directory) / name)
-        }
-        if relative == Path(".trellis"):
-            ignored.add(".runtime")
-        return ignored
-
-    shutil.copytree(repo_root, workspace, ignore=ignore, symlinks=True)
-    for path in workspace.rglob("*"):
-        if not path.is_symlink():
-            continue
-        try:
-            path.resolve(strict=True).relative_to(workspace.resolve())
-        except (OSError, ValueError) as exc:
-            raise DispatchError(
-                "strict_workspace_symlink",
-                f"strict workspace contains an external or broken symlink: {path.relative_to(workspace)}",
-            ) from exc
-
-
-def _strict_workspace_file_contains_secret(path: Path) -> bool:
-    if not path.is_file():
-        return False
-    try:
-        if path.stat().st_size > 1024 * 1024:
-            return False
-        content = path.read_text(encoding="utf-8", errors="replace")
-    except OSError:
-        return True
-    return any(pattern.search(content) for pattern in SECRET_PATTERNS)
-
-
-def _snapshot_workspace(workspace: Path) -> dict[str, str]:
-    snapshot: dict[str, str] = {}
-    for path in workspace.rglob("*"):
-        relative = path.relative_to(workspace).as_posix()
-        if relative == ".trellis/.strict-output" or relative.startswith(".trellis/.strict-output/"):
-            continue
-        if path.is_symlink():
-            snapshot[relative] = f"symlink:{os.readlink(path)}"
-        elif path.is_file():
-            digest = hashlib.sha256()
-            try:
-                with path.open("rb") as handle:
-                    for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-                        digest.update(chunk)
-            except OSError as exc:
-                raise DispatchError("strict_snapshot_failed", f"cannot hash {relative}") from exc
-            snapshot[relative] = f"file:{digest.hexdigest()}"
-    return snapshot
-
-
-def _strict_environment() -> dict[str, str]:
-    allowed = {
-        "PATH",
-        "HOME",
-        "USER",
-        "LOGNAME",
-        "LANG",
-        "LC_ALL",
-        "LC_CTYPE",
-        "TERM",
-        "SHELL",
-        "TMPDIR",
-        "XDG_CONFIG_HOME",
-        "XDG_DATA_HOME",
-        "XDG_CACHE_HOME",
-        "CODEX_HOME",
-        "SSL_CERT_FILE",
-        "SSL_CERT_DIR",
-    }
-    return {key: value for key, value in os.environ.items() if key in allowed}
-
-
-def _validate_reported_changes(raw_result: str, actual_changes: list[str]) -> None:
-    try:
-        value = json.loads(raw_result)
-    except json.JSONDecodeError as exc:
-        raise DispatchError("invalid_json", "Codex strict result is not JSON") from exc
-    reported = value.get("changed_files") if isinstance(value, dict) else None
-    if not isinstance(reported, list) or any(not isinstance(item, str) for item in reported):
-        raise DispatchError("invalid_result_field", "changed_files must describe actual strict changes")
-    normalized = sorted(dict.fromkeys(item.replace("\\", "/").removeprefix("./") for item in reported))
-    if normalized != actual_changes:
-        raise DispatchError(
-            "changed_files_mismatch",
-            "reported changed_files do not match the strict workspace diff",
-            [f"reported={normalized}", f"actual={actual_changes}"],
-        )
-
-
-def _prepare_strict_sync(
-    repo_root: Path,
-    changed_files: list[str],
-    backup_root: Path,
-) -> dict[str, Any]:
-    backups: dict[str, Path | None] = {}
-    for relative in changed_files:
-        target = repo_root / relative
-        if target.is_symlink():
-            raise DispatchError("strict_workspace_symlink", f"cannot sync symlinked path: {relative}")
-        if target.exists():
-            if target.is_dir():
-                raise DispatchError("unauthorized_actual_changes", f"strict sync cannot replace directory: {relative}")
-            backup = backup_root / relative
-            backup.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(target, backup)
-            backups[relative] = backup
-        else:
-            backups[relative] = None
-    return {"backups": backups, "created_dirs": []}
-
-
-def _ensure_sync_parent(target: Path, repo_root: Path, state: dict[str, Any]) -> None:
-    missing: list[Path] = []
-    parent = target.parent
-    while parent != repo_root and not parent.exists():
-        missing.append(parent)
-        parent = parent.parent
-    for directory in reversed(missing):
-        directory.mkdir()
-        state["created_dirs"].append(directory)
-
-
-def _sync_strict_changes(
-    workspace: Path,
-    repo_root: Path,
-    changed_files: list[str],
-    state: dict[str, Any],
-) -> None:
-    for relative in changed_files:
-        source = workspace / relative
-        target = repo_root / relative
-        if source.is_symlink() or target.is_symlink():
-            raise DispatchError("strict_workspace_symlink", f"cannot sync symlinked path: {relative}")
-        if source.is_file():
-            _ensure_sync_parent(target, repo_root, state)
-            shutil.copy2(source, target)
-        elif target.exists():
-            if target.is_dir():
-                raise DispatchError("unauthorized_actual_changes", f"strict sync cannot delete directory: {relative}")
-            target.unlink()
-
-
-def _restore_strict_sync(repo_root: Path, state: dict[str, Any]) -> None:
-    backups = state.get("backups")
-    if not isinstance(backups, dict):
-        return
-    for relative, backup in backups.items():
-        if not isinstance(relative, str):
-            continue
-        target = repo_root / relative
-        if isinstance(backup, Path):
-            _ensure_sync_parent(target, repo_root, state)
-            shutil.copy2(backup, target)
-        elif target.is_file():
-            target.unlink()
-    for directory in reversed(state.get("created_dirs", [])):
-        try:
-            directory.rmdir()
-        except OSError:
-            pass
-
-
 def result_json_schema() -> dict[str, Any]:
     string_array = {"type": "array", "items": {"type": "string"}}
     return {
@@ -1299,6 +1053,7 @@ def result_json_schema() -> dict[str, Any]:
             "task_revision": {"type": "integer", "minimum": 0},
             "role": {"type": "string", "enum": ["planner", "researcher", "coder", "runner", "reviewer"]},
             "profile": {"type": "string"},
+            "parent_job_id": {"type": ["string", "null"], "pattern": JOB_ID_RE.pattern},
             "status": {"type": "string", "enum": ["success", "failure", "blocked"]},
             "conclusion": {"type": "string", "maxLength": MAX_CONCLUSION_CHARS},
             "uncertainties": string_array,
@@ -1333,6 +1088,7 @@ def _dispatch_audit(dispatch: dict[str, Any]) -> dict[str, Any]:
             "revision": "pass",
             "role_profile": "pass",
             "work_package": "pass",
+            "parent_job": "pass",
             "refs": "pass",
             "sensitive_content": "pass",
             "absolute_user_path": "pass",
@@ -1344,6 +1100,7 @@ def _dispatch_audit(dispatch: dict[str, Any]) -> dict[str, Any]:
             "ref_count": len(dispatch.get("refs") or []),
             "allowed_file_patterns": len(dispatch.get("allowed_files") or []),
             "forbidden_file_patterns": len(dispatch.get("forbidden_files") or []),
+            "has_parent_job": dispatch.get("parent_job_id") is not None,
         },
         "dispatch_sha256": _stable_hash(dispatch, {"audit"}),
     }
@@ -1360,6 +1117,7 @@ def _sanitized_result(
     sanitized["dispatch_revision"] = dispatch.get("hermes_revision")
     sanitized["role"] = dispatch.get("role")
     sanitized["profile"] = dispatch.get("profile")
+    sanitized["parent_job_id"] = dispatch.get("parent_job_id")
     sanitized["work_package"] = dispatch.get("work_package")
     verification = dict(result.get("verification") or {})
     verification["run_refs"] = list(result.get("run_refs") or [])
@@ -1522,6 +1280,7 @@ def _append_worker_task_card(task_dir: Path, dispatch: dict[str, Any]) -> None:
         "profile": dispatch["profile"],
         "objective": dispatch["objective"],
         "work_package": dispatch["work_package"],
+        "parent_job_id": dispatch["parent_job_id"],
         "hermes_revision": dispatch["hermes_revision"],
         "worktree_id": dispatch["worktree_id"],
         "status": "queued",
@@ -1549,6 +1308,7 @@ def _append_worker_result(
         "id": f"cp-{dispatch['job_id']}",
         "timestamp": now_utc(),
         "job_id": dispatch["job_id"],
+        "parent_job_id": dispatch.get("parent_job_id"),
         "checkpoint": "result-envelope-validated",
         "resume_from": "sanitized result",
         "evidence_refs": result["evidence_refs"],
@@ -1560,6 +1320,7 @@ def _append_worker_result(
         "id": f"rs-{dispatch['job_id']}",
         "timestamp": now_utc(),
         "job_id": dispatch["job_id"],
+        "parent_job_id": dispatch.get("parent_job_id"),
         "status": "done" if result["status"] == "success" else result["status"],
         "summary": result["conclusion"],
         "uncertainties": result["uncertainties"],
@@ -1678,10 +1439,134 @@ def _mark_dispatch_terminal(
     )
 
 
-def _validate_work_package(task: dict[str, Any], role: str, work_package: Any) -> None:
+def _is_handoff_writer(
+    task_dir: Path,
+    repo_root: Path,
+    role: str,
+    profile: str,
+    work_package: Any,
+    allowed_files: list[str],
+) -> bool:
+    expected = f"{_repo_relative(task_dir, repo_root)}/HANDOFF.md"
+    return (
+        role == "coder"
+        and profile == "configuration"
+        and _normalize_optional_text(work_package) is None
+        and allowed_files == [expected]
+    )
+
+
+def _validate_handoff_file_boundary(
+    task_dir: Path,
+    repo_root: Path,
+    allowed_files: list[str],
+    handoff_writer: bool,
+) -> None:
+    expected = f"{_repo_relative(task_dir, repo_root)}/HANDOFF.md"
+    if any(_path_matches(expected, pattern) for pattern in allowed_files) and not handoff_writer:
+        raise DispatchError(
+            "handoff_path_reserved",
+            "HANDOFF.md is reserved for the dedicated coder:configuration handoff dispatch",
+        )
+
+
+def _validate_role_write_scope(
+    task_dir: Path,
+    repo_root: Path,
+    role: str,
+    allowed_files: list[str],
+) -> None:
+    if role == "coder" or not allowed_files:
+        return
+    task_ref = _repo_relative(task_dir, repo_root)
+    roots = {
+        "planner": [f"{task_ref}/hermes/analysis"],
+        "researcher": [f"{task_ref}/research", f"{task_ref}/hermes/research"],
+        "reviewer": [f"{task_ref}/hermes/reviews"],
+        "runner": [],
+    }.get(role, [])
+    invalid = [
+        pattern
+        for pattern in allowed_files
+        if not any(pattern == root or pattern.startswith(root + "/") for root in roots)
+    ]
+    if invalid:
+        raise DispatchError(
+            "role_write_scope",
+            f"{role} allowed_files may only target its task-scoped record directory",
+            invalid,
+        )
+
+
+def _validate_parent_job(
+    task_dir: Path,
+    task: dict[str, Any],
+    repo_root: Path,
+    *,
+    job_id: str,
+    role: str,
+    profile: str,
+    work_package: str | None,
+    parent_job_id: str | None,
+) -> None:
+    """Bind formal review work to one existing job in the same package."""
+    requires_parent = role == "reviewer" and profile not in INDEPENDENT_REVIEWER_PROFILES
+    if role == "runner" and profile in {"test", "build"}:
+        requires_parent = True
+    if role == "runner" and profile == "validation" and parent_job_id is None:
+        dispatch_dir = task_dir / "hermes" / "dispatches"
+        for candidate_path in dispatch_dir.glob("*.dispatch.json"):
+            try:
+                candidate = json.loads(candidate_path.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError):
+                continue
+            if (
+                isinstance(candidate, dict)
+                and candidate.get("role") == "coder"
+                and candidate.get("work_package") == work_package
+                and candidate.get("status") != "superseded"
+            ):
+                requires_parent = True
+                break
+    if parent_job_id is None:
+        if requires_parent:
+            raise DispatchError(
+                "missing_parent_job",
+                f"{role}:{profile} dispatch requires parent_job_id for the work being checked",
+            )
+        return
+    _validate_job_id(parent_job_id)
+    if parent_job_id == job_id:
+        raise DispatchError("parent_job_self_reference", "parent_job_id cannot equal job_id")
+    parent = load_dispatch(task_dir, parent_job_id)
+    if parent.get("job_id") != parent_job_id:
+        raise DispatchError("parent_job_invalid", "parent dispatch job_id does not match its record")
+    expected_task_id = str(task.get("id") or task_dir.name)
+    if parent.get("task_id") != expected_task_id:
+        raise DispatchError("parent_job_task_mismatch", "parent dispatch belongs to a different task")
+    if parent.get("task_path") != _repo_relative(task_dir, repo_root):
+        raise DispatchError("parent_job_task_mismatch", "parent dispatch path does not match this task")
+    try:
+        parent_work_package = _normalize_optional_text(parent.get("work_package"))
+    except DispatchError as exc:
+        raise DispatchError("parent_job_invalid", "parent dispatch has an invalid work_package") from exc
+    if parent_work_package != work_package:
+        raise DispatchError(
+            "parent_job_work_package_mismatch",
+            "parent dispatch must use the same work_package",
+        )
+
+
+def _validate_work_package(
+    task: dict[str, Any],
+    role: str,
+    work_package: Any,
+    *,
+    allow_task_handoff: bool = False,
+) -> None:
     current = task.get("current_work_package")
     normalized = _normalize_optional_text(work_package)
-    if role in EXECUTION_ROLES:
+    if role in EXECUTION_ROLES and not allow_task_handoff:
         if not normalized:
             raise DispatchError("missing_work_package", f"{role} dispatch requires work_package")
         if normalized != current:
@@ -1977,10 +1862,11 @@ def _generated_job_id(
     role: str,
     profile: str,
     work_package: str | None,
+    parent_job_id: str | None,
     objective: str,
 ) -> str:
     payload = json.dumps(
-        [task_name, revision, role, profile, work_package, objective],
+        [task_name, revision, role, profile, work_package, parent_job_id, objective],
         ensure_ascii=False,
         separators=(",", ":"),
     )

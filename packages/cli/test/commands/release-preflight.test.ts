@@ -24,7 +24,13 @@ const packedCliRequiredFiles = [
   "package/dist/templates/trellis/scripts/hermes/experiment.py",
   "package/dist/templates/trellis/scripts/hermes/runner.py",
   "package/dist/templates/trellis/scripts/hermes/report.py",
+  "package/dist/templates/trellis/scripts/common/closure.py",
+  "package/dist/templates/trellis/scripts/common/dispatch.py",
+  "package/dist/templates/trellis/hermes/schemas/result-envelope.schema.json",
   "package/dist/templates/shared-hooks/hermes-runtime-guard.py",
+  "package/dist/templates/shared-hooks/inject-workflow-state.py",
+  "package/dist/templates/common/commands/status.md",
+  "package/dist/templates/common/commands/handoff.md",
 ];
 
 const packedCoreRequiredFiles = [
@@ -290,6 +296,10 @@ describe("release-preflight verify-packed-cli", () => {
       missingFile: "package/dist/templates/trellis/scripts/hermes/runner.py",
     },
     { label: "COPYRIGHT", missingFile: "package/COPYRIGHT" },
+    {
+      label: "the handoff command template",
+      missingFile: "package/dist/templates/common/commands/handoff.md",
+    },
   ])("fails when packed CLI is missing $label", ({ missingFile }) => {
     const cliPkg = JSON.parse(fs.readFileSync(cliPkgPath, "utf-8")) as {
       name: string;

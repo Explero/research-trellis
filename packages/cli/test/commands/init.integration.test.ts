@@ -30,7 +30,7 @@ import { init } from "../../src/commands/init.js";
 import { VERSION } from "../../src/constants/version.js";
 import { DIR_NAMES, FILE_NAMES, PATHS } from "../../src/constants/paths.js";
 import { collectPlatformTemplates } from "../../src/configurators/index.js";
-import { computeHash } from "../../src/utils/template-hash.js";
+import { computeHash, loadHashes } from "../../src/utils/template-hash.js";
 import { execSync } from "node:child_process";
 
 // eslint-disable-next-line @typescript-eslint/no-empty-function
@@ -324,6 +324,12 @@ describe("init() integration", () => {
     expect(fs.existsSync(path.join(tmpDir, ".github", "copilot"))).toBe(false);
     expect(fs.existsSync(path.join(tmpDir, ".factory"))).toBe(false);
     expect(fs.existsSync(path.join(tmpDir, ".pi"))).toBe(false);
+    const claudeEntry = fs.readFileSync(path.join(tmpDir, "CLAUDE.md"), "utf-8");
+    expect(claudeEntry.length).toBeLessThan(300);
+    expect(claudeEntry).toContain("AGENTS.md");
+    expect(claudeEntry).toContain(".trellis/project/PROJECT_INDEX.md");
+    expect(claudeEntry).toContain("Task Capsule");
+    expect(claudeEntry).toContain("HANDOFF.md");
     expect(
       fs.existsSync(
         path.join(tmpDir, ".claude", "skills", "trellis-meta", "SKILL.md"),
@@ -340,6 +346,16 @@ describe("init() integration", () => {
         ),
       ),
     ).toBe(true);
+  });
+
+  it("preserves an existing root CLAUDE.md even during force init", async () => {
+    const existing = "# Team Claude instructions\n\nKeep this file.\n";
+    fs.writeFileSync(path.join(tmpDir, "CLAUDE.md"), existing, "utf-8");
+
+    await init({ yes: true, claude: true, force: true });
+
+    expect(fs.readFileSync(path.join(tmpDir, "CLAUDE.md"), "utf-8")).toBe(existing);
+    expect(loadHashes(tmpDir)).not.toHaveProperty("CLAUDE.md");
   });
 
   it("#3 multi platform creates all selected platform directories", async () => {

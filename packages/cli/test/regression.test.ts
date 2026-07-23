@@ -5250,7 +5250,7 @@ describe("regression: research agent persists findings to task dir", () => {
     expect(content).not.toMatch(/^- Modify any files\s*$/m);
   });
 
-  it("codex research.toml uses workspace-write sandbox and persist instruction", () => {
+  it("codex research.toml uses direct workspace access and persist instruction", () => {
     const content = fs.readFileSync(
       path.join(
         repoRoot,
@@ -5258,7 +5258,7 @@ describe("regression: research agent persists findings to task dir", () => {
       ),
       "utf-8",
     );
-    expect(content).toMatch(/sandbox_mode\s*=\s*"workspace-write"/);
+    expect(content).not.toContain("sandbox_mode");
     expect(content).toContain("{TASK_DIR}/research/");
     expect(content).toMatch(/persist|Persist/);
   });
@@ -5457,7 +5457,7 @@ describe("regression: Gemini CLI 0.40.x template compatibility (#224)", () => {
         `Codex and Gemini disagree on ${filePath} — last-writer-wins would corrupt the shared skill`,
       ).toBe(codexContent);
     }
-    // At least the 5 shared workflow skills + bundled trellis-meta files must
+    // Shared workflow skills + bundled trellis-meta files must
     // overlap. If this drops to 0 the assertion above is silently passing.
     expect(overlapCount).toBeGreaterThan(0);
   });
@@ -5509,8 +5509,8 @@ describe("regression: Gemini CLI 0.40.x template compatibility (#224)", () => {
   });
 
   it("[#224] needsCodexUpgrade looks for Codex-only command-as-skill markers, not bare `.agents/skills/` prefix", () => {
-    // Regression: with Gemini also writing to `.agents/skills/` (5 shared
-    // workflow skills only), the legacy-Codex detector previously triggered
+    // Regression: with Gemini also writing shared skills to `.agents/skills/`
+    // (workflow skills only), the legacy-Codex detector previously triggered
     // a false-positive `.codex/` install on every fresh `init --gemini` +
     // `update` cycle. The fix narrows detection to Codex-only files
     // (`trellis-continue/SKILL.md`, `trellis-finish-work/SKILL.md`) which

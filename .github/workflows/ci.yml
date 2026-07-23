@@ -115,7 +115,13 @@ jobs:
             "dist/templates/trellis/scripts/hermes/experiment.py",
             "dist/templates/trellis/scripts/hermes/runner.py",
             "dist/templates/trellis/scripts/hermes/report.py",
+            "dist/templates/trellis/scripts/common/closure.py",
+            "dist/templates/trellis/scripts/common/dispatch.py",
+            "dist/templates/trellis/hermes/schemas/result-envelope.schema.json",
             "dist/templates/shared-hooks/hermes-runtime-guard.py",
+            "dist/templates/shared-hooks/inject-workflow-state.py",
+            "dist/templates/common/commands/status.md",
+            "dist/templates/common/commands/handoff.md",
           ];
           const missingCliFiles = requiredCliFiles.filter(
             (file) => !fs.existsSync(path.join(cliRoot, file)),

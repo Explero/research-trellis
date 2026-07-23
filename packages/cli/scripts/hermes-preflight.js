@@ -142,40 +142,13 @@ export function checkHookMatcherIncludes(repoRoot = DEFAULT_REPO_ROOT) {
       messages.push(`hook matcher missing ${matcher}`);
     }
   }
-  if (!content.includes("cannot safely parse Bash")) {
-    messages.push("Bash write parsing must fail closed when targets are unclear");
+  if (!content.includes("BASH_EXECUTION_ROLES")) {
+    messages.push("Bash execution role boundary is missing");
   }
   return result("Hermes hook matcher", messages.length === 0, messages);
 }
 
-export function checkSecurityGateDocumentation(repoRoot = DEFAULT_REPO_ROOT) {
-  const docPath = path.join(repoRoot, "docs/hermes_deployment_preflight.md");
-  if (!fs.existsSync(docPath)) {
-    return result("Hermes security gate docs", false, [
-      "missing docs/hermes_deployment_preflight.md",
-    ]);
-  }
-  const content = fs.readFileSync(docPath, "utf-8");
-  const required = [
-    "deployment candidate hardening",
-    "Bash",
-    "fail closed",
-    "allowed_commands",
-    "not a strong command sandbox",
-    "approval_records",
-    "human/root",
-    "external human/root approval",
-    "JSONL",
-    "not tamper-proof",
-    "not an OS sandbox",
-  ];
-  const messages = required
-    .filter((text) => !content.includes(text))
-    .map((text) => `deployment docs must mention: ${text}`);
-  return result("Hermes security gate docs", messages.length === 0, messages);
-}
-
-export function checkSandboxConfiguration(repoRoot = DEFAULT_REPO_ROOT) {
+export function checkLocalRunnerConfiguration(repoRoot = DEFAULT_REPO_ROOT) {
   const configPath = path.join(
     repoRoot,
     "packages/cli/src/templates/trellis/hermes/config.yaml",
@@ -184,39 +157,26 @@ export function checkSandboxConfiguration(repoRoot = DEFAULT_REPO_ROOT) {
     repoRoot,
     "packages/cli/src/templates/trellis/hermes/experiments/experiment.yaml",
   );
-  const docPath = path.join(repoRoot, "docs/hermes_deployment_preflight.md");
   const messages = [];
-  for (const requiredPath of [configPath, experimentPath, docPath]) {
+  for (const requiredPath of [configPath, experimentPath]) {
     if (!fs.existsSync(requiredPath)) {
-      messages.push(`missing sandbox boundary file: ${rel(repoRoot, requiredPath)}`);
+      messages.push(`missing local runner file: ${rel(repoRoot, requiredPath)}`);
     }
   }
   const config = fs.existsSync(configPath) ? fs.readFileSync(configPath, "utf-8") : "";
   const experiment = fs.existsSync(experimentPath) ? fs.readFileSync(experimentPath, "utf-8") : "";
-  const docs = fs.existsSync(docPath) ? fs.readFileSync(docPath, "utf-8") : "";
-  for (const [name, content] of [
-    ["config.yaml", config],
-    ["experiment.yaml", experiment],
-  ]) {
-    for (const text of ["sandbox:", "mode:", "required:"]) {
-      if (!content.includes(text)) {
-        messages.push(`${name} must include sandbox ${text}`);
-      }
+  if (!config.includes("runs directly in the project workspace")) {
+    messages.push("config.yaml must describe direct project-workspace execution");
+  }
+  for (const text of ["allowed_commands:", "artifact_dir:"]) {
+    if (!experiment.includes(text)) {
+      messages.push(`experiment.yaml must include ${text}`);
     }
   }
-  for (const text of [
-    "sandbox.required=true",
-    "mode=none",
-    "container",
-    "external",
-    "not an OS sandbox",
-    "not a strong command sandbox",
-  ]) {
-    if (!docs.includes(text)) {
-      messages.push(`deployment docs must mention sandbox boundary: ${text}`);
-    }
+  if (config.includes("sandbox:") || experiment.includes("sandbox:")) {
+    messages.push("local runner templates must not configure a sandbox");
   }
-  return result("Hermes sandbox configuration", messages.length === 0, messages);
+  return result("Hermes local runner configuration", messages.length === 0, messages);
 }
 
 export function checkPythonCompile(repoRoot = DEFAULT_REPO_ROOT) {
@@ -303,7 +263,7 @@ function usage() {
   return [
     "Usage: node packages/cli/scripts/hermes-preflight.js [--quick] [--skip-python-compile]",
     "",
-    "--quick skips template vitest, typecheck, and build, but keeps security/file/cache checks.",
+    "--quick skips template vitest, typecheck, and build, but keeps template/file/cache checks.",
   ].join("\n");
 }
 
@@ -314,8 +274,7 @@ export function runPreflight(options = {}) {
     checkHermesRequiredFiles(repoRoot),
     checkNoPythonCaches(repoRoot),
     checkHookMatcherIncludes(repoRoot),
-    checkSecurityGateDocumentation(repoRoot),
-    checkSandboxConfiguration(repoRoot),
+    checkLocalRunnerConfiguration(repoRoot),
   ];
 
   if (options.skipPythonCompile) {
@@ -374,16 +333,13 @@ async function main() {
   }
 
   console.log(
-    `Hermes deployment preflight${args.quick ? " (quick mode)" : ""}`,
+    `Hermes local workflow preflight${args.quick ? " (quick mode)" : ""}`,
   );
   console.log(
-    "Scope: deployment candidate hardening, not production ready.",
+    "Scope: lightweight local research collaboration.",
   );
   console.log(
-    "Security gate: Bash write parsing is best-effort and fails closed; allowed_commands is not a strong command sandbox.",
-  );
-  console.log(
-    "Approval and storage: approval_records require external human/root approval; JSONL is not tamper-proof storage. This is not an OS sandbox.",
+    "Runner: commands execute in the current project workspace; allowed_commands records the experiment contract.",
   );
   const checks = runPreflight(args);
   for (const check of checks) {

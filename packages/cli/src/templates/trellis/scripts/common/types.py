@@ -60,6 +60,7 @@ class TaskData(TypedDict, total=False):
     research_route: str
     research_change_fields: list[str]
     grill_completed: bool
+    decision_ref: str | None
     constraints: dict
     work_packages: list[dict]
     current_work_package: str | None

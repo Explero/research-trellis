@@ -1,5 +1,14 @@
 # Code Quality Check
 
+The main agent triggers this skill only after a code, test, or configuration
+work package changes implementation. A `runner` executes tests, lint, typecheck,
+and builds; an independent `reviewer:quality` judges correctness, scope, and
+regressions. The coder's own success statement is not acceptance.
+
+Pure experiment and literature packages skip this skill. Code quality checks
+do not approve evidence, statistics, claims, or task closure; those belong to
+the matching reviewer profile.
+
 Comprehensive quality verification for recently written code. Combines spec compliance, cross-layer safety, and pre-commit checks.
 
 ---

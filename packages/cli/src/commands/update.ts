@@ -33,6 +33,11 @@ import { compareVersions } from "../utils/compare-versions.js";
 import { toPosix } from "../utils/posix.js";
 import { setupProxy } from "../utils/proxy.js";
 import { emptyTaskJson } from "../utils/task-json.js";
+import {
+  isTrellisCodexConfigMerge,
+  mergeTrellisCodexConfig,
+} from "../utils/codex-config.js";
+import { warnCodexVersion } from "../utils/codex-version.js";
 
 // Import templates for comparison
 import {
@@ -687,6 +692,31 @@ function collectTemplateFiles(
     }
   }
 
+  const codexConfigPath = ".codex/config.toml";
+  const codexConfig = files.get(codexConfigPath);
+  const existingCodexConfigPath = path.join(cwd, codexConfigPath);
+  if (codexConfig && fs.existsSync(existingCodexConfigPath)) {
+    try {
+      const existing = fs.readFileSync(existingCodexConfigPath, "utf-8");
+      files.set(
+        codexConfigPath,
+        mergeTrellisCodexConfig(existing, codexConfig).content,
+      );
+    } catch {
+      // The normal update conflict path handles unreadable project config.
+    }
+  }
+
+  // A pre-existing root CLAUDE.md has no Trellis write receipt. Keep it
+  // outside update ownership even under --force.
+  const rootClaudePath = "CLAUDE.md";
+  if (
+    fs.existsSync(path.join(cwd, rootClaudePath)) &&
+    !loadHashes(cwd)[rootClaudePath]
+  ) {
+    files.delete(rootClaudePath);
+  }
+
   preserveExistingClaudeStatusLine(cwd, files);
 
   // Apply update.skip from config.yaml (unless bypassed for breaking release)
@@ -808,10 +838,14 @@ function analyzeChanges(
         const storedHash = hashes[relativePath];
         const currentHash = computeHash(existingContent);
 
+        const safeCodexConfigMerge =
+          relativePath === ".codex/config.toml" &&
+          isTrellisCodexConfigMerge(existingContent, newContent);
         if (
           (storedHash && storedHash === currentHash) ||
           (!storedHash &&
-            isKnownUntrackedTemplate(relativePath, existingContent))
+            isKnownUntrackedTemplate(relativePath, existingContent)) ||
+          safeCodexConfigMerge
         ) {
           // Either the tracked hash matches, or this is a known pristine template
           // from before the path was hash-tracked. Safe to auto-update.
@@ -1005,7 +1039,7 @@ function backupFile(
 const BACKUP_DIRS = ALL_MANAGED_DIRS;
 
 /** Root-level managed files to include in update backups. */
-const BACKUP_FILES = [FILE_NAMES.AGENTS] as const;
+const BACKUP_FILES = [FILE_NAMES.AGENTS, "CLAUDE.md"] as const;
 
 /**
  * Patterns to exclude from backup (user data that shouldn't be backed up)
@@ -1872,6 +1906,9 @@ export async function update(options: UpdateOptions): Promise<void> {
   // the prune step would otherwise consider orphans (codex hasn't been added
   // to configuredPlatforms yet at this point).
   const codexUpgradeNeeded = needsCodexUpgrade(cwd);
+  if (codexUpgradeNeeded || getConfiguredPlatforms(cwd).has("codex")) {
+    warnCodexVersion();
+  }
   if (codexUpgradeNeeded) {
     console.log(
       chalk.yellow(

@@ -38,6 +38,46 @@ research-design, or scope decision remains unresolved, or when the user
 explicitly asks for one. Task size, task age, and the mere presence of multiple
 work packages are not reasons to start a grill.
 
+Prefer truth and evidence over agreement. State material assumptions and
+uncertainty, and raise evidence-backed disagreement when it affects the
+conclusion. The user approves research trade-offs. A prompt is guidance, not a
+replacement for the structured task, decision, experiment, or evidence record.
+
+Use three intervention levels without adding workflow stages:
+
+* ordinary reversible work: execute directly with the current task boundary;
+* limited uncertainty: state the material assumption, then proceed;
+* high-risk research change: pause for focused discussion and user approval,
+  then record the decision before validation.
+
+If evidence conflicts or a critical assumption fails, mark the task blocked
+and continue only through an approved amendment. Do not apply this pause or a
+grill gate to ordinary delivery or frozen-protocol execution.
+
+Treat each request as one of three cases before routing it:
+
+* a new actionable task: perform the full short analysis and record 1-4
+  observable-result work packages after task-creation consent;
+* an in-scope continuation: keep the current package and do not regenerate the
+  plan merely because the user added detail;
+* a scope or research-contract change: use a bounded amendment, revalidate, and
+  require human approval for high-risk research fields.
+
+A newly completed high-risk exploration grill must carry a repository- or
+task-relative `decision_ref` to an existing `prd.md`, `design.md`, or equivalent
+record. That record contains Decision, Rationale, Evidence, Alternatives, and
+Failure Conditions. Events and the Task Capsule carry only the reference, never
+the decision body. Legacy tasks with `grill_completed=true` and no reference
+remain valid with a warning; the next research amendment clears the old
+reference and requires a fresh decision.
+
+Only an exploration task whose `research_change_fields` includes `dataset`,
+`split`, or `preprocessing` requires `experiment.yaml.data_preflight`. Validate
+its repository-local input manifest or data path and hash, plus a checks record
+covering schema, missing values, duplicates, and split leakage. Runner declares
+both files with `--input` before command execution. All other tasks have no new
+data-preflight step.
+
 At session start, use the project-context index for `.trellis/project/` before
 accepting or splitting a request. Read the relevant background, research-plan,
 and constraint document on demand; their contents must not be copied into the
@@ -49,12 +89,58 @@ context for its role and profile only after explicit task refs and context pins.
 Use the remaining refs for the task-specific spec or evidence that the worker
 needs. Do not add all project documents merely because they exist.
 
+## 1.1 Routing Priority
+
+Use this order for every request:
+
+1. current `task.json`, validated closure state, Task Capsule, and RecordBus;
+2. the user's natural-language intent and the current work-package boundary;
+3. explicit command or skill requests as a fallback or an override of the
+   requested action, never as a way to bypass task state or gates.
+
+Do not wait for the user to invoke a command before planning, dispatching,
+running review, recording a plan change, requesting a required handoff, or
+closing a task. Route those actions from the current state. The user-facing
+`grill-me` and `update-spec` skills remain optional explicit entry points, but
+the main agent must also trigger their underlying process when the state calls
+for focused decision resolution or durable project knowledge. It may lead the
+user discussion itself, but any task or spec write must be delegated through a
+validated planner or coder dispatch; the main agent only verifies the result.
+For pauses, phase changes, blocked work, or context compaction, request a
+compact `HANDOFF.md` update. It supports recovery but never grants authority,
+changes task state, or blocks task completion.
+
+## 1.2 Research Skill Ownership
+
+Skills are loaded on demand from the recorded phase and the actual work, with
+no fixed per-turn count. When several are necessary, use them in dependency
+order and reuse their recorded outputs by reference.
+
+* Main leads `brainstorm` only for unresolved requirements and `grill-me` only
+  for a material research decision. A planner may propose options but cannot
+  approve the user's research choice.
+* Main triggers `before-dev` for code work; coder uses it. TDD is opt-in through
+  the recorded strategy, with coder implementing and runner executing tests.
+* Main triggers code checking after implementation; runner executes tests and
+  builds, while an independent reviewer judges quality. Code checking never
+  establishes scientific evidence.
+* Main triggers `hermes-research` for formal runs or evidence. Runner records
+  runs and artifacts; reviewer judges evidence, statistics, and claims.
+* `break-loop` is for repeated technical failures. A negative scientific result
+  goes to planner/reviewer analysis and must not be treated as a software bug.
+* Software architecture analysis is explicit and does not decide scientific
+  model architecture.
+* Main may identify durable knowledge, but `update-spec` writes through
+  `coder:configuration` and is independently reviewed. One run is insufficient.
+* Main requests handoff writing through `coder:configuration`. At closure,
+  reviewer checks closure and runner performs final validation/archive actions.
+* `trellis-meta` is reserved for changes to Trellis itself.
+
 ## 2. Main Agent Hard Limits
 
 As Main Agent, you must not directly:
 
-* write files with `Edit`, `Write`, `MultiEdit`, `apply_patch`, shell
-  redirection, or write-like scripts;
+* write files with `Edit`, `Write`, `MultiEdit`, `apply_patch`, or `Bash`;
 * modify source code;
 * modify metrics;
 * modify dataset splits;
@@ -71,9 +157,10 @@ As Main Agent, you must not directly:
 * overwrite subagent records to make the state look cleaner;
 * rely on previous chat history as the source of truth.
 
-Allowed main-agent shell inspection is intentionally narrow: `git status`,
-`git diff ...`, `git log ...`, and `cat` / `jq` over RecordBus JSONL under
-`.trellis/tasks/<task>/hermes/` or `.ai/records/`.
+Allowed main-agent Bash is intentionally narrow: deterministic `task.py`,
+`dispatch.py`, and listed `closure.py` control commands, plus limited
+read-only `git status`, `git diff`, `git log`, and branch inspection. Prefer
+`Read` for records; `cat` and `jq` are not part of the coordinator surface.
 
 If code must be changed, route the task to a **coder subagent** with explicit allowed files, forbidden files, task scope, and required record output.
 
@@ -118,8 +205,8 @@ subagent_context_policy = validated_dispatch_only
 ```
 
 The main agent creates a validated dispatch and passes only its `job_id` to
-Claude Agent. Codex native dispatch is advisory; enforced Codex work uses the
-strict `dispatch.py run` wrapper. The canonical body contains role/profile,
+Claude Agent. Codex native dispatch is advisory; hooks and deterministic
+records provide the supported gates. The canonical body contains role/profile,
 revision, package, objective, and at most three refs within 2000 characters.
 
 The subagent reads a referenced file only when the assignment needs it. Full
@@ -203,9 +290,10 @@ safety, closure, or statistics. Evidence judgment must not patch code, set
 
 `PreToolUse` is the role firewall. For Claude Agent it accepts only a validated
 `job_id`, rejects async dispatch, and replaces the original prompt with the
-canonical body. `SubagentStop` validates the Result Envelope; `PostToolUse`
-returns only its sanitized summary. Explicit writers still pass through
-`task_card` and file-boundary checks.
+canonical body. `Edit` and `Write` are checked against `allowed_files` before
+they run. Bash has only role and bounded-command authorization; `SubagentStop`
+and `Stop` validate records and closure conditions afterward. These checks are
+not an OS sandbox, malicious-process isolation, or arbitrary-shell defense.
 
 `Stop` is read-only. It reads RecordBus, git diff, and `run_manifest.jsonl`.
 It must not write records or run tests.

@@ -4,10 +4,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
-import os
 import re
-import shlex
-import shutil
 import subprocess
 import sys
 import time
@@ -17,15 +14,12 @@ from typing import Any
 from runtime import (
     add_seconds,
     append_record,
-    container_image_error,
     find_task_card,
     format_timestamp,
     make_record_id,
     now_utc,
     normalize_path,
     parse_interval_seconds,
-    parse_bool,
-    parse_container_runtime_command,
     parse_timestamp,
     read_jsonl,
     record_path,
@@ -35,6 +29,7 @@ from runtime import (
     run_manifest_path,
     task_card_error,
     validate_experiment_config,
+    validate_data_preflight,
     validate_run_manifest_records,
 )
 
@@ -93,8 +88,13 @@ def heartbeat_record(
     }
 
 
-def checkpoint_record(args: argparse.Namespace) -> dict[str, Any]:
-    return {
+def checkpoint_record(
+    args: argparse.Namespace,
+    parent_job_id: Any = None,
+    *,
+    has_parent_field: bool = False,
+) -> dict[str, Any]:
+    record: dict[str, Any] = {
         "type": "checkpoint",
         "id": make_record_id("cp", args.job_id),
         "timestamp": now_utc(),
@@ -104,10 +104,20 @@ def checkpoint_record(args: argparse.Namespace) -> dict[str, Any]:
         "evidence_refs": [],
         "open_items": [],
     }
+    if has_parent_field:
+        record["parent_job_id"] = parent_job_id
+    return record
 
 
-def result_record(args: argparse.Namespace, manifest_id: str, outputs: list[str]) -> dict[str, Any]:
-    return {
+def result_record(
+    args: argparse.Namespace,
+    manifest_id: str,
+    outputs: list[str],
+    parent_job_id: Any = None,
+    *,
+    has_parent_field: bool = False,
+) -> dict[str, Any]:
+    record: dict[str, Any] = {
         "type": "result",
         "id": make_record_id("rs", args.job_id),
         "timestamp": now_utc(),
@@ -119,6 +129,9 @@ def result_record(args: argparse.Namespace, manifest_id: str, outputs: list[str]
         "risk_flags": [],
         "handoff": f"run manifest {manifest_id}",
     }
+    if has_parent_field:
+        record["parent_job_id"] = parent_job_id
+    return record
 
 
 def rejection_record(
@@ -178,30 +191,6 @@ def env_summary() -> dict[str, str]:
     }
 
 
-def minimal_subprocess_env() -> dict[str, str]:
-    allowed_names = {
-        "HOME",
-        "LANG",
-        "LC_ALL",
-        "PATH",
-        "PYTHONPATH",
-        "SYSTEMROOT",
-        "TMPDIR",
-        "TEMP",
-        "TMP",
-        "USERPROFILE",
-        "VIRTUAL_ENV",
-    }
-    env: dict[str, str] = {}
-    for name in allowed_names:
-        value = os.environ.get(name)
-        if value:
-            env[name] = value
-    if "PATH" not in env:
-        env["PATH"] = os.defpath
-    return env
-
-
 def command_display(command: list[str]) -> str:
     return " ".join(command)
 
@@ -224,61 +213,6 @@ def command_allowed(command: list[str], allowed_commands: Any) -> bool:
     return False
 
 
-def sandbox_execution_settings(experiment: dict[str, Any]) -> tuple[dict[str, Any], list[str]]:
-    sandbox = experiment.get("sandbox", {"mode": "none", "required": False})
-    if not isinstance(sandbox, dict):
-        return {}, ["sandbox must be a mapping"]
-    mode = sandbox.get("mode", "none")
-    required = parse_bool(sandbox.get("required", False))
-    if required is None:
-        return {}, ["sandbox.required must be true or false"]
-    if mode not in {"none", "container", "external"}:
-        return {}, ["sandbox.mode must be one of none, container, external"]
-    if required and mode == "none":
-        return {}, ["sandbox.required=true cannot use mode=none"]
-    settings: dict[str, Any] = {"mode": mode, "required": required}
-    if mode == "none":
-        return settings, []
-
-    command = sandbox.get("command")
-    if not isinstance(command, str) or not command.strip():
-        command = "docker" if mode == "container" else ""
-    if not command:
-        return settings, ["sandbox mode external requires sandbox.command"]
-    if mode == "container":
-        runtime_command, command_error = parse_container_runtime_command(command)
-        if command_error is not None:
-            return settings, [command_error]
-    else:
-        try:
-            runtime_command = shlex.split(command)
-        except ValueError as exc:
-            return settings, [f"sandbox.command is invalid: {exc}"]
-        if not runtime_command:
-            return settings, [f"sandbox mode {mode} requires sandbox.command"]
-    executable = runtime_command[0]
-    if shutil.which(executable) is None:
-        return settings, [f"sandbox mode {mode} not available: command {executable} not found"]
-    settings["runtime_command"] = runtime_command
-    if mode == "container":
-        image = sandbox.get("image")
-        image_error = container_image_error(image)
-        if image_error is not None:
-            return settings, [image_error]
-        if not isinstance(image, str):
-            return settings, ["sandbox mode container requires sandbox.image"]
-        settings["image"] = image.strip()
-        return settings, []
-    return settings, [
-        f"sandbox mode {mode} availability was checked, but this runner does not provide an OS sandbox"
-    ]
-
-
-def sandbox_gate_errors(experiment: dict[str, Any]) -> list[str]:
-    _, errors = sandbox_execution_settings(experiment)
-    return errors
-
-
 def redact_secret_text(value: str) -> str:
     secret_name_pattern = re.compile(
         r"\b[A-Z0-9_]*(?:SECRET|TOKEN|PASSWORD|PASSWD|PRIVATE_KEY|API_KEY|ACCESS_KEY)[A-Z0-9_]*\b"
@@ -288,67 +222,6 @@ def redact_secret_text(value: str) -> str:
 
 def manifest_command(command: list[str]) -> list[str]:
     return [redact_secret_text(part) for part in command]
-
-
-def container_workdir(root: Path, cwd: Path) -> str:
-    relative = relative_to_root(root, cwd)
-    if relative in {"", "."}:
-        return "/workspace"
-    return f"/workspace/{relative}"
-
-
-def containerized_command(
-    command: list[str],
-    root: Path,
-    cwd: Path,
-    sandbox: dict[str, Any],
-) -> list[str]:
-    runtime_command = sandbox.get("runtime_command")
-    image = sandbox.get("image")
-    if not isinstance(runtime_command, list) or not all(
-        isinstance(part, str) and part for part in runtime_command
-    ):
-        raise ValueError("container runtime command is not configured")
-    if not isinstance(image, str) or not image.strip():
-        raise ValueError("container image is not configured")
-    return [
-        *runtime_command,
-        "run",
-        "--rm",
-        "-v",
-        f"{root.resolve(strict=False).as_posix()}:/workspace",
-        "-w",
-        container_workdir(root, cwd),
-        image,
-        *command,
-    ]
-
-
-def command_for_execution(
-    command: list[str],
-    root: Path,
-    cwd: Path,
-    sandbox: dict[str, Any],
-) -> list[str]:
-    if sandbox.get("mode") == "container":
-        return containerized_command(command, root, cwd, sandbox)
-    return command
-
-
-def manifest_sandbox(sandbox: dict[str, Any]) -> dict[str, str] | None:
-    mode = sandbox.get("mode")
-    if mode == "none":
-        return None
-    entry: dict[str, str] = {"mode": str(mode)}
-    image = sandbox.get("image")
-    if isinstance(image, str) and image.strip():
-        entry["image"] = redact_secret_text(image.strip())
-    runtime_command = sandbox.get("runtime_command")
-    if isinstance(runtime_command, list) and runtime_command:
-        runtime = runtime_command[0]
-        if isinstance(runtime, str) and runtime.strip():
-            entry["runtime"] = redact_secret_text(Path(runtime).name)
-    return entry
 
 
 def resolve_repo_path(root: Path, base: Path, value: str, label: str) -> tuple[Path | None, str | None]:
@@ -406,11 +279,6 @@ def run_command(args: argparse.Namespace) -> int:
         for error in experiment_load_errors:
             print(error, file=sys.stderr)
         return 1
-    sandbox, sandbox_errors = sandbox_execution_settings(experiment)
-    if sandbox_errors:
-        for error in sandbox_errors:
-            print(error, file=sys.stderr)
-        return 1
     if not command_allowed(command, experiment.get("allowed_commands")):
         print(
             f"command not allowed by experiment allowed_commands: {command_display(command)}",
@@ -424,13 +292,6 @@ def run_command(args: argparse.Namespace) -> int:
         print("invalid --heartbeat-interval; use values like 30s, 5m, or 1h", file=sys.stderr)
         return 2
 
-    hermes_dir = worker_path.parent
-    runs_dir = hermes_dir / "runs"
-    run_id = make_record_id("run", job_id)
-    run_dir = runs_dir / run_id
-    run_dir.mkdir(parents=True, exist_ok=True)
-    stdout_path = run_dir / "stdout.log"
-    stderr_path = run_dir / "stderr.log"
     if args.cwd is None:
         cwd = root
     else:
@@ -449,14 +310,51 @@ def run_command(args: argparse.Namespace) -> int:
         for error in path_errors:
             print(error, file=sys.stderr)
         return 2
-    try:
-        execution_command = command_for_execution(command, root, cwd, sandbox)
-    except ValueError as exc:
-        print(str(exc), file=sys.stderr)
+    preflight_paths, preflight_errors = validate_data_preflight(exp_path, experiment)
+    if preflight_errors:
+        for error in preflight_errors:
+            print(error, file=sys.stderr)
         return 1
-
+    declared_inputs = {
+        resolved
+        for value in inputs
+        for resolved, error in [resolve_repo_path(root, cwd, value, "input")]
+        if error is None and resolved is not None
+    }
+    missing_preflight_inputs = [
+        path.relative_to(root).as_posix()
+        for path in preflight_paths
+        if path not in declared_inputs
+    ]
+    if missing_preflight_inputs:
+        print(
+            "data_preflight files must be declared with --input: "
+            + ", ".join(missing_preflight_inputs),
+            file=sys.stderr,
+        )
+        return 1
+    # Snapshot declared input hashes before process launch. The command may
+    # legitimately transform an input later, but the manifest must preserve
+    # the exact pre-run material it received.
+    input_entries = [path_entry(root, cwd, value, "input") for value in inputs]
+    hermes_dir = worker_path.parent
+    runs_dir = hermes_dir / "runs"
+    run_id = make_record_id("run", job_id)
+    run_dir = runs_dir / run_id
+    run_dir.mkdir(parents=True, exist_ok=True)
+    stdout_path = run_dir / "stdout.log"
+    stderr_path = run_dir / "stderr.log"
     started_at = now_utc()
-    append_record(worker_path, checkpoint_record(args))
+    has_parent_field = "parent_job_id" in task_card
+    parent_job_id = task_card.get("parent_job_id")
+    append_record(
+        worker_path,
+        checkpoint_record(
+            args,
+            parent_job_id,
+            has_parent_field=has_parent_field,
+        ),
+    )
     append_record(worker_path, heartbeat_record(args.job_id, args.checkpoint, args.summary, interval_seconds))
     last_heartbeat = time.monotonic()
     launch_error: OSError | None = None
@@ -464,11 +362,10 @@ def run_command(args: argparse.Namespace) -> int:
     with stdout_path.open("wb") as stdout_handle, stderr_path.open("wb") as stderr_handle:
         try:
             process = subprocess.Popen(
-                execution_command,
+                command,
                 cwd=str(cwd),
                 stdout=stdout_handle,
                 stderr=stderr_handle,
-                env=minimal_subprocess_env(),
             )
         except OSError as exc:
             launch_error = exc
@@ -499,7 +396,7 @@ def run_command(args: argparse.Namespace) -> int:
         "command": manifest_command(command),
         "cwd": relative_to_root(root, cwd),
         "env_summary": env_summary(),
-        "inputs": [path_entry(root, cwd, value, "input") for value in inputs],
+        "inputs": input_entries,
         "outputs": output_entries + log_entries,
         "exit_code": exit_code,
         "started_at": started_at,
@@ -507,16 +404,22 @@ def run_command(args: argparse.Namespace) -> int:
         "checkpoint": args.checkpoint,
         "resume_from": args.resume_from,
     }
-    sandbox_record = manifest_sandbox(sandbox)
-    if sandbox_record is not None:
-        manifest_record["sandbox"] = sandbox_record
     if launch_error is not None:
         manifest_record["error"] = f"cannot start command: {launch_error}"
     manifest_path = run_manifest_path(root, task)
     append_record(manifest_path, manifest_record)
 
     if exit_code == 0:
-        append_record(worker_path, result_record(args, run_id, [entry["path"] for entry in output_entries]))
+        append_record(
+            worker_path,
+            result_record(
+                args,
+                run_id,
+                [entry["path"] for entry in output_entries],
+                parent_job_id,
+                has_parent_field=has_parent_field,
+            ),
+        )
     else:
         append_record(
             worker_path,

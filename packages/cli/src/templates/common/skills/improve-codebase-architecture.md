@@ -5,6 +5,13 @@ description: "Active codebase architecture analysis and review. Three modes: (A)
 
 # Trellis Improve Codebase Architecture
 
+This is an explicit software-architecture skill. The main agent does not trigger
+it merely because a research task changes a neural-network or algorithmic model
+architecture. Research model decisions belong to a focused grill and
+`planner:research_design` or `planner:method_selection`; this skill applies only
+when module boundaries, interfaces, dependencies, or maintainability need
+guidance or independent review.
+
 This skill operates in three modes depending on context. Read the dispatch prompt to determine which mode applies.
 
 ---

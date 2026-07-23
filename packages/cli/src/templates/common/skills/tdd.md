@@ -2,6 +2,12 @@
 
 Use this skill when the task's chosen development strategy is TDD, or when the user explicitly asks to work test-first.
 
+The main agent triggers it only for deterministic software behavior inside a
+code work package. A `coder` writes tests and implementation; a `runner`
+executes them. TDD may verify data transforms, model interfaces, metrics code,
+and reproducibility utilities, but passing tests do not validate a hypothesis
+or establish experimental evidence.
+
 ## Purpose
 
 Turn a task into observable behavior slices and drive implementation through failing tests first.

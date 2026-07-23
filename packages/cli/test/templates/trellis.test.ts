@@ -222,17 +222,15 @@ describe("trellis template constants", () => {
     expect(block).toMatch(/codex|copilot|gemini|qoder/);
   });
 
-  it("[issue-237] workflow.md in_progress breadcrumb self-exempts implement/check sub-agents", () => {
+  it("[issue-237] workflow.md in_progress breadcrumb prevents recursive sub-agent dispatch", () => {
     // The in_progress breadcrumb may be injected into sub-agent turns on some
     // hosts, so its main-session dispatch guidance must not recursively apply
     // to a sub-agent that is already doing the requested work.
     const block = inProgressBreadcrumb();
     expect(block).toContain("Main-session default");
     expect(block).toContain("Sub-agent self-exemption");
-    expect(block).toContain("already running as `trellis-implement`");
-    expect(block).toContain("do NOT spawn another `trellis-implement`");
-    expect(block).toContain("already running as `trellis-check`");
-    expect(block).toContain("do NOT spawn another `trellis-check`");
+    expect(block).toContain("an active sub-agent never dispatches another worker");
+    expect(block).toContain("immediately close that subagent");
     expect(block).toContain("main session only");
   });
 
@@ -243,8 +241,7 @@ describe("trellis template constants", () => {
     expect(block).toContain("Review-gate contract: explicit-selection-v1");
     expect(block).toContain("Optional review gates status: configured");
     expect(block).toContain("trellis-check");
-    expect(block).toContain("merge if needed");
-    expect(block).toContain("build/test");
+    expect(block).toContain("runner performs final validation/archive actions");
     expect(block).toContain("trellis-code-architecture-review");
     expect(block).toContain("does not by itself enable or block deep-review");
   });
@@ -346,8 +343,9 @@ describe("trellis template constants", () => {
       "utf-8",
     );
     expect(brainstorm).toContain("Do not enter `trellis-grill-me` only because a task is legacy or complex");
-    expect(start).toContain("For a Lean Research Closure task, read the Task Capsule first");
-    expect(start).toContain("legacy or explicitly complex Claude Code tasks");
+    expect(start).toContain("For a Hermes closure task");
+    expect(start).toContain("run `{{PYTHON_CMD}} ./.trellis/scripts/closure.py capsule --task <task>` first");
+    expect(start).toContain("code-heavy complex tasks add `design.md` and `implement.md`");
   });
 
   it("workflow.md planning breadcrumb records Claude Code development strategy decisions before start", () => {
@@ -433,9 +431,6 @@ describe("trellis template constants", () => {
     expect(config).toContain("approval_records");
     expect(config).toContain('experiment: ".trellis/tasks/{task}/hermes/experiment.yaml"');
     expect(config).toContain('run_manifest: ".trellis/tasks/{task}/hermes/run_manifest.jsonl"');
-    expect(config).toContain("sandbox:");
-    expect(config).toContain('mode: "none"');
-    expect(config).toContain("required: false");
     expect(config).toContain("heartbeat_beat");
     expect(config).toContain("heartbeat_watch");
     expect(config).toContain("runner_run");
@@ -448,8 +443,8 @@ describe("trellis template constants", () => {
     expect(config).toContain("service_enqueue");
     expect(config).toContain("service_cancel");
     expect(config).toContain("append-only");
-    expect(config).toContain("deployment candidate hardening");
-    expect(config).toContain("not an OS sandbox");
+    expect(config).toContain("lightweight research collaboration");
+    expect(config).toContain("runs directly in the project workspace");
     expect(config).not.toContain("claim_allowed");
 
     for (const state of [
@@ -530,7 +525,7 @@ describe("trellis template constants", () => {
     expect(recordBus).toContain("provenance");
     expect(recordBus).toContain("audit");
     expect(recordBus).toContain("service queue");
-    expect(recordBus).toContain("not an OS sandbox");
+    expect(recordBus).toContain("lightweight local collaboration tool");
     expect(recordBus).toContain("report.md");
     expect(recordBus).toContain("HumanGate");
 
@@ -599,6 +594,14 @@ describe("trellis template constants", () => {
     expect(templates.get("HERMES_MAIN_AGENT_BOOT_GUARD.md")).toContain(
       "Main Agent / Main Pilot",
     );
+    expect(templates.get("HERMES_MAIN_AGENT_BOOT_GUARD.md")).toContain(
+      "Routing Priority",
+    );
+    expect(templates.get("HERMES_MAIN_AGENT_BOOT_GUARD.md")).toContain(
+      "Do not wait for the user to invoke a command",
+    );
+    expect(workflowMdTemplate).toContain("用户入口优先级");
+    expect(workflowMdTemplate).toContain("主代理也必须在相应条件出现时自动触发");
     expect(templates.get("metrics/metrics_schema.yaml")).toContain("HumanGate");
     expect(templates.get("reports/report.md")).toContain("Core Conclusions");
     expect(templates.get("schemas/result-envelope.schema.json")).toContain(

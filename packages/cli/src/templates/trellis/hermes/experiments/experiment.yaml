@@ -12,9 +12,12 @@ environment:
   shell: "bash"
 allowed_commands:
   - "python3"
-sandbox:
-  mode: "none"
-  required: false
-  image: ""
-  command: ""
 artifact_dir: ".trellis/tasks/{task}/hermes/experiments"
+
+# Exploration tasks changing dataset, split, or preprocessing add:
+# data_preflight:
+#   source: "source name"
+#   version: "version"
+#   input_manifest: "repo/path/to/input-manifest.json"
+#   hash: "sha256:..."
+#   checks_ref: "repo/path/to/data-checks.yaml"

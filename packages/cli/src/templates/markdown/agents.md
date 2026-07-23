@@ -16,6 +16,14 @@ If you're using Codex or another agent-capable tool, additional project-scoped h
 - `.agents/skills/` — reusable Trellis skills
 - `.codex/agents/` — optional custom subagents
 
+## Research Collaboration Contract
+
+- Prefer truth and evidence over agreement. State material assumptions and uncertainty, and raise evidence-backed disagreement when it changes the conclusion.
+- The user approves research trade-offs. Execute ordinary reversible work directly; with limited uncertainty, state the assumption and proceed.
+- Pause for discussion only for high-risk research changes. A prompt cannot replace the structured decision or experiment record required by the workflow.
+- If evidence conflicts or a critical assumption fails, mark the task blocked and use an approved amendment before continuing.
+- Keep context progressive and minimal: start from the Task Capsule and direct references, then read larger records only when needed.
+
 Managed by Trellis. Edits outside this block are preserved; edits inside may be overwritten by a future `research-trellis update`.
 
 <!-- TRELLIS:END -->
