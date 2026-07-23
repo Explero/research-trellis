@@ -60,7 +60,7 @@ python3 ./.trellis/scripts/hermes/validate.py --task "$TASK" --kind claim
 ## 验证记录
 
 - 日期：2026-07-15。
-- 版本：`0.7.1-beta.0`（测试版）。
+- 版本：`0.7.1-beta.1`（测试版）。
 - 更名前基准提交：`9f7dc8497b4782878d6fa7ac3b63eba5bde507df`。
 - 命令：`rg -n -m 1 "REQUIRED_FIELDS|PLAN_CHANGE_DECISION_STATES" packages/cli/src/templates/trellis/scripts/hermes/runtime.py`（记录结构核对）。
 - 结果：必填字段表和计划变更决定值与运行时定义一致；`recordbus.md`（记录总线说明）已标为全局协议路径。

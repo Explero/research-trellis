@@ -65,7 +65,7 @@ python3 ./.trellis/scripts/hermes/dispatch.py status --task "$TASK"
 ## 验证记录
 
 - 日期：2026-07-15。
-- 版本：`0.7.1-beta.0`（测试版）。
+- 版本：`0.7.1-beta.1`（测试版）。
 - 更名前基准提交：`9f7dc8497b4782878d6fa7ac3b63eba5bde507df`。
 - 命令：`rg -n -m 1 "quality gate|missing evidence|approval" packages/cli/src/templates/trellis/scripts/hermes packages/cli/test/templates/hermes-runtime.test.ts`（失败关闭分支核对）。
 - 结果：质量门禁、缺失证据和审批失败分支都有实现或测试依据。

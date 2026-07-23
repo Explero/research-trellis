@@ -71,7 +71,7 @@ trust_level = "trusted"
 
 `codex.dispatch_mode: inline`（Codex 主会话路由）是显式兼容模式，只改变普通 Trellis 提示路由，不会绕过已启用的 Hermes 写入和结束门禁，也不会提供操作系统隔离。
 
-`v0.7.1-beta.0`（当前测试版）的 closure 任务仍可在各平台读取 `Task Capsule`（紧凑任务上下文），但可执行的 `Agent Context Firewall`（代理上下文防火墙）只正式支持 `Claude Code`（Claude 代码工具）和 `Codex`（代码代理平台）。其他平台保留原有 Trellis 上下文和代理行为，不宣称具备派发替换、结构化返回或状态确认门禁。
+`v0.7.1-beta.1`（当前测试版）的 closure 任务仍可在各平台读取 `Task Capsule`（紧凑任务上下文），但可执行的 `Agent Context Firewall`（代理上下文防火墙）只正式支持 `Claude Code`（Claude 代码工具）和 `Codex`（代码代理平台）。其他平台保留原有 Trellis 上下文和代理行为，不宣称具备派发替换、结构化返回或状态确认门禁。
 
 五个正式 `Hermes`（科研工作流）角色模板目前只为 `Claude Code`（Claude 代码工具）和 `Codex`（代码代理平台）提供。`Claude Code`（Claude 代码工具）可使用已批准的 `PreToolUse / SubagentStop / PostToolUse`（工具前、子代理结束、工具后）钩子完成派发替换和结果净化；`Codex`（代码代理平台）使用相同的紧凑派发与结果契约，并通过项目钩子限制主代理写入、直接执行和提前结束。Codex 的子代理输入仍依赖协议，不宣称完全硬隔离。
 
@@ -124,7 +124,7 @@ trust_level = "trusted"
 ## 验证记录
 
 - 日期：2026-07-15。
-- 版本：`0.7.1-beta.0`（测试版）。
+- 版本：`0.7.1-beta.1`（测试版）。
 - 更名前基准提交：`9f7dc8497b4782878d6fa7ac3b63eba5bde507df`。
 - 命令：`rg -n -m 1 "dispatch_mode|agentCapable|hasHooks" packages/cli/src packages/cli/test`（平台能力核对）。
 - 结果：常规平台能力表保留；代理上下文防火墙的正式范围收窄为 Claude Code 和 Codex，并使用相同的最小上下文语义。

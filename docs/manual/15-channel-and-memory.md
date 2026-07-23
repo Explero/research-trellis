@@ -66,7 +66,7 @@ research-trellis mem search "固定指标" --platform codex --cwd "$PWD" --limit
 ## 验证记录
 
 - 日期：2026-07-15。
-- 版本：`0.7.1-beta.0`（测试版）。
+- 版本：`0.7.1-beta.1`（测试版）。
 - 更名前基准提交：`9f7dc8497b4782878d6fa7ac3b63eba5bde507df`。
 - 命令：`rg -n -m 1 "OpenCode|channel|mem" packages/cli/src/commands packages/core/src packages/cli/test packages/core/test`（频道与会话读取核对）。
 - 结果：频道、会话读取和 `OpenCode`（开放代码工具）未实现分支均有当前代码与测试依据。

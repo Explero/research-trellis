@@ -1,6 +1,6 @@
 # Hermes research overlay config.
 
-hermes_version: "0.7.1-beta.0"
+hermes_version: "0.7.1-beta.1"
 runtime_scope: "lightweight research collaboration"
 runtime_boundary: "runs directly in the project workspace"
 

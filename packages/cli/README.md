@@ -97,7 +97,7 @@ node packages/cli/scripts/release-preflight.js verify-packed-cli
 新包发布后，可固定安装本次测试版：
 
 ```bash
-npm install -g research-trellis@0.7.1-beta.0
+npm install -g research-trellis@0.7.1-beta.1
 research-trellis --version
 ```
 
@@ -107,7 +107,7 @@ research-trellis --version
 
 ```bash
 npm uninstall -g trellis-hermes
-npm install -g research-trellis@0.7.1-beta.0
+npm install -g research-trellis@0.7.1-beta.1
 research-trellis --version
 ```
 

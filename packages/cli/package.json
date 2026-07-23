@@ -1,6 +1,6 @@
 {
   "name": "research-trellis",
-  "version": "0.7.1-beta.0",
+  "version": "0.7.1-beta.1",
   "description": "Auditable AI-assisted research workflow tooling built on Trellis",
   "type": "module",
   "main": "./dist/index.js",

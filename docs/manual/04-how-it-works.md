@@ -62,7 +62,7 @@
 ## 验证记录
 
 - 日期：2026-07-15。
-- 版本：`0.7.1-beta.0`（测试版）。
+- 版本：`0.7.1-beta.1`（测试版）。
 - 更名前基准提交：`9f7dc8497b4782878d6fa7ac3b63eba5bde507df`。
 - 命令：`rg -n "state_machine|approval-gate|task.py" packages/cli/src/templates`（协议与实现核对）。
 - 结果：任务生命周期有实现支持；科研状态文件已准确标为协议模板。

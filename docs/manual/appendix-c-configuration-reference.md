@@ -58,7 +58,7 @@ python3 ./.trellis/scripts/hermes/experiment.py validate --task "$TASK"
 ## 验证记录
 
 - 日期：2026-07-15。
-- 版本：`0.7.1-beta.0`（测试版）。
+- 版本：`0.7.1-beta.1`（测试版）。
 - 更名前基准提交：`9f7dc8497b4782878d6fa7ac3b63eba5bde507df`。
 - 命令：`rg -n -m 1 "dispatch_mode|session_auto_commit|allowed_commands" packages/cli/src/templates/trellis`（配置模板核对）。
 - 结果：会话、Hermes 防火墙、`Codex`（代码代理）调度和实验命令配置均可定位，模式门禁与心跳设置已对齐。

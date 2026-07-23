@@ -62,7 +62,7 @@ python3 ./.trellis/scripts/task.py validate "$TASK"
 ## 验证记录
 
 - 日期：2026-07-15。
-- 版本：`0.7.1-beta.0`（测试版）。
+- 版本：`0.7.1-beta.1`（测试版）。
 - 更名前基准提交：`9f7dc8497b4782878d6fa7ac3b63eba5bde507df`。
 - 命令：`rg -n "implement.jsonl|check.jsonl|context" packages/cli/src/templates/trellis/scripts packages/cli/test`（上下文实现核对）。
 - 结果：上下文清单、重复检查和平台读取路径与当前模板一致。
