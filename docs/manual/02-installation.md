@@ -28,7 +28,7 @@ git --version
 新包发布后，推荐固定安装本手册对应的测试版：
 
 ```bash
-npm install --global research-trellis@0.7.1-beta.0
+npm install --global research-trellis@0.7.1-beta.1
 research-trellis --version
 research-trellis --help
 ```
@@ -36,14 +36,14 @@ research-trellis --help
 如不希望全局安装，可临时执行：
 
 ```bash
-npm exec --yes --package research-trellis@0.7.1-beta.0 -- research-trellis --version
+npm exec --yes --package research-trellis@0.7.1-beta.1 -- research-trellis --version
 ```
 
 已经安装旧包时，先卸载旧名称，再安装新包：
 
 ```bash
 npm uninstall --global trellis-hermes
-npm install --global research-trellis@0.7.1-beta.0
+npm install --global research-trellis@0.7.1-beta.1
 research-trellis --version
 ```
 
@@ -62,7 +62,7 @@ node packages/cli/bin/trellis.js --version
 
 ## 预期结果
 
-版本命令输出 `0.7.1-beta.0`，帮助中能看到 `init`（初始化）、`update`（更新）、`workflow`（工作流）、`channel`（协作频道）和 `mem`（会话记忆）等命令。
+版本命令输出 `0.7.1-beta.1`，帮助中能看到 `init`（初始化）、`update`（更新）、`workflow`（工作流）、`channel`（协作频道）和 `mem`（会话记忆）等命令。
 
 ## 失败恢复
 
@@ -74,10 +74,10 @@ node packages/cli/bin/trellis.js --version
 ## 验证记录
 
 - 日期：2026-07-15。
-- 版本：`0.7.1-beta.0`（测试版）。
+- 版本：`0.7.1-beta.1`（测试版）。
 - 更名前基准提交：`9f7dc8497b4782878d6fa7ac3b63eba5bde507df`。
 - 命令：`node -p "require('./packages/cli/package.json').version"`（包版本核对）。
-- 结果：源码包版本为 `0.7.1-beta.0`（测试版），运行时要求与包配置一致。
+- 结果：源码包版本为 `0.7.1-beta.1`（测试版），运行时要求与包配置一致。
 - 未验证项：本轮未重新进行全局安装，也未实时查询 `npm`（Node 包平台）标签。
 
 ## 来源

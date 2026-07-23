@@ -6,7 +6,7 @@
 
 ## 适用范围
 
-适用于 `0.7.1-beta.0`（测试版），后续版本应重新核对。
+适用于 `0.7.1-beta.1`（测试版），后续版本应重新核对。
 
 ## 前置条件
 
@@ -69,7 +69,7 @@
 ## 验证记录
 
 - 日期：2026-07-15。
-- 版本：`0.7.1-beta.0`（测试版）。
+- 版本：`0.7.1-beta.1`（测试版）。
 - 更名前基准提交：`9f7dc8497b4782878d6fa7ac3b63eba5bde507df`。
 - 命令：`node packages/cli/scripts/release-preflight.js check-licenses`（许可证元数据与权利说明一致性检查）；`rg -n -m 1 "COPYRIGHT|LICENSE|files" packages/cli/package.json packages/core/package.json packages/cli/scripts/release-preflight.js`（打包权利文件核对）。
 - 结果：项目和两个包的 `SPDX`（许可证标识）均为 `AGPL-3.0-or-later`（AGPL 第 3 版或任何后续版本）；两个包均声明 `LICENSE`（许可证）和 `COPYRIGHT`（版权声明），发布预检也将其列为必需文件。
